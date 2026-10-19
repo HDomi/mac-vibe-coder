@@ -14,6 +14,7 @@ export interface UsageSnapshot { fetchedAt: number; claude: ClaudeUsage | null; 
 
 let cache: UsageSnapshot | null = null;
 let inflight: Promise<UsageSnapshot> | null = null;
+let claudeRetryAt = 0;
 
 const toTs = (iso: unknown) => (typeof iso === 'string' ? Math.floor(Date.parse(iso) / 1000) : null);
 
@@ -32,11 +33,24 @@ async function readClaudeToken(): Promise<string | null> {
 async function fetchClaude(): Promise<ClaudeUsage | null> {
   const token = await readClaudeToken();
   if (!token) return null;
+  return fetchClaudeUsage(token);
+}
+
+/** Honor the provider's cooldown even when several windows request a forced refresh. */
+export async function fetchClaudeUsage(token: string): Promise<ClaudeUsage> {
+  if (Date.now() < claudeRetryAt) throw new Error('Claude usage HTTP 429 (temporarily rate limited; retry later)');
   const res = await fetch('https://api.anthropic.com/api/oauth/usage', {
     headers: { Authorization: `Bearer ${token}`, 'anthropic-beta': 'oauth-2025-04-20' },
     signal: AbortSignal.timeout(6000),
   });
+  if (res.status === 429) {
+    const retry = res.headers.get('retry-after');
+    const seconds = retry?.trim() ? Number(retry) : NaN;
+    const delay = Number.isFinite(seconds) ? seconds * 1000 : retry ? Date.parse(retry) - Date.now() : NaN;
+    claudeRetryAt = Date.now() + Math.min(86400000, Math.max(1000, Number.isFinite(delay) ? delay : 60000));
+  }
   if (!res.ok) throw new Error(`claude usage HTTP ${res.status}`);
+  claudeRetryAt = 0;
   const d = await res.json() as Record<string, unknown>;
   const win = (o: unknown): UsageWindow | null => {
     if (!o || typeof o !== 'object') return null;

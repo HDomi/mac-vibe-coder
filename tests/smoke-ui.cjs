@@ -12,6 +12,7 @@ let temp, server, win;
 let updateMode = 'disconnect';
 let commits = 0;
 let requestedA = false;
+let usageFailed = true;
 const errors = [];
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const js = async (source) => {
@@ -34,10 +35,12 @@ async function main() {
     import GitPanel from ${JSON.stringify(path.join(root, 'web/src/components/GitPanel.tsx'))};
     import { UpdateBadge } from ${JSON.stringify(path.join(root, 'web/src/components/UpdatePanel.tsx'))};
     import MarkdownView from ${JSON.stringify(path.join(root, 'web/src/components/MarkdownView.tsx'))};
+    import UsageBar from ${JSON.stringify(path.join(root, 'web/src/components/UsageBar.tsx'))};
     const target = createRoot(document.getElementById('root'));
     window.renderGit = cwd => target.render(<GitPanel cwd={cwd} visible />);
     window.renderUpdate = () => target.render(<UpdateBadge />);
     window.renderMarkdown = text => target.render(<MarkdownView text={text} baseDir="/fixture" />);
+    window.renderUsage = () => target.render(<UsageBar mode="ide" onMode={() => {}} />);
     window.addEventListener('error', event => console.error(event.message));
   `);
   await build({ entryPoints: [entry], outfile: path.join(temp, 'harness.js'), bundle: true, platform: 'browser', jsx: 'automatic', nodePaths: [path.join(root, 'node_modules')] });
@@ -74,6 +77,7 @@ async function main() {
       if (url.pathname === '/api/git/commit') { commits++; await wait(150); json({ ok: true, output: 'commit created' }); return; }
       if (url.pathname === '/api/git/checkout') { json({ ok: true, output: 'branch created' }); return; }
       if (url.pathname === '/api/update/status') { json({ installed: { version: '0.3.15', commit: 'old' }, remote: { version: '0.3.16', commit: 'new' }, branch: 'main', available: true, commits: [], error: null }); return; }
+      if (url.pathname === '/api/usage') { json({ fetchedAt: Date.now(), claude: usageFailed ? null : { fiveHour: { usedPct: 0, resetsAt: null }, weekly: { usedPct: 10, resetsAt: null }, model: null, plan: null }, codex: { fiveHour: { usedPct: 1, resetsAt: null }, weekly: null, plan: null }, errors: usageFailed ? ['claude: HTTP 429'] : [] }); return; }
       if (url.pathname === '/api/update/apply') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
         res.write('event: start\ndata: fixture update\n\n');
@@ -128,8 +132,15 @@ async function main() {
   await js(`Array.from(document.querySelectorAll('button')).find(e => e.textContent.trim() === 'Apply update').click()`);
   await until(`document.body.textContent.includes('Server did not restart')`);
   assert.equal(await js(`document.querySelector('[data-update-locked]').dataset.updateLocked`), 'false');
+  await js(`renderUsage()`);
+  await until(`!!document.querySelector('[title*="HTTP 429"]')`);
+  assert.equal(await js(`document.body.textContent.includes('Claude') && document.querySelector('[title*="HTTP 429"]').textContent.includes('—')`), true);
+  usageFailed = false;
+  await js(`document.querySelector('button[title="Refresh usage"]').click()`);
+  await until(`!!document.querySelector('[title^="5h: 0% used"]')`);
+  assert.equal(await js(`document.querySelector('[title^="5h: 0% used"]').textContent.includes('100%')`), true);
   assert.deepEqual(errors, []);
-  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout. Screenshot: ${screenshot}`);
+  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage. Screenshot: ${screenshot}`);
 }
 
 async function finish(code) {
