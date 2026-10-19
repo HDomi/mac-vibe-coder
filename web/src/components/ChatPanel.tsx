@@ -256,6 +256,11 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
     return t('activity.working');
   })();
   const elapsed = session.turnStartedAt ? Math.max(0, Math.round((now - session.turnStartedAt) / 1000)) : 0;
+  const elapsedLabel = t(elapsed >= 3600 ? 'activity.elapsedHours' : elapsed >= 60 ? 'activity.elapsedMinutes' : 'activity.elapsedSeconds', {
+    hours: Math.floor(elapsed / 3600),
+    minutes: Math.floor(elapsed / 60) % 60,
+    seconds: elapsed % 60,
+  });
 
   return (
     <div className="h-full flex flex-col min-w-0">
@@ -285,8 +290,8 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
       {activity && (
         <div className="h-7 shrink-0 flex items-center gap-2 px-4 text-[11px] text-zinc-400 border-t border-white/5 bg-[#0e1117]">
           <span className="inline-block w-3 h-3 rounded-full border-2 border-amber-400/70 border-t-transparent animate-spin" />
+          <span className="shrink-0 whitespace-nowrap text-zinc-600 tabular-nums">{elapsedLabel}</span>
           <span className="truncate">{activity}</span>
-          <span className="text-zinc-600 tabular-nums">{elapsed}s</span>
         </div>
       )}
       <Composer cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
