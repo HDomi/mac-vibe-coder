@@ -112,6 +112,13 @@ function AppInner() {
     else { const p = window.prompt(t('app.folderPathPrompt'), listing?.path ?? '~'); if (p) openProject(p); }
   };
   const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActiveSession);
+  const closeSession = (id: string) => {
+    const s = S.sessions[id];
+    if (!s) return;
+    if ((s.status === 'running' || s.status === 'compacting') && !window.confirm(t('app.confirmCloseRunning'))) return;
+    S.close(id);
+    if (activeSession === id) setActiveSession(null);
+  };
   const resumeSession = (s: RecentSession) => {
     const dir = s.cwd ?? project ?? cwd;
     if (s.cwd && s.cwd !== project) openProject(s.cwd);
@@ -163,12 +170,14 @@ function AppInner() {
               {project && projectSessions.length > 0 && (
                 <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs overflow-x-auto">
                   {projectSessions.map((s) => (
-                    <button key={s.id} onClick={() => setActiveSession(s.id)}
-                      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 whitespace-nowrap ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`}>
+                    <div key={s.id} onClick={() => setActiveSession(s.id)} onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeSession(s.id); } }}
+                      className={`group flex items-center gap-1.5 rounded-md pl-2.5 pr-1 py-1 whitespace-nowrap cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
                       <AgentIcon agent={s.agent} size={14} />
                       <span className="text-zinc-500">{(s.items.find((i) => i.kind === 'user') as { text?: string } | undefined)?.text?.slice(0, 18) ?? t('common.new')}</span>
-                    </button>
+                      <button className="ml-1 w-4 h-4 rounded text-[10px] leading-none text-zinc-500 hover:text-white hover:bg-white/15 opacity-0 group-hover:opacity-100" title={t('app.closeSession')}
+                        onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}>✕</button>
+                    </div>
                   ))}
                   <button className="px-2 py-1 text-zinc-400 hover:text-white" onClick={() => setActiveSession('new')} title={t('app.newSession')}>＋</button>
                 </div>
