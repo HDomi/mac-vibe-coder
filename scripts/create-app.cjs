@@ -10,7 +10,7 @@ function launcherSource(root) {
 if (require.main === module) {
   const [source, target, root] = process.argv.slice(2);
   if (!source || !target || !root) throw new Error('Usage: create-app.cjs source target checkout');
-  fs.cpSync(source, target, { recursive: true, errorOnExist: true, force: false });
+  fs.cpSync(source, target, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true });
   const name = 'Mac Vibe Coder';
   fs.renameSync(path.join(target, 'Contents/MacOS/Electron'), path.join(target, 'Contents/MacOS', name));
   execFileSync('/usr/libexec/PlistBuddy', ['-c', `Set :CFBundleExecutable ${name}`, path.join(target, 'Contents/Info.plist')]);
