@@ -61,9 +61,12 @@ function rawBase(remoteUrl: string, branch: string): string | null {
   return m ? `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${branch}` : null;
 }
 
+/** The build this process started with. Read once: a rebuild on disk is not "installed" until the server restarts. */
+const INSTALLED: BuildInfo = readBuildInfo();
+
 export async function checkUpdate(force = false): Promise<UpdateStatus> {
   if (!force && cached && Date.now() - cached.checkedAt < CHECK_TTL_MS) return cached;
-  const installed = readBuildInfo();
+  const installed = INSTALLED;
   const status: UpdateStatus = { repo: REPO_ROOT, branch: null, installed, remote: null, available: false, commits: [], checkedAt: Date.now(), error: null };
   try {
     const branch = await git(['rev-parse', '--abbrev-ref', 'HEAD']);
