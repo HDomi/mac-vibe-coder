@@ -100,6 +100,14 @@ export class ClaudeSession implements AgentSession {
     this.q = query({ prompt: this.input, options });
     this.emit({ kind: 'session.init', sessionId: this.id, agent: 'claude', cwd: this.cwd, permissionMode: options.permissionMode, agentSessionId: this.agentSessionId });
     void this.pump();
+    // The system/init message (and its slash_commands) only arrives with the first turn.
+    // Ask over the control channel so "/" autocomplete works before anything is sent.
+    void this.q.supportedCommands()
+      .then((cmds) => {
+        if (this.closed || !cmds.length) return;
+        this.emit({ kind: 'session.init', sessionId: this.id, agent: 'claude', cwd: this.cwd, agentSessionId: this.agentSessionId, commands: cmds.map((c) => `/${c.name}`) });
+      })
+      .catch((err) => this.emit({ kind: 'log', text: `supportedCommands failed: ${(err as Error).message}` }));
   }
 
   private async pump() {
