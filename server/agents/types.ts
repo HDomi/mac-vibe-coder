@@ -1,7 +1,7 @@
 /** Unified event schema shared by every agent adapter (Claude, Codex, ...). */
 
 export type AgentId = 'claude' | 'codex';
-export type PermissionModeId = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
+export type PermissionModeId = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'auto';
 
 export interface Attachment {
   path: string;

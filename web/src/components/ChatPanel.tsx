@@ -10,6 +10,8 @@ export interface StartOptions { resume?: string; permissionMode?: PermissionMode
 
 interface Props {
   cwd: string | null;
+  /** 'folder' lists sessions of cwd; 'all' lists every session across projects (Agent mode). */
+  scope?: 'folder' | 'all';
   session: ChatSession | null;
   onStart: (cwd: string, opts?: StartOptions) => void;
   onSend: (text: string, attachments: Attachment[]) => void;
@@ -69,9 +71,10 @@ const MODE_OPTIONS: { id: PermissionModeId; label: string }[] = [
   { id: 'acceptEdits', label: 'Auto-accept edits' },
   { id: 'plan', label: 'Plan mode' },
   { id: 'bypassPermissions', label: 'Allow everything' },
+  { id: 'auto', label: 'Auto (classifier reviews, Claude only)' },
 ];
 
-function StartScreen({ cwd, onStart }: { cwd: string | null; onStart: Props['onStart'] }) {
+function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; scope?: 'folder' | 'all'; onStart: Props['onStart'] }) {
   const menu = useContextMenu();
   const [history, setHistory] = useState<HistorySession[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -80,6 +83,7 @@ function StartScreen({ cwd, onStart }: { cwd: string | null; onStart: Props['onS
   const [model, setModel] = useState<string | null>(() => { try { return localStorage.getItem(`vibe.model.${agent}`); } catch { return null; } });
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [filter, setFilter] = useState('');
   useEffect(() => { try { localStorage.setItem('vibe.agent', agent); setModel(localStorage.getItem(`vibe.model.${agent}`)); } catch { /* ignore */ } }, [agent]);
   useEffect(() => { try { localStorage.setItem('vibe.mode', mode); } catch { /* ignore */ } }, [mode]);
   useEffect(() => { try { model ? localStorage.setItem(`vibe.model.${agent}`, model) : localStorage.removeItem(`vibe.model.${agent}`); } catch { /* ignore */ } }, [model, agent]);
@@ -87,26 +91,34 @@ function StartScreen({ cwd, onStart }: { cwd: string | null; onStart: Props['onS
   const loadHistory = () => {
     if (!cwd) return;
     setLoadingHistory(true);
-    api.history(cwd, 'all').then(setHistory).catch(() => setHistory([])).finally(() => setLoadingHistory(false));
+    const p = scope === 'all'
+      ? api.historyAll(300).then((rows) => rows.map((r) => ({ agent: r.agent, sessionId: r.sessionId, summary: r.title, lastModified: r.lastModified, cwd: r.cwd ?? undefined, pinned: r.pinned })))
+      : api.history(cwd, 'all');
+    p.then(setHistory).catch(() => setHistory([])).finally(() => setLoadingHistory(false));
   };
-  useEffect(() => { setHistory([]); loadHistory(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cwd]);
+  useEffect(() => { setHistory([]); loadHistory(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cwd, scope]);
 
   if (!cwd) return <div className="h-full flex items-center justify-center text-zinc-600 text-sm">Open a folder on the left to start a session</div>;
+  const shown = filter.trim() ? history.filter((h) => `${h.customTitle ?? ''} ${h.summary} ${h.firstPrompt ?? ''} ${h.cwd ?? ''}`.toLowerCase().includes(filter.toLowerCase())) : history;
   const opts = (extra: Partial<StartOptions> = {}) => ({ permissionMode: mode, agent, model, ...extra });
   const rename = (h: HistorySession) => {
     const title = draft.trim(); setRenaming(null);
     if (!title) return;
     api.historyRename(h.agent, h.sessionId, title, cwd).then(loadHistory).catch(() => {});
   };
+  const titleOf = (h: HistorySession) => h.customTitle || h.summary || h.firstPrompt || h.sessionId;
   const remove = (h: HistorySession) => {
-    if (!window.confirm(`${h.agent === 'codex' ? 'Archive' : 'Delete'} this session?\n${h.customTitle || h.summary || h.sessionId}`)) return;
-    api.historyDelete(h.agent, h.sessionId, cwd).then(loadHistory).catch(() => {});
+    if (h.pinned) { window.alert(`"${titleOf(h)}" is pinned. Unpin it first.`); return; }
+    if (!window.confirm(`Delete "${titleOf(h)}"?\nThis permanently erases the session and its history.`)) return;
+    api.historyDelete(h.agent, h.sessionId, cwd).then(loadHistory).catch((e) => window.alert(e.message));
   };
+  const togglePin = (h: HistorySession) => api.historyPin(h.agent, h.sessionId, !h.pinned).then(loadHistory).catch(() => {});
 
   return (
     <div className="h-full overflow-y-auto p-8 max-w-2xl mx-auto">
-      <div className="text-xs text-zinc-500 mb-1">Project</div>
-      <div className="text-lg font-medium mb-6 break-all">{cwd}</div>
+      <div className="text-xs text-zinc-500 mb-1">{scope === 'all' ? 'Agent' : 'Project'}</div>
+      <div className="text-lg font-medium mb-6 break-all">{scope === 'all' ? 'Free conversation' : cwd}</div>
+      {scope === 'all' && <div className="text-xs text-zinc-500 -mt-4 mb-6">Not tied to a project. New sessions run in {cwd}; resumed sessions keep their own folder.</div>}
       <div className="flex items-center gap-1 mb-4 rounded-lg bg-white/5 p-1 w-fit text-sm">
         {(['claude', 'codex'] as AgentId[]).map((a) => (
           <button key={a} onClick={() => setAgent(a)} className={`px-4 py-1.5 rounded-md ${agent === a ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white'}`}>{a === 'claude' ? 'Claude Code' : 'Codex'}</button>
@@ -115,38 +127,41 @@ function StartScreen({ cwd, onStart }: { cwd: string | null; onStart: Props['onS
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <button className="rounded-lg bg-blue-500/30 hover:bg-blue-500/40 px-4 py-2 text-sm" onClick={() => onStart(cwd, opts())}>New {agent === 'claude' ? 'Claude' : 'Codex'} session <span className="text-zinc-400 text-xs ml-1">⌘N</span></button>
         <select value={mode} onChange={(e) => setMode(e.target.value as PermissionModeId)} className="bg-white/5 rounded-md text-xs px-2 py-1.5 outline-none">
-          {MODE_OPTIONS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+          {MODE_OPTIONS.filter((m) => m.id !== 'auto' || agent === 'claude').map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
         <ModelSelect agent={agent} value={model} onChange={setModel} />
       </div>
       <div className="text-xs text-zinc-500 mb-6">
         {agent === 'codex' ? 'Codex: Default = workspace-write sandbox + approval on request · Plan = read-only · Allow everything = no sandbox' : 'Claude: uses your local claude login and ~/.claude settings'}
       </div>
-      <div className="flex items-center text-xs text-zinc-500 mb-2">
-        <span>Previous sessions in this folder</span>
+      <div className="flex items-center text-xs text-zinc-500 mb-2 gap-3">
+        <span>{scope === 'all' ? `Previous conversations (${history.length})` : 'Previous sessions in this folder'}</span>
         <div className="flex-1" />
+        {scope === 'all' && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search…" className="bg-white/5 rounded px-2 py-1 text-xs outline-none w-40" />}
         {loadingHistory && <span className="text-zinc-600">loading…</span>}
       </div>
-      {history.length === 0 && !loadingHistory && <div className="text-xs text-zinc-600">No sessions here yet.</div>}
+      {history.length === 0 && !loadingHistory && <div className="text-xs text-zinc-600">No sessions yet.</div>}
       <div className="space-y-1">
-        {history.map((h) => (
+        {shown.map((h) => (
           <div key={h.agent + h.sessionId} className="w-full text-left rounded-lg border border-white/10 hover:bg-white/5 px-3 py-2 cursor-pointer flex items-center gap-3"
-            onClick={() => onStart(cwd, opts({ resume: h.sessionId, agent: h.agent }))}
+            onClick={() => onStart(h.cwd ?? cwd, opts({ resume: h.sessionId, agent: h.agent }))}
             onContextMenu={(e) => menu.open(e, [
-              { label: 'Resume', onClick: () => onStart(cwd, opts({ resume: h.sessionId, agent: h.agent })) },
+              { label: 'Resume', onClick: () => onStart(h.cwd ?? cwd, opts({ resume: h.sessionId, agent: h.agent })) },
+              { label: h.pinned ? 'Unpin' : 'Pin', onClick: () => togglePin(h) },
               { label: 'Rename…', onClick: () => { setRenaming(h.sessionId); setDraft(h.customTitle || h.summary || ''); } },
               { label: 'Copy session id', onClick: () => navigator.clipboard.writeText(h.sessionId) },
               { separator: true },
-              { label: h.agent === 'codex' ? 'Archive' : 'Delete', danger: true, onClick: () => remove(h) },
+              { label: h.pinned ? 'Delete (unpin first)' : 'Delete permanently', danger: true, disabled: !!h.pinned, onClick: () => remove(h) },
             ])}>
+            {h.pinned && <span title="Pinned">📌</span>}
             <span className={`text-[10px] rounded px-1.5 py-0.5 ${h.agent === 'codex' ? 'bg-emerald-500/15 text-emerald-200' : 'bg-blue-500/15 text-blue-200'}`}>{h.agent}</span>
             <div className="flex-1 min-w-0">
               {renaming === h.sessionId
                 ? <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onClick={(e) => e.stopPropagation()} onBlur={() => rename(h)}
                     onKeyDown={(e) => { if (e.key === 'Enter') rename(h); if (e.key === 'Escape') setRenaming(null); }}
                     className="w-full bg-black/40 rounded px-2 py-0.5 text-sm outline-none border border-blue-400/50" />
-                : <div className="text-sm truncate">{h.customTitle || h.summary || h.firstPrompt || h.sessionId}</div>}
-              <div className="text-[11px] text-zinc-500">{new Date(h.lastModified).toLocaleString()}{h.gitBranch ? ` · ${h.gitBranch}` : ''}</div>
+                : <div className="text-sm truncate">{titleOf(h)}</div>}
+              <div className="text-[11px] text-zinc-500 truncate">{new Date(h.lastModified).toLocaleString()}{h.gitBranch ? ` · ${h.gitBranch}` : ''}{scope === 'all' && h.cwd ? ` · ${h.cwd.replace(/^\/Users\/[^/]+/, '~')}` : ''}</div>
             </div>
           </div>
         ))}
@@ -155,7 +170,7 @@ function StartScreen({ cwd, onStart }: { cwd: string | null; onStart: Props['onS
   );
 }
 
-export default function ChatPanel({ cwd, session, onStart, onSend, onApprove, onAnswer, onInterrupt, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments }: Props) {
+export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onSend, onApprove, onAnswer, onInterrupt, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
@@ -176,7 +191,7 @@ export default function ChatPanel({ cwd, session, onStart, onSend, onApprove, on
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [session?.items]);
 
-  if (!session) return <StartScreen cwd={cwd} onStart={onStart} />;
+  if (!session) return <StartScreen cwd={cwd} scope={scope} onStart={onStart} />;
 
   const running = session.status === 'running' || session.status === 'compacting';
   const close = () => {
@@ -208,7 +223,7 @@ export default function ChatPanel({ cwd, session, onStart, onSend, onApprove, on
           <button onClick={jump} className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-[#1b1f2a] border border-white/15 px-3 py-1 text-xs text-zinc-300 shadow-lg hover:bg-[#242938]">↓ Jump to latest</button>
         )}
       </div>
-      <Composer cwd={session.cwd} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
+      <Composer cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
         onSend={onSend} onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments} />
     </div>
   );

@@ -50,7 +50,7 @@ function UpdateModal({ status, onClose, onRefresh }: { status: UpdateStatus | nu
   };
 
   return (
-    <div className="absolute inset-0 z-20 bg-black/60 flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center" onClick={onClose}>
       <div className="w-[640px] max-w-[92vw] max-h-[85vh] rounded-xl bg-[#12151c] border border-white/10 shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center px-5 h-12 border-b border-white/10">
           <div className="font-medium">Update</div>

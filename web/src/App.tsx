@@ -6,7 +6,7 @@ import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
 import Preview from './components/Preview';
 import ToolsPanel from './components/ToolsPanel';
-import UsageBar from './components/UsageBar';
+import UsageBar, { type ViewMode } from './components/UsageBar';
 import ChatPanel, { type StartOptions } from './components/ChatPanel';
 import TerminalPanel from './components/TerminalPanel';
 import GitPanel from './components/GitPanel';
@@ -18,6 +18,7 @@ const LS_CWD = 'vibe.cwd';
 const LS_PROJECT = 'vibe.project';
 const LS_SIDEBAR = 'vibe.sidebar.collapsed';
 const LS_RIGHT = 'vibe.right.collapsed';
+const LS_MODE = 'vibe.mode.view';
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
 
@@ -48,6 +49,9 @@ function AppInner() {
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [view, setView] = useState<ViewMode>(() => { try { return (localStorage.getItem(LS_MODE) as ViewMode) || 'ide'; } catch { return 'ide'; } });
+  const [agentActive, setAgentActive] = useState<string | 'new' | null>(null);
+  useEffect(() => { try { localStorage.setItem(LS_MODE, view); } catch { /* ignore */ } }, [view]);
   const sidebar = usePaneWidth('vibe.w.sidebar', 256, 180, 480);
   const right = usePaneWidth('vibe.w.right', 420, 280, 1200);
   const S = useSessions();
@@ -127,18 +131,21 @@ function AppInner() {
       else if (k === 'b') { e.preventDefault(); setCollapsed((v) => !v); }
       else if (k === 'j') { e.preventDefault(); setRightCollapsed((v) => !v); }
       else if (k === 'k') { e.preventDefault(); window.dispatchEvent(new Event('vibe:focus-composer')); }
-      else if (k === 'n' && !e.shiftKey) { e.preventDefault(); if (project) setActiveSession('new'); }
+      else if (k === 'n' && !e.shiftKey) { e.preventDefault(); if (view === 'agent') setAgentActive('new'); else if (project) setActiveSession('new'); }
       else if (k === 'w') { e.preventDefault(); if (session && !(session.status === 'running' && !window.confirm('Session is running. Close it?'))) { S.close(session.id); setActiveSession(null); } }
       else if (k === '/') { e.preventDefault(); setShowTools(true); }
       else if (['1', '2', '3', '4'].includes(e.key) && !inText) { e.preventDefault(); setRightTab(rightTabs[Number(e.key) - 1][0]); setRightCollapsed(false); }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [project, session, S]);
+  }, [project, session, S, view]);
 
   return (
       <div className="h-full flex flex-col">
-        <UsageBar />
+        <UsageBar mode={view} onMode={setView} />
+        {view === 'agent' ? (
+          <AgentView home={home?.home ?? '~'} S={S} active={agentActive} setActive={setAgentActive} />
+        ) : (
         <div className="flex-1 flex min-h-0 relative">
           <div style={{ width: collapsed ? 40 : sidebar.width }} className={`shrink-0 h-full overflow-hidden ${paneTransition}`}>
             <Sidebar home={home} favorites={favorites} recent={recent} cwd={project ?? ''} collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)}
@@ -223,6 +230,49 @@ function AppInner() {
               onAttach={(h) => { if (!h.isDir) attach([{ path: h.path, name: h.rel.split('/').pop() ?? h.rel, isDir: false, size: 0, mtime: 0, ext: '', hidden: false, kind: 'binary' }]); }} />
           )}
         </div>
+        )}
       </div>
+  );
+}
+
+/** Agent mode: free conversation not tied to a project. Left: live sessions; center: chat / all previous conversations. */
+function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType<typeof useSessions>; active: string | 'new' | null; setActive: (v: string | 'new' | null) => void }) {
+  const live = Object.values(S.sessions);
+  const session = active && active !== 'new' ? S.sessions[active] ?? null : null;
+  const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActive);
+  return (
+    <div className="flex-1 flex min-h-0 relative">
+      <aside className="w-64 shrink-0 h-full flex flex-col border-r border-white/10 bg-[#0e1117]">
+        <div className="h-10 flex items-center px-3 text-xs text-zinc-500">
+          <span className="font-medium text-zinc-400">Agent</span>
+          <div className="flex-1" />
+          <button className="px-2 py-1 rounded hover:bg-white/10 text-zinc-300" onClick={() => setActive('new')} title="New conversation (⌘N)">＋ New</button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-2 py-1">
+          <div className="px-2 mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Open sessions</div>
+          {live.length === 0 && <div className="px-2 text-xs text-zinc-600">Nothing open. Start a new conversation or resume one from the list.</div>}
+          {live.map((s) => (
+            <div key={s.id} onClick={() => setActive(s.id)}
+              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
+              <span className={`text-[10px] rounded px-1 ${s.agent === 'codex' ? 'bg-emerald-500/15 text-emerald-200' : 'bg-blue-500/15 text-blue-200'}`}>{s.agent}</span>
+              <span className="truncate flex-1">{(s.items.find((i) => i.kind === 'user') as { text?: string } | undefined)?.text?.slice(0, 40) ?? 'new'}</span>
+              <span className="text-[10px] text-zinc-600 truncate max-w-[70px]" title={s.cwd}>{s.cwd.split('/').pop()}</span>
+            </div>
+          ))}
+        </div>
+      </aside>
+      <div className="flex-1 min-w-0">
+        <ChatPanel cwd={home} scope="all" session={session}
+          onStart={start}
+          onSend={(t, a) => session && S.send(session.id, t, a)}
+          onApprove={(r, d, m) => session && S.approve(session.id, r, d, m)}
+          onAnswer={(r, a) => session && S.answer(session.id, r, a)}
+          onInterrupt={() => session && S.interrupt(session.id)}
+          onMode={(m) => session && S.setMode(session.id, m)}
+          onModel={(m) => session && S.setModel(session.id, m)}
+          onClose={() => { if (session) { S.close(session.id); setActive(null); } }} />
+      </div>
+    </div>
   );
 }

@@ -174,10 +174,12 @@ export function createApp(registry?: SessionRegistry) {
       wantCodex ? which('codex') : Promise.resolve(null),
     ]);
     const codex = codexPath ? await listCodexThreads(codexPath, dir).catch(() => []) : [];
+    const pinned = new Set((await loadConfig()).pinnedSessions);
     const rows = [
       ...claude.map((s) => ({ ...s, agent: 'claude' as const })),
       ...codex.map((s) => ({ ...s, agent: 'codex' as const })),
-    ].sort((a, b) => b.lastModified - a.lastModified);
+    ].map((s) => ({ ...s, pinned: pinned.has(`${s.agent}:${s.sessionId}`) }))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastModified - a.lastModified);
     return c.json(rows);
   });
   app.post('/api/history/rename', async (c) => {
@@ -186,9 +188,19 @@ export function createApp(registry?: SessionRegistry) {
     else await renameSession(b.id, b.title, b.cwd ? { dir: resolvePath(b.cwd) } : undefined);
     return c.json({ ok: true });
   });
+  app.post('/api/history/pin', async (c) => {
+    const b = await c.req.json<{ agent: 'claude' | 'codex'; id: string; pinned: boolean }>();
+    const key = `${b.agent}:${b.id}`;
+    const cfg = await loadConfig();
+    cfg.pinnedSessions = b.pinned ? [...new Set([...cfg.pinnedSessions, key])] : cfg.pinnedSessions.filter((k) => k !== key);
+    await saveConfig(cfg);
+    return c.json({ ok: true, pinned: b.pinned });
+  });
   app.delete('/api/history/:id', async (c) => {
     const agent = c.req.query('agent') ?? 'claude';
     const cwd = c.req.query('cwd');
+    const cfg = await loadConfig();
+    if (cfg.pinnedSessions.includes(`${agent}:${c.req.param('id')}`)) return c.json({ error: 'Session is pinned. Unpin it first.', code: 'PINNED' }, 409);
     if (agent === 'codex') { const p = await which('codex'); if (p) await codexThreadOp(p, 'delete', c.req.param('id')); }
     else await deleteSession(c.req.param('id'), cwd ? { dir: resolvePath(cwd) } : undefined);
     return c.json({ ok: true });
@@ -202,12 +214,15 @@ export function createApp(registry?: SessionRegistry) {
 
   // Recent sessions across every project (sidebar).
   app.get('/api/history-all', async (c) => {
-    const [claude, codexPath] = await Promise.all([listSessions({ limit: 15 }).catch(() => []), which('codex')]);
-    const codex = codexPath ? await listCodexThreads(codexPath, null).catch(() => []) : [];
+    const limit = Math.min(300, Number(c.req.query('limit') ?? 20));
+    const [claude, codexPath] = await Promise.all([listSessions({ limit }).catch(() => []), which('codex')]);
+    const codex = codexPath ? await listCodexThreads(codexPath, null, limit).catch(() => []) : [];
+    const pinned = new Set((await loadConfig()).pinnedSessions);
     const rows = [
       ...claude.map((s) => ({ agent: 'claude' as const, sessionId: s.sessionId, title: s.customTitle || s.summary || s.firstPrompt || s.sessionId, cwd: (s as { cwd?: string }).cwd ?? null, lastModified: s.lastModified })),
       ...codex.map((s) => ({ agent: 'codex' as const, sessionId: s.sessionId, title: s.summary || s.sessionId, cwd: s.cwd ?? null, lastModified: s.lastModified })),
-    ].sort((a, b) => b.lastModified - a.lastModified).slice(0, 20);
+    ].map((s) => ({ ...s, pinned: pinned.has(`${s.agent}:${s.sessionId}`) }))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastModified - a.lastModified).slice(0, limit);
     return c.json(rows);
   });
 

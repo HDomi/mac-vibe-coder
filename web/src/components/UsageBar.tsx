@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api, type UsageSnapshot, type UsageWindow } from '../lib/api';
-import { UpdateBadge } from './UpdatePanel';
+
+export type ViewMode = 'ide' | 'agent';
+
+interface Props { mode: ViewMode; onMode: (m: ViewMode) => void }
 
 function color(remain: number) {
   if (remain > 50) return 'bg-emerald-400';
@@ -17,21 +20,25 @@ function resetLabel(ts: number | null) {
   return h > 0 ? `resets in ${h}h ${m}m` : `resets in ${m}m`;
 }
 
-function Pill({ label, win }: { label: string; win: UsageWindow | null }) {
+/** Tiny battery: remaining % fills the cell from the left. */
+function Battery({ label, win }: { label: string; win: UsageWindow | null }) {
   if (!win) return null;
   const remain = Math.max(0, 100 - win.usedPct);
   return (
-    <div className="flex items-center gap-1.5" title={`${label}: ${win.usedPct}% used · ${resetLabel(win.resetsAt)}`}>
-      <span className="text-[10px] text-zinc-500 font-medium">{label}</span>
-      <div className="w-10 h-1.5 rounded-full bg-white/10 overflow-hidden">
-        <div className={`h-full ${color(remain)}`} style={{ width: `${remain}%` }} />
-      </div>
-      <span className="text-[11px] tabular-nums text-zinc-300">{remain}</span>
+    <div className="flex items-center gap-1" title={`${label}: ${win.usedPct}% used · ${resetLabel(win.resetsAt)}`}>
+      <span className="text-[10px] text-zinc-500">{label}</span>
+      <span className="relative inline-flex items-center">
+        <span className="w-[18px] h-[9px] rounded-[2px] border border-zinc-500/80 p-px flex">
+          <span className={`h-full rounded-[1px] ${color(remain)}`} style={{ width: `${remain}%` }} />
+        </span>
+        <span className="w-[2px] h-[4px] bg-zinc-500/80 rounded-r-[1px] ml-px" />
+      </span>
+      <span className="text-[10px] tabular-nums text-zinc-400 w-5">{remain}</span>
     </div>
   );
 }
 
-export default function UsageBar() {
+export default function UsageBar({ mode, onMode }: Props) {
   const [u, setU] = useState<UsageSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -48,26 +55,37 @@ export default function UsageBar() {
   }, []);
 
   return (
-    <div className="titlebar-drag h-9 shrink-0 flex items-center justify-center gap-5 border-b border-white/10 bg-[#0e1117] text-xs select-none relative">
-      <div className="absolute right-3 top-0 h-full flex items-center"><UpdateBadge /></div>
-      {u?.claude && (
-        <div className="flex items-center gap-3">
-          <span className="text-zinc-400 font-medium">Claude</span>
-          <Pill label="5h" win={u.claude.fiveHour} />
-          <Pill label="week" win={u.claude.weekly} />
-          {u.claude.model && <Pill label={u.claude.model.name} win={u.claude.model} />}
-        </div>
-      )}
-      {u?.claude && u?.codex && <span className="text-zinc-700">|</span>}
-      {u?.codex && (
-        <div className="flex items-center gap-3">
-          <span className="text-zinc-400 font-medium">Codex</span>
-          <Pill label="5h" win={u.codex.fiveHour} />
-          <Pill label="week" win={u.codex.weekly} />
-        </div>
-      )}
-      {u && !u.claude && !u.codex && <span className="text-zinc-600">No usage data{u.errors.length ? ` · ${u.errors[0]}` : ''}</span>}
-      <button className={`titlebar-nodrag text-zinc-600 hover:text-zinc-300 ${loading ? 'animate-spin' : ''}`} onClick={() => load(true)} title="Refresh usage">↻</button>
+    <div className="titlebar-drag h-9 shrink-0 flex items-center border-b border-white/10 bg-[#0e1117] text-xs select-none relative">
+      {/* Mode switch, centered */}
+      <div className="absolute left-1/2 -translate-x-1/2 titlebar-nodrag flex items-center rounded-md bg-white/5 p-0.5">
+        {(['ide', 'agent'] as ViewMode[]).map((m) => (
+          <button key={m} onClick={() => onMode(m)}
+            className={`px-3 py-0.5 rounded text-[11px] font-medium transition-colors ${mode === m ? 'bg-white/15 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            {m === 'ide' ? 'IDE' : 'Agent'}
+          </button>
+        ))}
+      </div>
+      {/* Usage batteries, right-aligned */}
+      <div className="ml-auto flex items-center gap-3 pr-3">
+        {u?.claude && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-400 font-medium">Claude</span>
+            <Battery label="5h" win={u.claude.fiveHour} />
+            <Battery label="wk" win={u.claude.weekly} />
+            {u.claude.model && <Battery label={u.claude.model.name.slice(0, 5)} win={u.claude.model} />}
+          </div>
+        )}
+        {u?.claude && u?.codex && <span className="text-zinc-700">|</span>}
+        {u?.codex && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-400 font-medium">Codex</span>
+            <Battery label="5h" win={u.codex.fiveHour} />
+            <Battery label="wk" win={u.codex.weekly} />
+          </div>
+        )}
+        {u && !u.claude && !u.codex && <span className="text-zinc-600">No usage data{u.errors.length ? ` · ${u.errors[0]}` : ''}</span>}
+        <button className={`titlebar-nodrag text-zinc-600 hover:text-zinc-300 ${loading ? 'animate-spin' : ''}`} onClick={() => load(true)} title="Refresh usage">↻</button>
+      </div>
     </div>
   );
 }

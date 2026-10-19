@@ -5,6 +5,7 @@ import type { Attachment, PermissionModeId } from '../lib/agent';
 interface Props {
   /** Session working directory; root for "@" file mentions. */
   cwd?: string;
+  agent?: 'claude' | 'codex';
   disabled: boolean;
   running: boolean;
   mode: PermissionModeId;
@@ -24,6 +25,7 @@ const MODES: { id: PermissionModeId; label: string; hint: string }[] = [
   { id: 'acceptEdits', label: 'Auto-edit', hint: 'File edits are auto-approved' },
   { id: 'plan', label: 'Plan', hint: 'Read-only, plan first' },
   { id: 'bypassPermissions', label: 'Allow all', hint: 'Run without approvals (careful)' },
+  { id: 'auto', label: 'Auto', hint: 'Claude: a classifier reviews each action instead of you' },
 ];
 
 function toAttachment(path: string, name?: string): Attachment {
@@ -31,7 +33,7 @@ function toAttachment(path: string, name?: string): Attachment {
   return { path, name: n, kind: IMAGE_RE.test(n) ? 'image' : 'file' };
 }
 
-export default function Composer({ cwd, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments }: Props) {
+export default function Composer({ cwd, agent, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments }: Props) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -194,7 +196,7 @@ export default function Composer({ cwd, disabled, running, mode, commands = [], 
         <div className="flex items-center gap-2 px-2 pb-2">
           <select value={mode} onChange={(e) => onMode(e.target.value as PermissionModeId)} disabled={disabled}
             className="bg-white/5 rounded-md text-xs px-2 py-1 outline-none" title={MODES.find((m) => m.id === mode)?.hint}>
-            {MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            {MODES.filter((m) => m.id !== 'auto' || agent === 'claude').map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
           </select>
           <label className="text-xs text-zinc-400 hover:text-white cursor-pointer px-2">
             📎 Attach

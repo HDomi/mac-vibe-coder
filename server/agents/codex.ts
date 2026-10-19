@@ -83,6 +83,7 @@ interface PendingReq {
 }
 
 function policyFor(mode: PermissionModeId, cwd: string) {
+  // 'auto' is Claude's classifier mode; Codex has no equivalent, so it behaves like default.
   const sandboxMode = mode === 'bypassPermissions' ? 'danger-full-access' : mode === 'plan' ? 'read-only' : 'workspace-write';
   const sandboxPolicy = mode === 'bypassPermissions' ? { type: 'dangerFullAccess' }
     : mode === 'plan' ? { type: 'readOnly', networkAccess: false }
@@ -408,12 +409,12 @@ export class CodexSession implements AgentSession {
 }
 
 /** List Codex threads for a directory using a short-lived app-server process. */
-export async function listCodexThreads(codexPath: string, cwd: string | null): Promise<{ sessionId: string; summary: string; lastModified: number; firstPrompt?: string; gitBranch?: string; cwd?: string }[]> {
+export async function listCodexThreads(codexPath: string, cwd: string | null, limit = 30): Promise<{ sessionId: string; summary: string; lastModified: number; firstPrompt?: string; gitBranch?: string; cwd?: string }[]> {
   const c = new AppServerClient(codexPath, cwd ?? process.env.HOME ?? '/');
   try {
     await c.request('initialize', { clientInfo: { name: 'mac-vibe-coder', title: 'mac-vibe-coder', version: '0.1.0' }, capabilities: null });
     c.notify('initialized');
-    const res = await c.request<Json>('thread/list', { cwd: cwd ?? null, limit: cwd ? 30 : 15, sortKey: 'updated_at', sortDirection: 'desc', archived: false });
+    const res = await c.request<Json>('thread/list', { cwd: cwd ?? null, limit, sortKey: 'updated_at', sortDirection: 'desc', archived: false });
     return ((res.data as Json[]) ?? []).map((t) => ({
       sessionId: String(t.id),
       summary: String(t.name ?? t.preview ?? ''),
@@ -446,7 +447,7 @@ export async function codexThreadOp(codexPath: string, op: 'rename' | 'delete', 
     await c.request('initialize', { clientInfo: { name: 'mac-vibe-coder', title: 'mac-vibe-coder', version: '0.1.0' }, capabilities: null });
     c.notify('initialized');
     if (op === 'rename') await c.request('thread/name/set', { threadId, name: name ?? '' });
-    else await c.request('thread/archive', { threadId });
+    else await c.request('thread/delete', { threadId }); // permanent, unlike thread/archive
   } finally {
     c.kill();
   }

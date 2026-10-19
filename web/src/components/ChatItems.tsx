@@ -58,14 +58,20 @@ export function AssistantItem({ item, baseDir }: { item: Extract<ChatItem, { kin
   );
 }
 
+const SUBAGENT_TOOLS = new Set(['Agent', 'Task', 'SubAgent', 'SubAgentActivity']);
+
 export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: 'tool' }>; children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [showKids, setShowKids] = useState(true);
   const summary = summarizeInput(item.name, item.input);
+  const isSubagent = SUBAGENT_TOOLS.has(item.name);
+  const i = (item.input ?? {}) as Record<string, unknown>;
   return (
-    <div className={`rounded-lg border ${item.isError ? 'border-red-500/30' : 'border-white/10'} bg-white/[0.03] text-[13px] ${item.parent ? 'ml-6' : ''}`}>
+    <div className={`rounded-lg border ${item.isError ? 'border-red-500/30' : isSubagent && !item.done ? 'border-violet-400/40' : 'border-white/10'} ${isSubagent ? 'bg-violet-500/[0.04]' : 'bg-white/[0.03]'} text-[13px] ${item.parent ? 'ml-6' : ''}`}>
       <button className="w-full flex items-center gap-2 px-3 py-1.5 text-left" onClick={() => setOpen((v) => !v)}>
         <span className={`w-1.5 h-1.5 rounded-full ${item.done ? (item.isError ? 'bg-red-400' : 'bg-emerald-400') : 'bg-amber-400 animate-pulse'}`} />
-        <span className="font-medium text-zinc-200">{item.name}</span>
+        {isSubagent && <span className={`text-[10px] rounded px-1.5 py-0.5 ${item.done ? 'bg-violet-500/15 text-violet-200' : 'bg-violet-500/25 text-violet-100 animate-pulse'}`}>{item.done ? 'subagent' : 'subagent working…'}</span>}
+        <span className="font-medium text-zinc-200">{isSubagent ? String(i.subagent_type ?? i.description ?? item.name) : item.name}</span>
         <span className="truncate text-zinc-400 font-mono text-[12px] flex-1">{summary}</span>
         {!item.done && item.elapsed > 0 && <span className="text-zinc-500 text-[11px]">{Math.round(item.elapsed)}s</span>}
         <span className="text-zinc-600">{open ? '▾' : '▸'}</span>
@@ -78,7 +84,14 @@ export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: '
           )}
         </div>
       )}
-      {children && <div className="border-t border-white/10 px-2 py-2 space-y-2">{children}</div>}
+      {children && (
+        <div className="border-t border-white/10">
+          <button className="w-full text-left px-3 py-1 text-[11px] text-zinc-500 hover:text-zinc-300" onClick={() => setShowKids((v) => !v)}>
+            {showKids ? '▾' : '▸'} {isSubagent ? 'subagent activity' : 'nested activity'}
+          </button>
+          {showKids && <div className="px-2 pb-2 space-y-2 border-l-2 border-violet-400/30 ml-3">{children}</div>}
+        </div>
+      )}
     </div>
   );
 }

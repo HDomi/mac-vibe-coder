@@ -90,6 +90,8 @@ export class ClaudeSession implements AgentSession {
       systemPrompt: { type: 'preset', preset: 'claude_code', snapshot: true },
       model: this.opts.model,
       includePartialMessages: true,
+      // Stream subagent text/thinking too, so the UI can show what a subagent is doing.
+      forwardSubagentText: true,
       abortController: this.abort,
       env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: 'mac-vibe-coder/0.1.0' },
       stderr: (data) => this.emit({ kind: 'log', text: data }),

@@ -35,7 +35,7 @@ export interface UsageSnapshot {
   codex: { fiveHour: UsageWindow | null; weekly: UsageWindow | null; plan: string | null } | null;
   errors: string[];
 }
-export interface HistorySession { agent: 'claude' | 'codex'; sessionId: string; summary: string; lastModified: number; customTitle?: string; firstPrompt?: string; gitBranch?: string; cwd?: string }
+export interface HistorySession { agent: 'claude' | 'codex'; sessionId: string; summary: string; lastModified: number; customTitle?: string; firstPrompt?: string; gitBranch?: string; cwd?: string; pinned?: boolean }
 export interface HistoryMessage { type: string; uuid: string; message: unknown; parent_tool_use_id: string | null }
 
 export interface UpdateStatus { repo: string; branch: string | null; local: string | null; remote: string | null; behind: number; ahead: number; dirty: boolean; commits: { hash: string; subject: string }[]; checkedAt: number; error: string | null }
@@ -44,7 +44,7 @@ export interface GitFile { path: string; index: string; worktree: string; staged
 export interface GitBranch { name: string; current: boolean; remote: boolean; upstream: string | null }
 export interface GitStatus { repo: boolean; root: string | null; branch: string | null; ahead: number; behind: number; files: GitFile[] }
 
-export interface RecentSession { agent: 'claude' | 'codex'; sessionId: string; title: string; cwd: string | null; lastModified: number }
+export interface RecentSession { agent: 'claude' | 'codex'; sessionId: string; title: string; cwd: string | null; lastModified: number; pinned?: boolean }
 export interface ModelInfo { id: string; name: string; description?: string; isDefault?: boolean }
 
 export class ApiError extends Error {
@@ -86,7 +86,7 @@ export const api = {
   fsMove: (paths: string[], dest: string) => post<{ paths: string[] }>('/api/fs/move', { paths, dest }),
   fsDuplicate: (path: string) => post<{ path: string }>('/api/fs/duplicate', { path }),
   fsTrash: (paths: string[]) => post<{ ok: true }>('/api/fs/trash', { paths }),
-  historyAll: () => req<RecentSession[]>('/api/history-all'),
+  historyAll: (limit = 20) => req<RecentSession[]>(`/api/history-all?limit=${limit}`),
   models: (agent: 'claude' | 'codex') => req<ModelInfo[]>(`/api/models?agent=${agent}`),
   recent: () => req<string[]>('/api/recent'),
   pushRecent: (path: string) =>
@@ -101,6 +101,7 @@ export const api = {
   },
   history: (cwd: string, agent: 'claude' | 'codex' | 'all' = 'all') => req<HistorySession[]>(`/api/history?cwd=${q(cwd)}&agent=${agent}`),
   historyRename: (agent: 'claude' | 'codex', id: string, title: string, cwd?: string) => post<{ ok: true }>('/api/history/rename', { agent, id, title, cwd }),
+  historyPin: (agent: 'claude' | 'codex', id: string, pinned: boolean) => post<{ ok: true }>('/api/history/pin', { agent, id, pinned }),
   historyDelete: (agent: 'claude' | 'codex', id: string, cwd?: string) => req<{ ok: true }>(`/api/history/${q(id)}?agent=${agent}${cwd ? `&cwd=${q(cwd)}` : ''}`, { method: 'DELETE' }),
   search: (cwd: string, query: string) => req<{ path: string; rel: string; isDir: boolean }[]>(`/api/fs/search?cwd=${q(cwd)}&q=${q(query)}`),
   updateStatus: (force = false) => req<UpdateStatus>(`/api/update/status${force ? '?force=1' : ''}`),

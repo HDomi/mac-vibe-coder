@@ -1,6 +1,6 @@
 /** Shared types mirrored from server/agents/types.ts (kept in sync by hand). */
 export type AgentId = 'claude' | 'codex';
-export type PermissionModeId = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
+export type PermissionModeId = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'auto';
 export interface Attachment { path: string; name: string; kind: 'image' | 'file'; mime?: string }
 export interface QuestionOption { label: string; description?: string; preview?: string }
 export interface Question { question: string; header: string; options: QuestionOption[]; multiSelect: boolean }

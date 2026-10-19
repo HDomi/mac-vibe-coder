@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Favorite, type FavoriteGroup, type Favorites, type HomeInfo, type RecentSession } from '../lib/api';
 import { useContextMenu, type MenuItem } from './ContextMenu';
+import { UpdateBadge } from './UpdatePanel';
 
 interface Props {
   home: HomeInfo | null;
@@ -155,7 +156,9 @@ export default function Sidebar(p: Props) {
   return (
     <aside className="h-full flex flex-col border-r border-white/10 bg-[#0e1117] min-w-0">
       <div className="h-10 flex items-center px-3 text-xs text-zinc-500">
-        <span className="flex-1 pl-1 font-medium text-zinc-400">Mac Vibe Coder</span>
+        <span className="pl-1 font-medium text-zinc-400">Mac Vibe Coder</span>
+        <span className="ml-2"><UpdateBadge /></span>
+        <div className="flex-1" />
         <button className="w-6 h-6 rounded hover:bg-white/10 text-zinc-400" onClick={p.onToggle} title="Collapse sidebar">«</button>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-2">
@@ -213,15 +216,18 @@ export default function Sidebar(p: Props) {
               <InlineInput value={s.title} onCancel={() => setRenaming(null)} onCommit={(v) => { setRenaming(null); if (v.trim() && v !== s.title) api.historyRename(s.agent, s.sessionId, v.trim(), s.cwd ?? undefined).then(reloadSessions).catch(() => {}); }} />
             </div>
           ) : (
-            <Item key={s.agent + s.sessionId} label={s.title} path={s.cwd ?? s.sessionId} active={false} hint={s.agent === 'codex' ? 'codex' : 'claude'}
+            <Item key={s.agent + s.sessionId} label={(s.pinned ? '📌 ' : '') + s.title} path={s.cwd ?? s.sessionId} active={false} hint={s.agent === 'codex' ? 'codex' : 'claude'}
               onClick={() => p.onResumeSession(s)}
               onContextMenu={(e) => menu.open(e, [
                 { label: 'Resume', onClick: () => p.onResumeSession(s) },
+                { label: s.pinned ? 'Unpin' : 'Pin', onClick: () => api.historyPin(s.agent, s.sessionId, !s.pinned).then(reloadSessions).catch(() => {}) },
                 { label: 'Rename…', onClick: () => setRenaming({ kind: 'session', id: s.sessionId }) },
                 { label: 'Copy session id', onClick: () => navigator.clipboard.writeText(s.sessionId) },
                 ...(s.cwd ? [{ separator: true }, ...commonItems(s.cwd)] : []),
                 { separator: true },
-                { label: s.agent === 'codex' ? 'Archive' : 'Delete', danger: true, onClick: () => { if (window.confirm(`${s.agent === 'codex' ? 'Archive' : 'Delete'} session “${s.title}”?`)) api.historyDelete(s.agent, s.sessionId, s.cwd ?? undefined).then(reloadSessions).catch(() => {}); } },
+                { label: s.pinned ? 'Delete (unpin first)' : 'Delete permanently', danger: true, disabled: !!s.pinned, onClick: () => {
+                  if (window.confirm(`Delete "${s.title}"?\nThis permanently erases the session and its history.`)) api.historyDelete(s.agent, s.sessionId, s.cwd ?? undefined).then(reloadSessions).catch((e) => window.alert(e.message));
+                } },
               ])} />
           ))}
         </div>

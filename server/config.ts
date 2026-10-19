@@ -24,9 +24,11 @@ export interface Config {
   favorites: Favorite[];
   groups: FavoriteGroup[];
   recent: string[];
+  /** "agent:sessionId" keys of pinned sessions; pinned sessions cannot be deleted. */
+  pinnedSessions: string[];
 }
 
-const DEFAULT: Config = { favorites: [], groups: [], recent: [] };
+const DEFAULT: Config = { favorites: [], groups: [], recent: [], pinnedSessions: [] };
 
 export async function loadConfig(): Promise<Config> {
   try {
