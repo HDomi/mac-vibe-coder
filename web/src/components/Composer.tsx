@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import type { Attachment, PermissionModeId } from '../lib/agent';
 import { t, useLang } from '../lib/i18n';
 import { openLightbox } from './Lightbox';
+import FileIcon from './FileIcon';
 
 interface Props {
   /** Session working directory; root for "@" file mentions. */
@@ -182,7 +183,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
             {fileHits.map((h, i) => (
               <div key={h.path} onMouseEnter={() => setFileIdx(i)} onMouseDown={(e) => { e.preventDefault(); pickMention(h); }}
                 className={`px-3 py-1 flex items-center gap-2 cursor-pointer ${i === fileIdx ? 'bg-blue-500/20 text-white' : 'text-zinc-300'}`}>
-                <span className="text-xs">{h.isDir ? '📁' : '📄'}</span>
+                <FileIcon name={h.rel.split('/').pop() ?? h.rel} isDir={h.isDir} className="w-3.5 h-3.5" />
                 <span className="font-mono truncate">{h.rel}</span>
               </div>
             ))}

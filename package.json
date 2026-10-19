@@ -1,7 +1,7 @@
 {
   "name": "mac-vibe-coder",
   "productName": "Mac Vibe Coder",
-  "version": "0.3.21",
+  "version": "0.3.22",
   "private": true,
   "type": "module",
   "main": "dist/electron/main.cjs",
@@ -43,6 +43,7 @@
     "@xterm/xterm": "^5.5.0",
     "concurrently": "^9.1.0",
     "electron": "^39.0.0",
+    "material-icon-theme": "^5.39.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.0.0",

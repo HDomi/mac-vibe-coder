@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
+import FileIcon from './FileIcon';
 
 interface Hit { path: string; rel: string; isDir: boolean }
 
@@ -48,7 +49,7 @@ export default function QuickOpen({ cwd, onClose, onOpen, onAttach }: Props) {
           {hits.map((h, i) => (
             <div key={h.path} onMouseEnter={() => setIdx(i)} onClick={() => { onOpen(h); onClose(); }}
               className={`px-4 py-1.5 text-sm flex items-center gap-2 cursor-pointer ${i === idx ? 'bg-blue-500/20' : ''}`}>
-              <span>{h.isDir ? '📁' : '📄'}</span>
+              <FileIcon name={h.rel.split('/').pop() ?? h.rel} isDir={h.isDir} />
               <span className="truncate flex-1 font-mono text-[13px]">{h.rel}</span>
               {i === idx && !h.isDir && <button className="text-[10px] text-zinc-400 hover:text-white" onClick={(e) => { e.stopPropagation(); onAttach(h); onClose(); }}>{t('quickopen.attach')}</button>}
             </div>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, formatSize, type Entry, type Listing } from '../lib/api';
 import { useContextMenu, type MenuItem } from './ContextMenu';
 import { t, useLang } from '../lib/i18n';
+import FileIcon from './FileIcon';
 
 interface Props {
   listing: Listing | null;
@@ -13,8 +14,6 @@ interface Props {
   onRefresh: () => void;
   onAttach?: (entries: Entry[]) => void;
 }
-
-const ICON: Record<string, string> = { markdown: '📝', image: '🖼️', video: '🎬', audio: '🎵', pdf: '📄', text: '📃', binary: '📦' };
 
 interface Clipboard { paths: string[]; cut: boolean }
 let clipboard: Clipboard | null = null; // module-level so it survives re-renders and folder changes
@@ -178,7 +177,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
           <table className="w-full text-sm">
             <tbody>
               {creating && (
-                <tr className="bg-blue-500/10"><td className="w-9 pl-3 pr-2 py-1.5">📁</td>
+                <tr className="bg-blue-500/10"><td className="w-9 pl-3 pr-2 py-1.5"><FileIcon name={draft} isDir /></td>
                   <td colSpan={3} className="py-1 pr-3"><input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={createFolder} onKeyDown={(e) => { if (e.key === 'Enter') createFolder(); if (e.key === 'Escape') setCreating(false); }} className="w-full bg-black/40 rounded px-2 py-0.5 outline-none border border-blue-400/50" /></td></tr>
               )}
               {entries.map((e) => (
@@ -188,7 +187,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
                   draggable
                   onDragStart={(ev) => { const paths = selected.has(e.path) ? selectedEntries.map((x) => x.path) : [e.path]; ev.dataTransfer.setData('text/plain', paths.join('\n')); ev.dataTransfer.setData('application/x-vibe-path', paths.join('\n')); }}
                 >
-                  <td className="w-9 pl-3 pr-2 py-1.5">{e.isDir ? '📁' : ICON[e.kind]}</td>
+                  <td className="w-9 pl-3 pr-2 py-1.5"><FileIcon name={e.name} isDir={e.isDir} /></td>
                   <td className="py-1.5 pl-1 truncate max-w-0 w-full">
                     {renaming === e.path
                       ? <input autoFocus value={draft} onChange={(ev) => setDraft(ev.target.value)} onBlur={commitRename} onClick={(ev) => ev.stopPropagation()} onDoubleClick={(ev) => ev.stopPropagation()}
