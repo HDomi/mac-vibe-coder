@@ -31,10 +31,14 @@ export type AgentEvent =
 export type ServerMessage =
   | { sessionId: string; seq: number; ts: number; event: AgentEvent }
   | { type: 'session.started'; sessionId: string; requestCwd: string; agent: AgentId }
-  | { type: 'session.missing'; sessionId: string };
+  | { type: 'session.missing'; sessionId: string }
+  | { type: 'pong' }
+  /** Synthetic, client-side: the socket reconnected after a drop; subscriptions must be re-established. */
+  | { type: 'reconnected' };
 
 export type ClientCommand =
   | { type: 'session.start'; agent: AgentId; cwd: string; resume?: string; permissionMode?: PermissionModeId; model?: string }
+  | { type: 'ping' }
   | { type: 'session.attach'; sessionId: string; after?: number }
   | { type: 'session.send'; sessionId: string; text: string; attachments?: Attachment[] }
   | { type: 'session.approve'; sessionId: string; requestId: string; decision: 'allow' | 'allow_always' | 'deny'; message?: string }
@@ -53,6 +57,9 @@ export class AgentClient {
   private queue: string[] = [];
   private retry = 0;
   private closed = false;
+  private opens = 0;
+  private lastSeen = Date.now();
+  private heartbeat: number | null = null;
   readonly ready: Promise<void>;
   private resolveReady!: () => void;
 
@@ -67,21 +74,40 @@ export class AgentClient {
     this.ws = ws;
     ws.onopen = () => {
       this.retry = 0;
+      this.lastSeen = Date.now();
+      const reconnected = this.opens++ > 0;
       for (const q of this.queue.splice(0)) ws.send(q);
       this.resolveReady();
+      // Tell subscribers first so they can re-attach before any queued command needs the subscription.
+      if (reconnected) for (const l of this.listeners) l({ type: 'reconnected' });
+      this.startHeartbeat(ws);
     };
     ws.onmessage = (ev) => {
+      this.lastSeen = Date.now();
       let m: ServerMessage;
       try { m = JSON.parse(ev.data); } catch { return; }
+      if ('type' in m && m.type === 'pong') return;
       for (const l of this.listeners) l(m);
     };
     ws.onclose = () => {
+      this.stopHeartbeat();
       if (this.closed) return;
       const delay = Math.min(8000, 500 * 2 ** this.retry++);
       setTimeout(() => this.connect(), delay);
     };
     ws.onerror = () => ws.close();
   }
+
+  /** Detect half-open sockets (sleep/wake, server restart) that never fire onclose: ping every 15s, drop after 40s of silence. */
+  private startHeartbeat(ws: WebSocket) {
+    this.stopHeartbeat();
+    this.heartbeat = window.setInterval(() => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - this.lastSeen > 40000) { ws.close(); return; }
+      ws.send(JSON.stringify({ type: 'ping' }));
+    }, 15000);
+  }
+  private stopHeartbeat() { if (this.heartbeat !== null) { window.clearInterval(this.heartbeat); this.heartbeat = null; } }
 
   send(cmd: ClientCommand) {
     const s = JSON.stringify(cmd);

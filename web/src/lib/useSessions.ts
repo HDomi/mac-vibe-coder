@@ -25,11 +25,19 @@ interface Persisted { id: string; cwd: string; agent: AgentId; agentSessionId?: 
 
 export function useSessions() {
   const [sessions, setSessions] = useState<Record<string, ChatSession>>({});
+  const sessionsRef = useRef(sessions);
+  useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
   const pendingStart = useRef(new Map<string, { cwd: string; resolve: (id: string) => void; preload: ChatItem[] }[]>());
 
   useEffect(() => {
     const off = agentClient.on((m: ServerMessage) => {
       if ('type' in m) {
+        if (m.type === 'reconnected') {
+          // The server lost this socket's subscriptions; re-attach every live session from where we left off.
+          for (const s of Object.values(sessionsRef.current)) if (s.status !== 'closed') agentClient.send({ type: 'session.attach', sessionId: s.id, after: s.lastSeq });
+          return;
+        }
+        if (m.type === 'pong') return;
         if (m.type === 'session.started') {
           const queue = pendingStart.current.get(m.requestCwd) ?? [];
           const p = queue.shift();
@@ -94,6 +102,12 @@ export function useSessions() {
   }, []);
 
   const send = useCallback((sessionId: string, text: string, attachments: Attachment[]) => {
+    // Show the message immediately; the server's echo confirms it (see reducer) instead of adding a duplicate.
+    setSessions((prev) => {
+      const s = prev[sessionId];
+      if (!s) return prev;
+      return { ...prev, [sessionId]: { ...s, items: [...s.items, { kind: 'user', id: `local-${Date.now()}`, text, attachments, pending: true }], status: s.status === 'idle' ? 'running' : s.status, turnStartedAt: s.turnStartedAt ?? Date.now() } };
+    });
     agentClient.send({ type: 'session.send', sessionId, text, attachments });
   }, []);
   const approve = useCallback((sessionId: string, requestId: string, decision: 'allow' | 'allow_always' | 'deny', message?: string) => {

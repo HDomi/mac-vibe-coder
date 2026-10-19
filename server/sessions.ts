@@ -121,6 +121,9 @@ export function attachWebSocket(wss: WebSocketServer, registry: SessionRegistry)
 
 async function handle(cmd: ClientCommand, ws: WebSocket, registry: SessionRegistry) {
   switch (cmd.type) {
+    case 'ping':
+      safeSend(ws, { type: 'pong' });
+      return;
     case 'session.start': {
       const s = await registry.start(cmd, ws);
       safeSend(ws, { type: 'session.started', sessionId: s.id, requestCwd: cmd.cwd, agent: cmd.agent });

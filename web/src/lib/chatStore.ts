@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentId, Attachment, PermissionModeId, Question } from './agent';
 
 export type ChatItem =
-  | { kind: 'user'; id: string; text: string; attachments: Attachment[] }
+  | { kind: 'user'; id: string; text: string; attachments: Attachment[]; pending?: boolean }
   | { kind: 'assistant'; id: string; text: string; thinking: string; parent: string | null; streaming: boolean }
   | { kind: 'tool'; id: string; name: string; input: unknown; output: string | null; isError: boolean; parent: string | null; elapsed: number; done: boolean }
   | { kind: 'approval'; id: string; toolName: string; input: unknown; canAlwaysAllow: boolean; decision: string | null }
@@ -69,7 +69,10 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
     case 'user': {
       // Live events carry clean text; replayed ones (Codex resume) may still include the appended path block.
       const split = e.attachments.length ? { text: e.text, attachments: e.attachments } : splitAttachments(e.text);
-      items.push({ kind: 'user', id: uid(), text: split.text, attachments: split.attachments });
+      // Confirm an optimistic local echo with the same text instead of appending a duplicate.
+      const pendingIdx = items.findIndex((it) => it.kind === 'user' && it.pending && it.text === split.text);
+      if (pendingIdx >= 0) items[pendingIdx] = { kind: 'user', id: uid(), text: split.text, attachments: split.attachments };
+      else items.push({ kind: 'user', id: uid(), text: split.text, attachments: split.attachments });
       next.turnStartedAt = next.turnStartedAt ?? Date.now();
       return next;
     }

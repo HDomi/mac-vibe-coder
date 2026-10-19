@@ -41,6 +41,7 @@ export type ServerMessage = { sessionId: string; seq: number; ts: number; event:
 
 export type ClientCommand =
   | { type: 'session.start'; agent: AgentId; cwd: string; resume?: string; permissionMode?: PermissionModeId; model?: string }
+  | { type: 'ping' }
   | { type: 'session.attach'; sessionId: string; after?: number }
   | { type: 'session.send'; sessionId: string; text: string; attachments?: Attachment[] }
   | { type: 'session.approve'; sessionId: string; requestId: string; decision: 'allow' | 'allow_always' | 'deny'; message?: string }

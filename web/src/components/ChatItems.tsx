@@ -23,7 +23,7 @@ function summarizeInput(name: string, input: unknown): string {
 export function UserItem({ item }: { item: Extract<ChatItem, { kind: 'user' }> }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[80%] rounded-2xl rounded-br-md bg-blue-500/20 px-4 py-2.5 text-[14px] whitespace-pre-wrap">
+      <div className={`max-w-[80%] rounded-2xl rounded-br-md bg-blue-500/20 px-4 py-2.5 text-[14px] whitespace-pre-wrap ${item.pending ? 'opacity-60' : ''}`}>
         {item.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
             {item.attachments.map((a) => a.kind === 'image'
