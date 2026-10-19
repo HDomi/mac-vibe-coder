@@ -85,6 +85,12 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
               className="rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 px-3 py-1.5 disabled:opacity-40" onClick={() => apply(false)}>
               {t('update.apply')}
             </button>
+            <button disabled={phase === 'running' || phase === 'restarting' || !status || !!status.error}
+              className="rounded bg-white/5 hover:bg-white/10 text-zinc-200 px-3 py-1.5 disabled:opacity-40"
+              title={t('update.reinstallHint')}
+              onClick={() => { if (window.confirm(t('update.reinstallConfirm', { v: status?.remote?.version ?? '' }))) apply(false); }}>
+              {t('update.reinstall')}
+            </button>
             {phase === 'failed' && <button className="rounded bg-white/5 hover:bg-white/10 px-3 py-1.5 text-xs" onClick={() => apply(true)}>{t('update.force')}</button>}
           </div>
           {phase === 'restarting' && <div className="text-emerald-300 text-xs animate-pulse">{t('update.restarting')}</div>}
