@@ -13,5 +13,5 @@ export function fileIconUrl(name: string, isDir: boolean): string {
 }
 
 export default function FileIcon({ name, isDir, className = 'w-4 h-4' }: { name: string; isDir: boolean; className?: string }) {
-  return <img src={fileIconUrl(name, isDir)} alt="" draggable={false} className={`inline-block shrink-0 ${className}`} />;
+  return <img src={fileIconUrl(name, isDir)} alt="" draggable={false} className={`inline-block shrink-0 max-w-none ${className}`} />;
 }
