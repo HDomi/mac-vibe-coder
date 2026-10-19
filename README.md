@@ -122,14 +122,20 @@ cd mac-vibe-coder
 |------|------|
 | `~/.mac-vibe-coder/config.json` | 즐겨찾기 · 그룹 · 최근 폴더 |
 | `~/.mac-vibe-coder/attachments/` | 브라우저 모드 · 붙여넣기 첨부 사본 |
-| `~/.claude/projects/` | Claude 세션(앱이 읽기만 함, CLI 와 공유) |
+| `~/.claude/projects/` | Claude 세션(CLI 와 공유, 이름 변경·삭제도 반영) |
 | `~/.codex/` | Codex 세션 · 로그인(앱이 읽기만 함) |
 | `~/Library/LaunchAgents/com.hdomi.mac-vibe-coder.plist` | `--login` 으로 등록한 자동 실행 |
 
 ## 업데이트
 
-- **앱 안에서**: 헤더 오른쪽 `Update N` 배지 → 커밋 목록 확인 → Apply. `git pull --ff-only && npm ci && npm run build` 후 자동 재시작. 활성 세션이 있으면 보류(강제 옵션 있음). 로컬 변경이 있으면 pull 이 거부되고 그대로 보여준다.
-- **터미널에서**: `scripts/update.sh`
+- **앱 안에서**: 버전 배지 → 커밋 목록 확인 → Apply. 임시 폴더에서 clone → `npm ci` → build 후, 빌드한 커밋으로 체크아웃을 fast-forward 한다. 교체 또는 fast-forward 실패 시 기존 빌드 폴더를 복원한다. 활성 세션이 있으면 보류하며 강제 옵션을 제공한다. Electron 런타임 자체가 바뀌거나 `npm run app`으로 실행 중이면 터미널 업데이트를 안내한다.
+- **터미널에서**: `scripts/update.sh`. 앱과 서버가 끝난 뒤 임시 폴더에서 빌드·교체하고 설치된 앱 번들도 다시 만든다. 설치 경로는 `runtime/install-location`에 보관한다.
+
+## 안정성 검증
+
+- `npm test`: 요청 출처 검증, 설정 동시 저장, Git·파일 처리, 세션 오류, Markdown HTML 필터, 업데이트 실패 복원 테스트.
+- `npm run build && npm run test:ui`: 임시 프로필과 가짜 API를 사용하는 숨겨진 Electron 창에서 Git 응답 순서·브랜치 생성·중복 커밋·업데이트 오류 복구 검증. 실제 CLI 세션이나 설치된 앱은 사용하지 않는다.
+- [v0.3.16 점검 기록](docs/stability-audit.md)
 
 ## 문제 해결
 

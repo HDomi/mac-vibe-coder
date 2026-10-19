@@ -25,6 +25,7 @@ case "${1:-status}" in
   </array>
   <key>WorkingDirectory</key><string>$ROOT</string>
   <key>RunAtLoad</key><true/>
+  <key>AbandonProcessGroup</key><true/>
   <key>KeepAlive</key>
   <dict>
     <key>SuccessfulExit</key><false/>

@@ -50,35 +50,60 @@ export default function GitPanel({ cwd, visible }: Props) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
+  const cwdRef = useRef(cwd);
+  const projectRef = useRef(0);
+  if (cwdRef.current !== cwd) projectRef.current++;
+  cwdRef.current = cwd;
+  const project = projectRef.current;
+  const generation = useRef(0);
+  const refreshId = useRef(0);
+  const operationRef = useRef(false);
+  const [diffTick, setDiffTick] = useState(0);
+  const [newBranch, setNewBranch] = useState<string | null>(null);
   useEffect(() => { logRef.current = log; }, [log]);
 
   const refresh = useCallback(() => {
     if (!cwd) return;
-    api.gitStatus(cwd).then(setSt).catch(() => setSt(null));
-    api.gitBranches(cwd).then(setBranches).catch(() => setBranches([]));
+    const request = ++refreshId.current;
+    const current = () => projectRef.current === project && refreshId.current === request;
+    api.gitStatus(cwd).then((st) => { if (current()) { setSt(st); setDiffTick((n) => n + 1); } }).catch((e) => { if (current()) setNote(e.message); });
+    api.gitBranches(cwd).then((rows) => { if (current()) setBranches(rows); }).catch(() => { if (current()) setBranches([]); });
     // First page only. Pages already scrolled in are kept when the head is unchanged.
     api.gitLog(cwd, 0, PAGE).then((r) => {
+      if (!current()) return;
       const cur = logRef.current;
-      if (cur.length > r.commits.length && JSON.stringify(cur.slice(0, r.commits.length)) === JSON.stringify(r.commits)) return;
+      if (cur.length > PAGE && r.hasMore && r.commits.length === PAGE && r.commits.every((commit, i) => cur[i]?.hash === commit.hash)) {
+        const updated = [...r.commits, ...cur.slice(PAGE)];
+        logRef.current = updated; setLog(updated);
+        return;
+      }
+      generation.current++;
+      logRef.current = r.commits;
       setLog(r.commits); setHasMore(r.hasMore);
-    }).catch(() => { setLog([]); setHasMore(false); });
+    }).catch((e) => { if (current()) setNote(e.message); });
   }, [cwd]);
 
   const loadMore = useCallback(() => {
     if (!cwd || loadingRef.current) return;
     loadingRef.current = true; setLoadingMore(true);
+    const epoch = generation.current;
+    const current = () => projectRef.current === project && generation.current === epoch;
     const skip = logRef.current.length;
     api.gitLog(cwd, skip, PAGE).then((r) => {
+      if (!current()) return;
       setLog((prev) => {
         const seen = new Set(prev.map((c) => c.hash));
         return [...prev, ...r.commits.filter((c) => !seen.has(c.hash))];
       });
       setHasMore(r.hasMore);
-    }).catch(() => setHasMore(false)).finally(() => { loadingRef.current = false; setLoadingMore(false); });
+    }).catch((e) => { if (current()) setNote(e.message); }).finally(() => { if (projectRef.current === project) { loadingRef.current = false; setLoadingMore(false); } });
   }, [cwd]);
 
   // Reset paging when the project changes.
-  useEffect(() => { setLog([]); setHasMore(false); setSel(null); }, [cwd]);
+  useEffect(() => {
+    generation.current++; refreshId.current++; logRef.current = []; loadingRef.current = false; operationRef.current = false;
+    setLog([]); setHasMore(false); setSel(null); setSt(null); setBranches([]); setDiff(''); setMsg(''); setNote(null); setBusy(false); setRemoteBusy(null); setLoadingMore(false); setNewBranch(null);
+  }, [cwd]);
   useEffect(() => { if (visible) refresh(); }, [visible, refresh]);
   useEffect(() => {
     if (!visible || !cwd) return;
@@ -87,8 +112,10 @@ export default function GitPanel({ cwd, visible }: Props) {
   }, [visible, cwd, refresh]);
   useEffect(() => {
     if (!cwd || !sel) { setDiff(''); return; }
-    api.gitDiff(cwd, sel.path, sel.staged).then(setDiff).catch(() => setDiff(''));
-  }, [cwd, sel]);
+    let alive = true;
+    api.gitDiff(cwd, sel.path, sel.staged).then((text) => { if (alive) setDiff(text); }).catch((e) => { if (alive) setDiff(e.message); });
+    return () => { alive = false; };
+  }, [cwd, sel, diffTick]);
 
   // Infinite scroll: fetch the next page when the sentinel enters the commit list's viewport.
   useEffect(() => {
@@ -105,35 +132,40 @@ export default function GitPanel({ cwd, visible }: Props) {
   const staged = st?.files.filter((f) => f.staged) ?? [];
   const unstaged = st?.files.filter((f) => !f.staged || f.worktree !== ' ') ?? [];
   const stage = (files: GitFile[], action: 'add' | 'reset' | 'discard') => {
-    if (!files.length) return;
+    if (!files.length || operationRef.current || remoteBusy) return;
     if (action === 'discard' && !window.confirm(t('git.confirmDiscard', { n: files.length }))) return;
-    setBusy(true);
-    api.gitStage(cwd, files.map((f) => f.path), action).then(refresh).finally(() => setBusy(false));
+    operationRef.current = true; setBusy(true);
+    api.gitStage(cwd, files.map((f) => f.path), action).then(() => { if (projectRef.current === project) refresh(); }).catch((e) => { if (projectRef.current === project) setNote(e.message); }).finally(() => { if (projectRef.current === project) { operationRef.current = false; setBusy(false); } });
   };
-  const commit = () => {
-    if (!msg.trim() || !staged.length) return;
-    setBusy(true); setNote(null);
-    api.gitCommit(cwd, msg.trim()).then((r) => { setNote(r.output); if (r.ok) setMsg(''); refresh(); }).finally(() => setBusy(false));
+  const commit = (push = false) => {
+    if (!msg.trim() || !staged.length || operationRef.current || remoteBusy) return;
+    operationRef.current = true; setBusy(true); setNote(null);
+    api.gitCommit(cwd, msg.trim()).then((r) => { if (projectRef.current !== project) return; setNote(r.output); if (r.ok) { setMsg(''); if (push) {
+        setRemoteBusy('push');
+        return api.gitRemote(cwd, 'push').then((result) => { if (projectRef.current === project) setNote(result.output); }).finally(() => { if (projectRef.current === project) { setRemoteBusy(null); refresh(); } });
+      } } refresh(); }).catch((e) => { if (projectRef.current === project) setNote(e.message); }).finally(() => { if (projectRef.current === project) { operationRef.current = false; setBusy(false); } });
   };
 
   const remote = (op: 'fetch' | 'pull' | 'push') => {
-    setRemoteBusy(op); setNote(null);
-    api.gitRemote(cwd, op).then((r) => setNote(`${op}: ${r.ok ? t('git.ok') : t('git.failed')} ${r.output.split('\n').slice(-1)[0] ?? ''}`)).catch((e) => setNote(`${op} ${t('git.failed')}: ${e.message}`)).finally(() => { setRemoteBusy(null); refresh(); });
+    if (operationRef.current || remoteBusy) return;
+    operationRef.current = true; setRemoteBusy(op); setNote(null);
+    api.gitRemote(cwd, op).then((r) => { if (projectRef.current === project) setNote(`${op}: ${r.ok ? t('git.ok') : t('git.failed')} ${r.output.split('\n').slice(-1)[0] ?? ''}`); }).catch((e) => { if (projectRef.current === project) setNote(`${op} ${t('git.failed')}: ${e.message}`); }).finally(() => { if (projectRef.current === project) { operationRef.current = false; setRemoteBusy(null); refresh(); } });
   };
   const checkout = (value: string) => {
     if (!value) return;
-    if (value === '__new__') {
-      const name = window.prompt(t('git.newBranchPrompt'));
-      if (!name) return;
-      setBusy(true);
-      api.gitCheckout(cwd, name.trim(), true).then((r) => setNote(r.output.split('\n')[0] ?? '')).finally(() => { setBusy(false); refresh(); });
-      return;
-    }
-    setBusy(true);
-    api.gitCheckout(cwd, value).then((r) => setNote(r.output.split('\n')[0] ?? '')).finally(() => { setBusy(false); refresh(); });
+    if (operationRef.current || remoteBusy) return;
+    if (value === '__new__') { setNewBranch(''); return; }
+    operationRef.current = true; setBusy(true);
+    api.gitCheckout(cwd, value).then((r) => { if (projectRef.current === project) setNote(r.output.split('\n')[0] ?? ''); }).catch((e) => { if (projectRef.current === project) setNote(e.message); }).finally(() => { if (projectRef.current === project) { operationRef.current = false; setBusy(false); refresh(); } });
+  };
+  const createBranch = () => {
+    const name = newBranch?.trim();
+    if (!name || operationRef.current || remoteBusy) return;
+    operationRef.current = true; setBusy(true);
+    api.gitCheckout(cwd, name, true).then((r) => { if (projectRef.current !== project) return; setNote(r.output); if (r.ok) setNewBranch(null); }).catch((e) => { if (projectRef.current === project) setNote(e.message); }).finally(() => { if (projectRef.current === project) { operationRef.current = false; setBusy(false); refresh(); } });
   };
 
-  const Row = ({ f, isStaged }: { f: GitFile; isStaged: boolean }) => {
+  const row = ({ f, isStaged }: { f: GitFile; isStaged: boolean }) => {
     const code = isStaged ? f.index : (f.untracked ? '?' : f.worktree);
     const tone = f.untracked || code === 'A' ? 'text-emerald-300 bg-emerald-500/10' : code === 'D' ? 'text-red-300 bg-red-500/10' : 'text-amber-300 bg-amber-500/10';
     const active = sel?.path === f.path && sel.staged === isStaged;
@@ -164,20 +196,29 @@ export default function GitPanel({ cwd, visible }: Props) {
         ))}
         <button className="text-zinc-400 hover:text-white px-1" onClick={refresh} disabled={busy} title={t('common.refresh')}>↻</button>
       </div>
+      {newBranch !== null && <form className="flex gap-2 px-2 py-2 border-b border-white/10" onSubmit={(e) => { e.preventDefault(); createBranch(); }}>
+        <input autoFocus aria-label={t('git.newBranch')} placeholder={t('git.newBranchPrompt')} value={newBranch} onChange={(e) => setNewBranch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setNewBranch(null); }} className="min-w-0 flex-1 rounded bg-white/5 px-2 text-xs outline-none" />
+        <button disabled={busy || !!remoteBusy || !newBranch.trim()} className="text-xs text-sky-200 disabled:opacity-40">{t('git.newBranch')}</button>
+        <button type="button" onClick={() => setNewBranch(null)} className="text-xs">✕</button>
+      </form>}
       {note && <div className="px-3 py-1 text-[11px] text-amber-200 border-b border-white/5 truncate" title={note}>{note}</div>}
       <div className="flex-1 min-h-0 flex flex-col">
         <div className="max-h-[45%] overflow-y-auto border-b border-white/10">
+          <section>
           <SectionHeader color="bg-emerald-400" title={t('git.stagedTitle')} count={staged.length}>
             {staged.length > 0 && <button className="hover:text-white" onClick={() => stage(staged, 'reset')}>{t('git.unstageAll')}</button>}
           </SectionHeader>
-          {staged.length === 0 ? <div className="px-3 py-2 text-[11px] text-zinc-600">{t('git.nothingStaged')}</div> : <div className="py-1">{staged.map((f) => <Row key={'s' + f.path} f={f} isStaged />)}</div>}
+          {staged.length === 0 ? <div className="px-3 py-2 text-[11px] text-zinc-600">{t('git.nothingStaged')}</div> : <div className="py-1">{staged.map((f) => <div key={'s' + f.path}>{row({ f, isStaged: true })}</div>)}</div>}
+          </section>
+          <section>
           <SectionHeader color="bg-amber-400" title={t('git.changesTitle')} count={unstaged.length}>
             {unstaged.length > 0 && <>
               <button className="hover:text-white" onClick={() => stage(unstaged, 'add')}>{t('git.stageAll')}</button>
               {unstaged.some((f) => !f.untracked) && <button className="hover:text-red-300" onClick={() => stage(unstaged.filter((f) => !f.untracked), 'discard')}>{t('git.discard')}</button>}
             </>}
           </SectionHeader>
-          {st && unstaged.length === 0 ? <div className="px-3 py-2 text-[11px] text-zinc-600">{t('git.clean')}</div> : <div className="py-1">{unstaged.map((f) => <Row key={'u' + f.path} f={f} isStaged={false} />)}</div>}
+          {st && unstaged.length === 0 ? <div className="px-3 py-2 text-[11px] text-zinc-600">{t('git.clean')}</div> : <div className="py-1">{unstaged.map((f) => <div key={'u' + f.path}>{row({ f, isStaged: false })}</div>)}</div>}
+          </section>
         </div>
         <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto bg-[#0b0d12]">
           {sel ? (
@@ -211,9 +252,9 @@ export default function GitPanel({ cwd, visible }: Props) {
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); commit(); } }}
               className="w-full bg-[#0b0d12] rounded-md border border-white/10 focus:border-sky-400/40 px-2 py-1.5 text-xs outline-none resize-none font-mono" />
             <div className="flex items-center gap-2">
-              <button disabled={busy || !msg.trim() || !staged.length} className="rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-xs px-3 py-1.5 disabled:opacity-40" onClick={commit}>{t('git.commit', { n: staged.length })}</button>
+              <button disabled={busy || !msg.trim() || !staged.length} className="rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-xs px-3 py-1.5 disabled:opacity-40" onClick={() => commit()}>{t('git.commit', { n: staged.length })}</button>
               <button disabled={busy || !msg.trim() || !staged.length || !!remoteBusy} className="rounded bg-white/5 hover:bg-white/10 text-xs px-3 py-1.5 disabled:opacity-40"
-                onClick={() => { setBusy(true); api.gitCommit(cwd, msg.trim()).then((r) => { if (r.ok) { setMsg(''); remote('push'); } else setNote(r.output); }).finally(() => setBusy(false)); }}>{t('git.commitPush')}</button>
+                onClick={() => commit(true)}>{t('git.commitPush')}</button>
               <span className="ml-auto text-[10px] text-zinc-600">⌘↩</span>
             </div>
           </div>

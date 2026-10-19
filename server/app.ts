@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { duplicate, FsError, homeInfo, listDir, mkdir, rawFile, readText, rename, resolvePath, searchFiles, statPath, transfer, trash } from './fs.js';
-import { loadConfig, saveConfig } from './config.js';
+import { loadConfig, PORT, saveConfig, withConfigLock } from './config.js';
+import { bodyLimit } from 'hono/body-limit';
 import { streamSSE } from 'hono/streaming';
 import { detectTools, INSTALL_COMMANDS, UPDATE_COMMANDS, type InstallMethod, type ToolId } from './tools.js';
 import { streamShell } from './shell.js';
@@ -15,24 +15,40 @@ import { previewKind } from './mime.js';
 import { codexThreadOp, listCodexModels, listCodexThreads } from './agents/codex.js';
 import { listClaudeModels } from './agents/claude.js';
 import { which, run } from './shell.js';
-import { applyUpdate, checkUpdate, isUpdating, readBuildInfo, RESTART_EXIT_CODE } from './updater.js';
+import { applyUpdate, checkUpdate, isUpdating, readBuildInfo, REPO_ROOT, RESTART_EXIT_CODE } from './updater.js';
 /** Claude Code stores its compaction summary as a user turn; never surface it as a session title. */
 const isCompactSummary = (text?: string | null) => (text ?? '').trimStart().startsWith('This session is being continued from a previous conversation');
 
+import { rejectReason } from './guard.js';
+import { requestShutdown } from './lifecycle.js';
 import { gitBranches, gitCheckout, gitCommit, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
 import { displayableIcon, findProjectIcon } from './icons.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// dist/server/app.js -> ../../web/dist ; server/app.ts (tsx) -> ../web/dist
-const WEB_DIST = path.resolve(__dirname, __dirname.includes(`${path.sep}dist${path.sep}`) ? '../../web/dist' : '../web/dist');
+const WEB_DIST = path.join(REPO_ROOT, 'web', 'dist');
 
 // Version/commit of the running build (dist/build-info.json), not of the checkout.
 const BUILD = readBuildInfo();
 
-export function createApp(registry?: SessionRegistry) {
+export function createApp(registry?: SessionRegistry, port = PORT) {
   const app = new Hono();
 
+  // Reject requests that a web page in the user's browser could forge (see guard.ts).
+  app.use('*', async (c, next) => {
+    const reason = rejectReason({ host: c.req.header('host'), origin: c.req.header('origin'), secFetchSite: c.req.header('sec-fetch-site') }, port);
+    if (reason) return c.json({ error: `Forbidden (${reason})`, code: 'FORBIDDEN' }, 403);
+    if (['POST', 'PATCH', 'PUT'].includes(c.req.method) && c.req.path !== '/api/attach' && !/^application\/json(?:;|$)/i.test(c.req.header('content-type') ?? '')) return c.json({ error: 'JSON body required', code: 'BAD_REQUEST' }, 415);
+    c.header('X-Content-Type-Options', 'nosniff');
+    await next();
+    if (c.res.headers.get('content-type')?.includes('text/html') && !c.res.headers.has('content-security-policy')) c.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+  });
+  app.use('/api/attach', bodyLimit({ maxSize: 32 * 1024 * 1024 }));
+  app.use('*', async (c, next) => {
+    if (c.req.method !== 'GET' && /^(\/api\/favorites(?:\/|$)|\/api\/recent$|\/api\/history\/pin$|\/api\/history\/[^/]+$)/.test(c.req.path)) return withConfigLock(next);
+    await next();
+  });
+
   app.onError((err, c) => {
+    if (err instanceof SyntaxError) return c.json({ error: 'Invalid JSON', code: 'BAD_REQUEST' }, 400);
     if (err instanceof FsError) {
       return c.json({ error: err.message, code: err.code }, err.status as 400);
     }
@@ -40,7 +56,7 @@ export function createApp(registry?: SessionRegistry) {
     return c.json({ error: err.message ?? 'Internal error', code: 'INTERNAL' }, 500);
   });
 
-  app.get('/api/health', (c) => c.json({ ok: true, version: BUILD.version, commit: BUILD.commit, builtAt: BUILD.builtAt }));
+  app.get('/api/health', (c) => c.json({ ok: true, repo: REPO_ROOT, version: BUILD.version, commit: BUILD.commit, builtAt: BUILD.builtAt }));
   app.get('/api/home', async (c) => c.json(await homeInfo()));
 
   app.get('/api/fs/list', async (c) => c.json(await listDir(c.req.query('path') ?? '~')));
@@ -223,7 +239,7 @@ export function createApp(registry?: SessionRegistry) {
     else await deleteSession(c.req.param('id'), cwd ? { dir: resolvePath(cwd) } : undefined);
     return c.json({ ok: true });
   });
-  app.get('/api/fs/search', async (c) => c.json(await searchFiles(c.req.query('cwd') ?? '~', c.req.query('q') ?? '', Number(c.req.query('limit') ?? 200))));
+  app.get('/api/fs/search', async (c) => c.json(await searchFiles(c.req.query('cwd') ?? '~', c.req.query('q') ?? '', Math.max(1, Math.min(500, Number(c.req.query('limit')) || 200)))));
   app.get('/api/history/:id', async (c) => {
     const dir = resolvePath(c.req.query('cwd') ?? '~');
     const messages = await getSessionMessages(c.req.param('id'), { dir });
@@ -232,7 +248,7 @@ export function createApp(registry?: SessionRegistry) {
 
   // Recent sessions across every project (sidebar).
   app.get('/api/history-all', async (c) => {
-    const limit = Math.min(300, Number(c.req.query('limit') ?? 20));
+    const limit = Math.max(1, Math.min(300, Number(c.req.query('limit')) || 20));
     const [claude, codexPath] = await Promise.all([listSessions({ limit }).catch(() => []), which('codex')]);
     const codex = codexPath ? await listCodexThreads(codexPath, null, limit).catch(() => []) : [];
     const pinned = new Set((await loadConfig()).pinnedSessions);
@@ -256,21 +272,22 @@ export function createApp(registry?: SessionRegistry) {
   app.get('/api/sessions', (c) => c.json(registry?.list() ?? []));
 
   // Open a folder in the native Terminal / iTerm / Finder / VS Code.
+  // The path is passed to AppleScript as argv and shell-quoted with `quoted form of`, so folder names
+  // containing quotes, backslashes or $(...) cannot inject commands.
   app.post('/api/open', async (c) => {
-    const body = await c.req.json<{ path: string; app?: 'terminal' | 'iterm' | 'finder' | 'vscode' | 'cursor'; command?: string }>();
+    const body = await c.req.json<{ path: string; app?: 'terminal' | 'iterm' | 'finder' | 'vscode' | 'cursor' }>();
     const abs = resolvePath(body.path);
-    const dirQ = abs.replace(/"/g, '\\"');
-    const cmd = body.command ? body.command.replace(/"/g, '\\"') : '';
     const target = body.app ?? 'terminal';
+    const osa = (lines: string[]) => run('osascript', [...lines.flatMap((l) => ['-e', l]), '--', abs]);
     let r;
     if (target === 'finder') r = await run('open', [abs]);
     else if (target === 'vscode') r = await run('open', ['-a', 'Visual Studio Code', abs]);
     else if (target === 'cursor') r = await run('open', ['-a', 'Cursor', abs]);
     else if (target === 'iterm') {
-      r = await run('osascript', ['-e', 'tell application "iTerm" to activate', '-e', 'tell application "iTerm" to create window with default profile',
-        '-e', `tell application "iTerm" to tell current session of current window to write text "cd \"${dirQ}\"${cmd ? ' && ' + cmd : ''}"`]);
+      r = await osa(['on run argv', 'tell application "iTerm"', 'activate', 'set w to (create window with default profile)',
+        'tell current session of w to write text ("cd " & quoted form of (item 1 of argv))', 'end tell', 'end run']);
     } else {
-      r = await run('osascript', ['-e', 'tell application "Terminal" to activate', '-e', `tell application "Terminal" to do script "cd \"${dirQ}\"${cmd ? ' && ' + cmd : ''}"`]);
+      r = await osa(['on run argv', 'tell application "Terminal"', 'activate', 'do script ("cd " & quoted form of (item 1 of argv))', 'end tell', 'end run']);
     }
     if (!r.ok) return c.json({ error: r.stderr, code: 'OPEN_FAILED' }, 500);
     return c.json({ ok: true });
@@ -312,15 +329,15 @@ export function createApp(registry?: SessionRegistry) {
       await stream.writeSSE({ event: 'done', data: '1' });
       return;
     }
-    await stream.writeSSE({ event: 'start', data: 'git pull --ff-only && npm ci && npm run build' });
+    await stream.writeSSE({ event: 'start', data: 'Clone, install and build in a temporary directory, then replace the installed build' });
     const code = await applyUpdate((line, src) => { stream.writeSSE({ event: src, data: line }).catch(() => {}); }).catch((e) => { stream.writeSSE({ event: 'stderr', data: String((e as Error).message) }).catch(() => {}); return 1; });
     await stream.writeSSE({ event: 'done', data: String(code) });
     if (code === 0) {
       await stream.writeSSE({ event: 'restart', data: String(RESTART_EXIT_CODE) });
-      setTimeout(() => process.exit(RESTART_EXIT_CODE), 800);
+      setTimeout(() => requestShutdown('update applied', RESTART_EXIT_CODE), 800);
     }
   }));
-  app.post('/api/restart', (c) => { setTimeout(() => process.exit(RESTART_EXIT_CODE), 300); return c.json({ ok: true }); });
+  app.post('/api/restart', (c) => { setTimeout(() => requestShutdown('restart requested', RESTART_EXIT_CODE), 300); return c.json({ ok: true }); });
 
   // Static SPA (production build)
   const root = path.relative(process.cwd(), WEB_DIST) || '.';

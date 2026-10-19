@@ -27,7 +27,7 @@ export function useSessions() {
   const [sessions, setSessions] = useState<Record<string, ChatSession>>({});
   const sessionsRef = useRef(sessions);
   useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
-  const pendingStart = useRef(new Map<string, { cwd: string; resolve: (id: string) => void; preload: ChatItem[] }[]>());
+  const pendingStart = useRef(new Map<string, { cwd: string; resolve: (id: string) => void; reject: (err: Error) => void; preload: ChatItem[] }>());
 
   useEffect(() => {
     const off = agentClient.on((m: ServerMessage) => {
@@ -38,10 +38,15 @@ export function useSessions() {
           return;
         }
         if (m.type === 'pong') return;
+        if (m.type === 'session.startFailed') {
+          const p = m.requestId ? pendingStart.current.get(m.requestId) : undefined;
+          if (m.requestId) pendingStart.current.delete(m.requestId);
+          p?.reject(new Error(m.message));
+          return;
+        }
         if (m.type === 'session.started') {
-          const queue = pendingStart.current.get(m.requestCwd) ?? [];
-          const p = queue.shift();
-          if (queue.length === 0) pendingStart.current.delete(m.requestCwd);
+          const p = m.requestId ? pendingStart.current.get(m.requestId) : undefined;
+          if (m.requestId) pendingStart.current.delete(m.requestId);
           setSessions((prev) => ({
             ...prev,
             [m.sessionId]: {
@@ -54,7 +59,8 @@ export function useSessions() {
           setSessions((prev) => {
             const s = prev[m.sessionId];
             if (!s) return prev;
-            return { ...prev, [m.sessionId]: { ...s, status: 'closed', items: [...s.items, { kind: 'system', id: `gone-${m.sessionId}`, text: t('session.lost') }] } };
+            const closed = reduceEvent(s, { kind: 'status', status: 'closed' }, 0);
+            return { ...prev, [m.sessionId]: { ...closed, items: [...closed.items, { kind: 'system', id: `gone-${m.sessionId}`, text: t('session.lost') }] } };
           });
         }
         return;
@@ -63,7 +69,7 @@ export function useSessions() {
       setSessions((prev) => {
         const s = prev[m.sessionId];
         if (!s) return prev;
-        if (m.seq <= s.lastSeq) return prev;
+        if (m.seq > 0 && m.seq <= s.lastSeq) return prev;
         return { ...prev, [m.sessionId]: reduceEvent(s, m.event, m.seq) };
       });
     });
@@ -93,11 +99,10 @@ export function useSessions() {
     if (opts.resume && (opts.agent ?? 'claude') === 'claude') {
       try { preload = itemsFromHistory(await api.historyMessages(cwd, opts.resume)); } catch { /* history is optional */ }
     }
-    return new Promise<string>((resolve) => {
-      const queue = pendingStart.current.get(cwd) ?? [];
-      queue.push({ cwd, resolve, preload });
-      pendingStart.current.set(cwd, queue);
-      agentClient.send({ type: 'session.start', agent: opts.agent ?? 'claude', cwd, resume: opts.resume, permissionMode: opts.permissionMode, model: opts.model ?? undefined });
+    return new Promise<string>((resolve, reject) => {
+      const requestId = crypto.randomUUID();
+      pendingStart.current.set(requestId, { cwd, resolve, reject, preload });
+      agentClient.send({ type: 'session.start', requestId, agent: opts.agent ?? 'claude', cwd, resume: opts.resume, permissionMode: opts.permissionMode, model: opts.model ?? undefined });
     });
   }, []);
 

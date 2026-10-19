@@ -29,6 +29,10 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
   const [log, setLog] = useState<{ line: string; err: boolean }[]>([]);
   const [phase, setPhase] = useState<'idle' | 'running' | 'restarting' | 'failed'>('idle');
   const logRef = useRef<HTMLDivElement>(null);
+  const sourceRef = useRef<EventSource | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; sourceRef.current?.close(); if (pollRef.current) clearTimeout(pollRef.current); }; }, []);
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [log]);
   // While an update runs (or the server restarts) the modal cannot be dismissed: the log is the only feedback.
   const locked = phase === 'running' || phase === 'restarting';
@@ -40,8 +44,11 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
   });
 
   const apply = (force = false) => {
+    if (locked) return;
+    sourceRef.current?.close();
     setPhase('running'); setLog([]);
     const es = new EventSource(api.updateApplyUrl(force));
+    sourceRef.current = es;
     es.addEventListener('start', (e) => setLog((l) => [...l, { line: `$ ${(e as MessageEvent).data}`, err: false }]));
     es.addEventListener('stdout', (e) => setLog((l) => [...l, { line: (e as MessageEvent).data, err: false }]));
     es.addEventListener('stderr', (e) => setLog((l) => [...l, { line: (e as MessageEvent).data, err: true }]));
@@ -51,16 +58,21 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
       // Poll until the server is back, then reload the page.
       const started = Date.now();
       const poll = () => {
-        fetch('/api/health').then((r) => { if (r.ok) location.reload(); else throw new Error(); })
-          .catch(() => { if (Date.now() - started < 120000) setTimeout(poll, 1000); });
+        if (!alive.current) return;
+        fetch('/api/health', { signal: AbortSignal.timeout(4000), cache: 'no-store' }).then((r) => { if (r.ok) location.reload(); else throw new Error(); })
+          .catch(() => {
+            if (!alive.current) return;
+            if (Date.now() - started < 120000) pollRef.current = setTimeout(poll, 1000);
+            else { setPhase('failed'); setLog((l) => [...l, { line: t('update.restartTimeout'), err: true }]); }
+          });
       };
-      setTimeout(poll, 2000);
+      pollRef.current = setTimeout(poll, 2000);
     });
-    es.onerror = () => { es.close(); if (phase === 'running') setPhase('failed'); };
+    es.onerror = () => { es.close(); setPhase((p) => p === 'running' ? 'failed' : p); setLog((l) => [...l, { line: t('update.connectionLost'), err: true }]); };
   };
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center" onClick={close}>
+    <div data-update-locked={locked} className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center" onClick={close}>
       <div className="w-[640px] max-w-[92vw] max-h-[85vh] rounded-xl bg-[#12151c] border border-white/10 shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center px-5 h-12 border-b border-white/10">
           <div className="font-medium">{t('update.title')}</div>

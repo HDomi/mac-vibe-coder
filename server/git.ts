@@ -5,7 +5,7 @@ export interface GitFile { path: string; index: string; worktree: string; staged
 export interface GitStatus { repo: boolean; root: string | null; branch: string | null; ahead: number; behind: number; files: GitFile[] }
 
 async function git(cwd: string, args: string[], timeout = 30000) {
-  return run('git', ['-C', cwd, ...args], timeout);
+  return run('git', ['-c', 'core.fsmonitor=false', '-C', cwd, ...args], timeout);
 }
 
 export async function gitStatus(dir: string): Promise<GitStatus> {
@@ -13,10 +13,11 @@ export async function gitStatus(dir: string): Promise<GitStatus> {
   const root = await git(cwd, ['rev-parse', '--show-toplevel']);
   if (!root.ok) return { repo: false, root: null, branch: null, ahead: 0, behind: 0, files: [] };
   const st = await git(cwd, ['status', '--porcelain=v1', '--branch', '-z']);
+  if (!st.ok) throw new Error(st.stderr || 'git status failed');
   const parts = st.stdout.split('\0');
   const head = parts.shift() ?? '';
   let branch: string | null = null; let ahead = 0; let behind = 0;
-  const bm = head.match(/^## (\S+?)(?:\.\.\.(\S+))?(?: \[(.*)\])?$/);
+  const bm = head.replace(/^## (?:No commits yet on|Initial commit on) /, '## ').match(/^## (\S+?)(?:\.\.\.(\S+))?(?: \[(.*)\])?$/);
   if (bm) {
     branch = bm[1].replace(/^No commits yet on /, '');
     const info = bm[3] ?? '';
@@ -36,19 +37,24 @@ export async function gitStatus(dir: string): Promise<GitStatus> {
 
 export async function gitDiff(dir: string, path: string, staged: boolean): Promise<string> {
   const cwd = resolvePath(dir);
-  const args = staged ? ['diff', '--cached', '--', path] : ['diff', '--', path];
+  const args = ['diff', '--no-ext-diff', '--no-textconv', ...(staged ? ['--cached'] : []), '--', path];
   const r = await git(cwd, args);
-  if (r.ok && r.stdout) return r.stdout;
+  if (!r.ok) throw new Error(r.stderr || 'git diff failed');
+  if (r.stdout || staged) return r.stdout;
+  const tracked = await git(cwd, ['ls-files', '--error-unmatch', '--', path]);
+  if (tracked.ok) return '';
   // Untracked file: show the whole file as additions.
-  const nt = await git(cwd, ['diff', '--no-index', '--', '/dev/null', path]);
+  const nt = await git(cwd, ['diff', '--no-ext-diff', '--no-textconv', '--no-index', '--', '/dev/null', path]);
+  if (nt.stderr) throw new Error(nt.stderr);
   return nt.stdout || r.stderr || '';
 }
 
 export async function gitStage(dir: string, paths: string[], action: 'add' | 'reset' | 'discard'): Promise<void> {
   const cwd = resolvePath(dir);
-  if (action === 'add') await git(cwd, ['add', '--', ...paths]);
-  else if (action === 'reset') await git(cwd, ['reset', '-q', '--', ...paths]);
-  else await git(cwd, ['checkout', '--', ...paths]);
+  if (!Array.isArray(paths) || !paths.length || paths.some((p) => typeof p !== 'string' || !p)) throw new Error('File paths required');
+  if (!['add', 'reset', 'discard'].includes(action)) throw new Error('Invalid staging action');
+  const r = await git(cwd, action === 'add' ? ['add', '--', ...paths] : action === 'reset' ? ['reset', '-q', '--', ...paths] : ['checkout', '--', ...paths]);
+  if (!r.ok) throw new Error(r.stderr || r.stdout || 'git stage failed');
 }
 
 export async function gitCommit(dir: string, message: string): Promise<{ ok: boolean; output: string }> {
@@ -87,6 +93,9 @@ export async function gitBranches(dir: string): Promise<GitBranch[]> {
 
 export async function gitCheckout(dir: string, branch: string, create = false): Promise<{ ok: boolean; output: string }> {
   const cwd = resolvePath(dir);
+  if (typeof branch !== 'string' || !branch || branch.startsWith('-')) return { ok: false, output: 'Invalid branch name' };
+  const valid = await git(cwd, ['check-ref-format', '--branch', branch]);
+  if (!valid.ok) return { ok: false, output: valid.stderr || 'Invalid branch name' };
   const args = create ? ['checkout', '-b', branch] : branch.startsWith('origin/') ? ['checkout', '--track', branch] : ['checkout', branch];
   const r = await git(cwd, args);
   return { ok: r.ok, output: r.ok ? (r.stdout || r.stderr) : r.stderr || r.stdout };
@@ -94,6 +103,7 @@ export async function gitCheckout(dir: string, branch: string, create = false): 
 
 export async function gitRemoteOp(dir: string, op: 'fetch' | 'pull' | 'push'): Promise<{ ok: boolean; output: string }> {
   const cwd = resolvePath(dir);
+  if (!['fetch', 'pull', 'push'].includes(op)) return { ok: false, output: 'Invalid remote operation' };
   const args = op === 'fetch' ? ['fetch', '--all', '--prune'] : op === 'pull' ? ['pull', '--ff-only'] : ['push', '-u', 'origin', 'HEAD'];
   const r = await git(cwd, args, 120000);
   return { ok: r.ok, output: [r.stdout, r.stderr].filter(Boolean).join('\n') };

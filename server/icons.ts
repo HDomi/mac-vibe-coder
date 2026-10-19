@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { CONFIG_DIR } from './config.js';
 import { resolvePath } from './fs.js';
@@ -70,26 +71,36 @@ async function expand(root: string, rel: string): Promise<string[]> {
   } catch { return []; }
 }
 
+async function safeIcon(root: string, file: string): Promise<string | null> {
+  if (!/\.(png|jpe?g|svg|ico|webp|gif|icns)$/i.test(file)) return null;
+  try {
+    const [base, actual] = await Promise.all([fs.realpath(root), fs.realpath(file)]);
+    const relative = path.relative(base, actual);
+    if (relative.startsWith('..' + path.sep) || relative === '..' || path.isAbsolute(relative)) return null;
+    return (await fs.stat(actual)).isFile() ? actual : null;
+  } catch { return null; }
+}
+
 /** Icons declared in project manifests: Godot `project.godot` (config/icon), Tauri `tauri.conf.json`, package.json "icon". */
 async function manifestIcon(root: string): Promise<string | null> {
   // Godot: [application] config/icon="res://assets/icon.png"
   try {
     const godot = await fs.readFile(path.join(root, 'project.godot'), 'utf8');
     const m = godot.match(/config\/icon\s*=\s*"res:\/\/([^"]+)"/);
-    if (m) { const p = path.join(root, m[1]); if (await exists(p)) return p; }
+    if (m) { const p = path.join(root, m[1]); const safe = await safeIcon(root, p); if (safe) return safe; }
   } catch { /* not godot */ }
   // Tauri: bundle.icon[] in src-tauri/tauri.conf.json (paths relative to src-tauri)
   try {
     const conf = JSON.parse(await fs.readFile(path.join(root, 'src-tauri', 'tauri.conf.json'), 'utf8'));
     const list: string[] = conf?.bundle?.icon ?? conf?.tauri?.bundle?.icon ?? [];
     const png = list.find((x) => /\.png$/i.test(x)) ?? list[0];
-    if (png) { const p = path.join(root, 'src-tauri', png); if (await exists(p)) return p; }
+    if (png) { const p = path.join(root, 'src-tauri', png); const safe = await safeIcon(root, p); if (safe) return safe; }
   } catch { /* not tauri */ }
   // package.json: "icon" (electron-builder style "build.mac.icon" / "build.icon") or top-level "icon"
   try {
     const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
     const rel: string | undefined = pkg?.icon ?? pkg?.build?.icon ?? pkg?.build?.mac?.icon;
-    if (typeof rel === 'string') { const p = path.join(root, rel); if (await exists(p)) return p; }
+    if (typeof rel === 'string') { const p = path.join(root, rel); const safe = await safeIcon(root, p); if (safe) return safe; }
   } catch { /* no package.json */ }
   return null;
 }
@@ -103,10 +114,11 @@ export async function findProjectIcon(dir: string): Promise<string | null> {
   outer: for (const rel of CANDIDATES) {
     if (found) break;
     for (const p of await expand(root, rel)) {
-      if (rel.endsWith('/')) { found = await largestPng(p); if (found) break outer; continue; }
-      if (await exists(p)) { found = p; break outer; }
+      if (rel.endsWith('/')) { const candidate = await largestPng(p); found = candidate ? await safeIcon(root, candidate) : null; if (found) break outer; continue; }
+      const safe = await safeIcon(root, p); if (safe) { found = safe; break outer; }
     }
   }
+  if (cache.size >= 1000) cache.delete(cache.keys().next().value!);
   cache.set(root, { file: found, at: Date.now() });
   return found;
 }
@@ -116,8 +128,10 @@ export async function displayableIcon(file: string): Promise<string> {
   if (!/\.icns$/i.test(file)) return file;
   await fs.mkdir(ICON_CACHE, { recursive: true });
   const st = await fs.stat(file);
-  const out = path.join(ICON_CACHE, `${Buffer.from(file).toString('base64url').slice(0, 80)}-${Math.floor(st.mtimeMs)}.png`);
+  const key = createHash('sha256').update(file).digest('hex');
+  const out = path.join(ICON_CACHE, `${key}-${Math.floor(st.mtimeMs)}.png`);
   if (!(await exists(out))) {
+    for (const old of await fs.readdir(ICON_CACHE)) if (old.startsWith(key + '-') && path.join(ICON_CACHE, old) !== out) await fs.rm(path.join(ICON_CACHE, old), { force: true });
     await execFileP('sips', ['-s', 'format', 'png', '-Z', '256', file, '--out', out], { timeout: 15000 });
   }
   return out;

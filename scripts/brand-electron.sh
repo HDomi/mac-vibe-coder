@@ -20,7 +20,7 @@ if [ -f "$ICON" ]; then
   cp "$ICON" "$APP/Contents/Resources/electron.icns"
 fi
 # Info.plist is part of the sealed bundle; re-sign ad hoc so macOS keeps launching it.
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
+codesign --force --deep --sign - "$APP" >/dev/null 2>&1
 # Make Finder/Dock pick up the new name and icon.
 touch "$APP"
 echo "branded: $APP -> $NAME ($BUNDLE_ID)"

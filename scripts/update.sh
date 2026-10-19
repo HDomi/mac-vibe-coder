@@ -7,18 +7,13 @@ cd "$ROOT"
 export PATH="$ROOT/runtime/node/bin:$(/bin/zsh -lic 'echo -n "$PATH"' 2>/dev/null):$PATH"
 unset ELECTRON_RUN_AS_NODE
 
-echo "▸ git pull"
-git pull --ff-only
-echo "▸ npm install"
-npm install --no-audit --no-fund
-echo "▸ build"
-npm run build
-scripts/brand-electron.sh >/dev/null || true
-
-if [ -d "/Applications/$APP_NAME.app" ]; then
-  echo "▸ relaunch"
-  osascript -e "tell application \"$APP_NAME\" to quit" >/dev/null 2>&1 || true
-  sleep 1
-  open "/Applications/$APP_NAME.app"
+APP="${MVC_APP_DIR:-/Applications}/$APP_NAME.app"
+if [ -f "$ROOT/runtime/install-location" ]; then APP="$(cat "$ROOT/runtime/install-location")"; fi
+# Stop before changing Electron or any lazy-loaded dependency.
+node "$ROOT/scripts/stop-app.cjs" "$APP" "$ROOT"
+unset MVC_ELECTRON_EXEC_PATH MVC_ELECTRON_VERSION
+/bin/zsh "$ROOT/scripts/apply-update.sh"
+if [ -d "$APP" ]; then
+  MVC_APP_DIR="$(dirname "$APP")" /bin/zsh "$ROOT/install.sh" --skip-build
 fi
 echo "updated to $(git rev-parse --short HEAD)"

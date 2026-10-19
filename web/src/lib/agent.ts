@@ -25,19 +25,20 @@ export type AgentEvent =
   | { kind: 'question.resolved'; requestId: string }
   | { kind: 'status'; status: 'running' | 'idle' | 'compacting' | 'closed'; permissionMode?: string }
   | { kind: 'result'; ok: boolean; text: string; costUsd: number; numTurns: number; durationMs: number; agentSessionId?: string }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; message: string; command?: string }
   | { kind: 'log'; text: string };
 
 export type ServerMessage =
   | { sessionId: string; seq: number; ts: number; event: AgentEvent }
-  | { type: 'session.started'; sessionId: string; requestCwd: string; agent: AgentId }
+  | { type: 'session.started'; sessionId: string; requestCwd: string; requestId?: string; agent: AgentId }
+  | { type: 'session.startFailed'; requestId?: string; requestCwd: string; message: string }
   | { type: 'session.missing'; sessionId: string }
   | { type: 'pong' }
   /** Synthetic, client-side: the socket reconnected after a drop; subscriptions must be re-established. */
   | { type: 'reconnected' };
 
 export type ClientCommand =
-  | { type: 'session.start'; agent: AgentId; cwd: string; resume?: string; permissionMode?: PermissionModeId; model?: string }
+  | { type: 'session.start'; requestId?: string; agent: AgentId; cwd: string; resume?: string; permissionMode?: PermissionModeId; model?: string }
   | { type: 'ping' }
   | { type: 'session.attach'; sessionId: string; after?: number }
   | { type: 'session.send'; sessionId: string; text: string; attachments?: Attachment[] }
@@ -76,16 +77,17 @@ export class AgentClient {
       this.retry = 0;
       this.lastSeen = Date.now();
       const reconnected = this.opens++ > 0;
-      for (const q of this.queue.splice(0)) ws.send(q);
       this.resolveReady();
       // Tell subscribers first so they can re-attach before any queued command needs the subscription.
       if (reconnected) for (const l of this.listeners) l({ type: 'reconnected' });
+      for (const q of this.queue.splice(0)) ws.send(q);
       this.startHeartbeat(ws);
     };
     ws.onmessage = (ev) => {
       this.lastSeen = Date.now();
       let m: ServerMessage;
       try { m = JSON.parse(ev.data); } catch { return; }
+      if (!m || typeof m !== 'object') return;
       if ('type' in m && m.type === 'pong') return;
       for (const l of this.listeners) l(m);
     };
@@ -93,7 +95,7 @@ export class AgentClient {
       this.stopHeartbeat();
       if (this.closed) return;
       const delay = Math.min(8000, 500 * 2 ** this.retry++);
-      setTimeout(() => this.connect(), delay);
+      setTimeout(() => { if (!this.closed) this.connect(); }, delay);
     };
     ws.onerror = () => ws.close();
   }
@@ -116,7 +118,7 @@ export class AgentClient {
   }
 
   on(l: Listener) { this.listeners.add(l); return () => { this.listeners.delete(l); }; }
-  close() { this.closed = true; this.ws?.close(); }
+  close() { this.closed = true; this.stopHeartbeat(); this.queue = []; this.ws?.close(); }
 }
 
 export const agentClient = new AgentClient();

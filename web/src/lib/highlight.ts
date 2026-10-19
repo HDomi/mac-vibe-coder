@@ -91,3 +91,15 @@ export function highlight(code: string, lang: string): string {
   try { return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value; }
   catch { return hljs.highlight(code, { language: 'plaintext' }).value; }
 }
+
+/** Carry highlight.js spans across row boundaries without reparsing escaped source text. */
+export function highlightedLines(html: string): string[] {
+  const open: string[] = [];
+  return html.split('\n').map((line) => {
+    const prefix = open.join('');
+    for (const match of line.matchAll(/<span\b[^>]*>|<\/span>/g)) {
+      if (match[0] === '</span>') open.pop(); else open.push(match[0]);
+    }
+    return prefix + line + '</span>'.repeat(open.length);
+  });
+}

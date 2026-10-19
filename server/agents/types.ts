@@ -29,7 +29,7 @@ export type AgentEvent =
   | { kind: 'question.resolved'; requestId: string }
   | { kind: 'status'; status: 'running' | 'idle' | 'compacting' | 'closed'; permissionMode?: string }
   | { kind: 'result'; ok: boolean; text: string; costUsd: number; numTurns: number; durationMs: number; agentSessionId?: string }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; message: string; command?: string }
   | { kind: 'log'; text: string };
 
 export type AssistantBlock =
@@ -40,7 +40,7 @@ export type AssistantBlock =
 export type ServerMessage = { sessionId: string; seq: number; ts: number; event: AgentEvent };
 
 export type ClientCommand =
-  | { type: 'session.start'; agent: AgentId; cwd: string; resume?: string; permissionMode?: PermissionModeId; model?: string }
+  | { type: 'session.start'; requestId?: string; agent: AgentId; cwd: string; resume?: string; permissionMode?: PermissionModeId; model?: string }
   | { type: 'ping' }
   | { type: 'session.attach'; sessionId: string; after?: number }
   | { type: 'session.send'; sessionId: string; text: string; attachments?: Attachment[] }
@@ -55,6 +55,7 @@ export interface AgentSession {
   readonly id: string;
   readonly agent: AgentId;
   readonly cwd: string;
+  start(): void;
   onEvent(listener: (e: AgentEvent) => void): () => void;
   send(text: string, attachments: Attachment[]): Promise<void>;
   approve(requestId: string, decision: 'allow' | 'allow_always' | 'deny', message?: string): void;

@@ -21,6 +21,7 @@ const RESTART_EXIT_CODE = 75;
 const REPO_ROOT = path.resolve(__dirname, '../..');
 const APP_ICON = path.join(REPO_ROOT, 'web', 'public', 'icon.png');
 const APP_NAME = 'Mac Vibe Coder';
+const EXPECTED_BUILD = (() => { try { return JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'dist/build-info.json'), 'utf8')); } catch { return null; } })();
 
 // Name used by dialogs, the app menu title and notifications. The menu bar / Dock label of the
 // unpackaged Electron.app comes from its Info.plist, which scripts/brand-electron.sh patches.
@@ -29,6 +30,34 @@ app.setName(APP_NAME);
 let server: ChildProcess | null = null;
 let quitting = false;
 let respawnDelay = 1500;
+let healthTimer: NodeJS.Timeout | null = null;
+let respawnTimer: NodeJS.Timeout | null = null;
+
+const APP_ORIGIN = new URL(DEV ? URL_DEV : URL_PROD).origin;
+/** Schemes handed to the OS. Anything else (file:, smb:, custom app schemes) could launch local programs. */
+const EXTERNAL_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
+
+function openExternalSafe(url: string) {
+  try {
+    if (EXTERNAL_SCHEMES.has(new URL(url).protocol)) void shell.openExternal(url).catch(() => {});
+  } catch { /* malformed URL: ignore */ }
+}
+
+/** IPC is only accepted from the app's own page, never from a frame that navigated elsewhere. */
+function fromApp(e: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): boolean {
+  try { return e.senderFrame === e.sender.mainFrame && new URL(e.senderFrame?.url ?? '').origin === APP_ORIGIN; } catch { return false; }
+}
+
+// One instance only: a second launch (login item + LaunchAgent, double click) focuses the first.
+const primaryInstance = app.requestSingleInstanceLock();
+if (!primaryInstance) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const w = BrowserWindow.getAllWindows()[0];
+    if (w) { if (w.isMinimized()) w.restore(); w.focus(); }
+  });
+}
 
 function loginShellLookup(cmd: string): Promise<string | null> {
   return new Promise((resolve) => {
@@ -54,7 +83,14 @@ async function resolveNode(): Promise<{ exe: string; env: NodeJS.ProcessEnv; lab
 
 function healthy(): Promise<boolean> {
   return new Promise((resolve) => {
-    const req = http.get(`${URL_PROD}/api/health`, { timeout: 1000 }, (res) => { res.resume(); resolve(res.statusCode === 200); });
+    const req = http.get(`${URL_PROD}/api/health`, { timeout: 1000 }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += String(chunk); if (data.length > 8192) req.destroy(); });
+      res.on('end', () => { try {
+        const info = JSON.parse(data);
+        resolve(res.statusCode === 200 && info.repo === REPO_ROOT && (!EXPECTED_BUILD || info.version === EXPECTED_BUILD.version && info.commit === EXPECTED_BUILD.commit));
+      } catch { resolve(false); } });
+    });
     req.on('error', () => resolve(false));
     req.on('timeout', () => { req.destroy(); resolve(false); });
   });
@@ -70,15 +106,19 @@ async function waitHealthy(ms: number): Promise<boolean> {
 }
 
 async function startServer(): Promise<void> {
+  respawnTimer = null;
+  if (quitting) return;
   if (await healthy()) return; // already running (e.g. `npm run serve`)
   const runtime = await resolveNode();
   const entry = path.join(REPO_ROOT, 'dist', 'server', 'index.js');
-  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (quitting) return;
+  const env: NodeJS.ProcessEnv = { ...process.env, MVC_DEV: DEV ? '1' : '0', MVC_ELECTRON_EXEC_PATH: process.execPath, MVC_ELECTRON_VERSION: process.versions.electron };
   delete env.ELECTRON_RUN_AS_NODE;
   Object.assign(env, runtime.env);
   console.log(`[mac-vibe-coder] server runtime: ${runtime.label}`);
   server = spawn(runtime.exe, [entry], { cwd: REPO_ROOT, env, stdio: ['ignore', 'inherit', 'inherit'] });
-  server.on('exit', (code) => {
+  server.on('error', (err) => console.error('[mac-vibe-coder] server spawn failed', err.message));
+  server.on('close', (code) => {
     server = null;
     if (quitting) return;
     if (code === RESTART_EXIT_CODE) {
@@ -91,9 +131,10 @@ async function startServer(): Promise<void> {
     const delay = respawnDelay;
     respawnDelay = Math.min(30000, respawnDelay * 2);
     console.log(`[mac-vibe-coder] server exited (${code}); restarting in ${delay}ms`);
-    setTimeout(() => { void startServer(); }, delay);
+    respawnTimer = setTimeout(() => { void startServer().catch(console.error); }, delay);
   });
-  if (await waitHealthy(15000)) respawnDelay = 1500; // healthy start resets the backoff
+  if (await waitHealthy(15000)) respawnDelay = 1500;
+  else throw new Error(`Server did not start on port ${PORT}. Close any other Mac Vibe Coder checkout using this port and try again.`); // healthy start resets the backoff
 }
 
 async function createWindow() {
@@ -110,22 +151,36 @@ async function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
-      sandbox: false,
+      nodeIntegration: false,
+      sandbox: true,
     },
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    openExternalSafe(url);
     return { action: 'deny' };
   });
+  // The window itself never leaves the app origin (a link or <form> in rendered markdown would
+  // otherwise load a foreign page that still receives the preload bridge).
+  const keepInApp = (e: Electron.Event, url: string) => {
+    let origin = '';
+    try { origin = new URL(url).origin; } catch { /* invalid */ }
+    if (origin === APP_ORIGIN && new URL(url).pathname === '/') return;
+    e.preventDefault();
+    openExternalSafe(url);
+  };
+  win.webContents.on('will-navigate', keepInApp);
+  win.webContents.on('will-redirect', keepInApp);
   await win.loadURL(DEV ? URL_DEV : URL_PROD);
 }
 
-ipcMain.handle('pick-folder', async () => {
+ipcMain.handle('pick-folder', async (e) => {
+  if (!fromApp(e)) return null;
   const res = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
   return res.canceled ? null : res.filePaths[0];
 });
 
-ipcMain.handle('login-item', (_e, enable: boolean | null) => {
+ipcMain.handle('login-item', (e, enable: boolean | null) => {
+  if (!fromApp(e)) return false;
   if (typeof enable === 'boolean') app.setLoginItemSettings({ openAtLogin: enable });
   return app.getLoginItemSettings().openAtLogin;
 });
@@ -161,20 +216,31 @@ function buildMenu() {
 }
 
 // The renderer reports its persisted language on load so the menu checkmark matches.
-ipcMain.on('language', (_e, lang: Lang) => { if (lang !== language) setLanguage(lang); });
+ipcMain.on('language', (e, lang: Lang) => { if (fromApp(e) && (lang === 'en' || lang === 'ko') && lang !== language) setLanguage(lang); });
 
 app.whenReady().then(async () => {
+  if (!primaryInstance || quitting) return;
   app.dock?.setIcon(APP_ICON);
   buildMenu();
-  if (!DEV) await startServer();
+  if (!DEV) {
+    await startServer();
+    let checking = false;
+    healthTimer = setInterval(() => {
+      if (server || respawnTimer || checking || quitting) return;
+      checking = true;
+      void startServer().catch(console.error).finally(() => { checking = false; });
+    }, 5000);
+  }
   await createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();
   });
-});
+}).catch((err) => { dialog.showErrorBox(APP_NAME, (err as Error).message); app.quit(); });
 
 app.on('before-quit', () => {
   quitting = true;
+  if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
+  if (respawnTimer) { clearTimeout(respawnTimer); respawnTimer = null; }
   server?.kill();
 });
 

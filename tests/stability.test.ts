@@ -1,0 +1,142 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { mkdtemp, readFile, writeFile, mkdir as makeDir, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import { ConfigStore } from '../server/config';
+import { rejectReason } from '../server/guard';
+import { createApp } from '../server/app';
+import { gitCheckout, gitDiff, gitStage, gitStatus } from '../server/git';
+import { mkdir, rawFile, readText, transfer } from '../server/fs';
+import { attachWebSocket, SessionRegistry } from '../server/sessions';
+import { findProjectIcon } from '../server/icons';
+import { reduceEvent, type ChatSession } from '../web/src/lib/chatStore';
+
+async function temporary<T>(run: (dir: string) => Promise<T>) {
+  const dir = await mkdtemp(join(tmpdir(), 'vibe-stability-'));
+  try { return await run(dir); } finally { await rm(dir, { recursive: true, force: true }); }
+}
+
+test('HTTP guard rejects cross-site requests, opaque origins and DNS rebinding', async () => {
+  const app = createApp();
+  const valid = { host: '127.0.0.1:11398' };
+  assert.equal(rejectReason(valid, 11398), null);
+  for (const headers of [
+    { ...valid, origin: 'https://evil.example' }, { ...valid, origin: 'null' },
+    { ...valid, origin: 'http://127.0.0.1:9999' }, { ...valid, secFetchSite: 'cross-site' },
+    { host: 'evil.example:11398', origin: 'http://evil.example:11398' },
+  ]) assert.ok(rejectReason(headers, 11398));
+  for (const path of ['/api/health', '/api/fs/raw?path=/etc/passwd', '/api/update/apply?force=1', '/api/tools/install?tool=claude']) {
+    const res = await app.request(`http://127.0.0.1:11398${path}`, { headers: { ...valid, origin: 'https://evil.example' } });
+    assert.equal(res.status, 403);
+  }
+  assert.equal((await app.request('http://127.0.0.1:11398/api/health', { headers: valid })).status, 200);
+  assert.equal((await app.request('http://127.0.0.1:11398/api/open', { method: 'POST', headers: { ...valid, 'content-type': 'text/plain' }, body: '{}' })).status, 415);
+});
+
+test('config writes serialize complete transactions and preserve damaged files', () => temporary(async (dir) => {
+  const file = join(dir, 'config.json');
+  const store = new ConfigStore(file);
+  const first = await store.load(); first.recent.push('not saved');
+  assert.deepEqual((await store.load()).recent, []);
+  await Promise.all(Array.from({ length: 20 }, (_, i) => store.exclusive(async () => {
+    const config = await store.load(); config.recent.push(String(i)); await store.save(config);
+  })));
+  assert.equal((await store.load()).recent.length, 20);
+  await writeFile(file, '{damaged');
+  await assert.rejects(store.load());
+  assert.equal(await readFile(file, 'utf8'), '{damaged');
+}));
+
+test('Git protects clean tracked diffs, empty reset, option-like branches and fsmonitor hooks', () => temporary(async (dir) => {
+  const git = (...args: string[]) => execFileSync('git', ['-C', dir, '-c', 'user.name=Test', '-c', 'user.email=test@example.test', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  git('init', '-b', 'main');
+  assert.equal((await gitStatus(dir)).branch, 'main');
+  await writeFile(join(dir, 'file.txt'), 'original\n'); git('add', '.'); git('commit', '-m', 'initial');
+  git('config', 'core.fsmonitor', `touch ${join(dir, 'HOOK_EXECUTED')}`);
+  await gitStatus(dir);
+  await assert.rejects(readFile(join(dir, 'HOOK_EXECUTED')));
+  assert.equal(await gitDiff(dir, 'file.txt', false), '');
+  await writeFile(join(dir, 'file.txt'), 'staged\n'); git('add', 'file.txt');
+  assert.equal(await gitDiff(dir, 'file.txt', false), '');
+  await assert.rejects(gitStage(dir, [], 'reset'));
+  assert.ok((await gitStatus(dir)).files.some((file) => file.staged));
+  assert.equal((await gitCheckout(dir, '--force')).ok, false);
+  await writeFile(join(dir, 'new.txt'), 'new file\n');
+  assert.match(await gitDiff(dir, 'new.txt', false), /\+new file/);
+}));
+
+test('filesystem rejects non-files and path traversal, preserves same-folder moves and clamps ranges', () => temporary(async (dir) => {
+  const file = join(dir, 'sample.txt'); await writeFile(file, 'hello');
+  assert.deepEqual(await transfer([file], dir, true), [file]);
+  assert.equal(await readFile(file, 'utf8'), 'hello');
+  await assert.rejects(mkdir(dir, '../outside'));
+  await assert.rejects(readText('/dev/zero'));
+  await assert.rejects(rawFile('/dev/zero', undefined));
+  const response = await rawFile(file, 'bytes=0-999');
+  assert.equal(response.status, 206);
+  assert.equal(await new Response(response.body).text(), 'hello');
+  assert.equal(response.headers['Content-Range'], 'bytes 0-4/5');
+  const html = join(dir, 'page.html'); await writeFile(html, '<script>alert(1)</script>');
+  const raw = await rawFile(html, undefined);
+  assert.match(raw.headers['Content-Security-Policy'], /sandbox/);
+  await raw.body?.cancel();
+}));
+
+test('icon manifests and symlinks cannot expose files outside the project', () => temporary(async (dir) => {
+  const project = join(dir, 'project'); await makeDir(project);
+  await writeFile(join(dir, 'outside.svg'), '<svg/>');
+  await writeFile(join(project, 'package.json'), JSON.stringify({ icon: '../outside.svg' }));
+  await symlink(join(dir, 'outside.svg'), join(project, 'icon.svg'));
+  assert.equal(await findProjectIcon(project), null);
+}));
+
+test('WebSocket malformed frames are harmless and failed starts carry request IDs', async () => {
+  const wss = new EventEmitter();
+  const ws = Object.assign(new EventEmitter(), { readyState: 1, OPEN: 1, send: (data: string) => sent.push(JSON.parse(data)) });
+  const sent: any[] = [];
+  const registry = { start: async () => { throw new Error('CLI not found'); }, detachAll: () => {} };
+  attachWebSocket(wss as any, registry as any);
+  wss.emit('connection', ws);
+  for (const message of ['null', '1', 'true', '"text"', '{bad']) ws.emit('message', message);
+  ws.emit('message', JSON.stringify({ type: 'session.start', requestId: 'request-1', cwd: '/test', agent: 'claude' }));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(sent, [{ type: 'session.startFailed', requestId: 'request-1', requestCwd: '/test', message: 'CLI not found' }]);
+});
+
+test('dead registry sessions no longer block updates', async () => {
+  const registry = new SessionRegistry();
+  const entry = { session: { id: 'closed', agent: 'claude', cwd: '/tmp' }, buffer: [], seq: 0, subscribers: new Set(), closed: false, bufferBytes: 0 };
+  (registry as any).entries.set('closed', entry);
+  (registry as any).broadcast(entry, { kind: 'status', status: 'closed' });
+  assert.deepEqual(registry.list(), []);
+  (registry as any).entries.clear();
+  await registry.closeAll();
+});
+
+test('session.started is sent before synchronous adapter initialization events', async () => {
+  const wss = new EventEmitter();
+  const sent: any[] = [];
+  const ws = Object.assign(new EventEmitter(), { readyState: 1, OPEN: 1, send: (data: string) => sent.push(JSON.parse(data)) });
+  const session = { id: 'new', start: () => ws.send(JSON.stringify({ event: { kind: 'session.init' } })) };
+  attachWebSocket(wss as any, { start: async () => session, detachAll: () => {} } as any);
+  wss.emit('connection', ws);
+  ws.emit('message', JSON.stringify({ type: 'session.start', requestId: 'new-request', cwd: '/test', agent: 'claude' }));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sent[0].type, 'session.started');
+  assert.equal(sent[0].requestId, 'new-request');
+  assert.equal(sent[1].event.kind, 'session.init');
+});
+
+test('command errors clear pending UI and mixed image/file replay keeps every attachment', () => {
+  const session: ChatSession = { id: 's', cwd: '/tmp', agent: 'codex', permissionMode: 'default', status: 'running', totalCostUsd: 0, lastSeq: 5, turnStartedAt: 1, items: [{ kind: 'user', id: 'pending', text: 'hello', attachments: [], pending: true }] };
+  const failed = reduceEvent(session, { kind: 'error', message: 'Unknown session' }, 0);
+  assert.equal(failed.lastSeq, 5); assert.equal(failed.status, 'idle'); assert.equal(failed.turnStartedAt, undefined);
+  assert.equal((failed.items[0] as any).pending, false);
+  assert.equal(reduceEvent(session, { kind: 'error', command: 'session.mode', message: 'Invalid mode' }, 0).status, 'running');
+  const replayed = reduceEvent({ ...session, items: [] }, { kind: 'user', text: 'hello\n\nAttached file paths:\n- /tmp/image.png\n- /tmp/report.pdf', attachments: [{ path: '/tmp/image.png', name: 'image.png', kind: 'image' }] }, 6);
+  assert.equal((replayed.items[0] as any).text, 'hello');
+  assert.equal((replayed.items[0] as any).attachments.length, 2);
+});

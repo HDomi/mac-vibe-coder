@@ -65,6 +65,7 @@ export class ClaudeSession implements AgentSession {
   private running = false;
   /** Incremented on every (re)launch so a superseded pump does not report 'closed'. */
   private generation = 0;
+  private relaunching: Promise<void> | null = null;
 
   constructor(private opts: ClaudeSessionOptions) {
     this.cwd = opts.cwd;
@@ -147,9 +148,10 @@ export class ClaudeSession implements AgentSession {
       this.emit({ kind: 'approval.resolved', requestId: id, decision: 'cancelled' });
     }
     this.pending.clear();
-    try { await old?.interrupt(); } catch { /* ignore */ }
+    await this.stopQuery(old);
     this.abort.abort();
     try { old?.close(); } catch { /* ignore */ }
+    if (this.closed) return;
     this.input = new InputQueue();
     this.abort = new AbortController();
     this.opts = { ...this.opts, permissionMode: mode, resume: this.agentSessionId };
@@ -268,6 +270,7 @@ export class ClaudeSession implements AgentSession {
   }
 
   async send(text: string, attachments: Attachment[]) {
+    await this.relaunching;
     if (this.closed) throw new Error('Session closed');
     const content: Array<Record<string, unknown>> = [];
     const mentions: string[] = [];
@@ -287,6 +290,8 @@ export class ClaudeSession implements AgentSession {
     if (mentions.length) body += `\n\nAttached file paths:\n${mentions.map((p) => `- ${p}`).join('\n')}`;
     content.push({ type: 'text', text: body });
     this.emit({ kind: 'user', text, attachments });
+    await this.relaunching;
+    if (this.closed) throw new Error('Session closed');
     this.running = true;
     this.emit({ kind: 'status', status: 'running' });
     this.input.push({ type: 'user', message: { role: 'user', content: content as never }, parent_tool_use_id: null });
@@ -308,17 +313,29 @@ export class ClaudeSession implements AgentSession {
     } catch (err) {
       const msg = (err as Error).message ?? String(err);
       // The CLI only accepts bypassPermissions as a launch-time flag: relaunch and resume.
-      if (/dangerously-skip-permissions/i.test(msg) || mode === 'bypassPermissions') { await this.relaunch(mode); return; }
+      if (/dangerously-skip-permissions/i.test(msg) || mode === 'bypassPermissions') {
+        if (!this.relaunching) this.relaunching = this.relaunch(mode).finally(() => { this.relaunching = null; });
+        await this.relaunching; return;
+      }
       this.emit({ kind: 'error', message: `Could not change permission mode: ${msg}` });
     }
+  }
+
+  private async stopQuery(q: Query | null) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([q?.interrupt(), new Promise<void>((resolve) => { timer = setTimeout(resolve, 2000); })]);
+    } catch { /* shutdown continues even if the CLI is gone */ }
+    finally { if (timer) clearTimeout(timer); }
   }
 
   async close() {
     if (this.closed) return;
     this.closed = true;
     this.input.close();
-    try { await this.q?.interrupt(); } catch { /* ignore */ }
     this.abort.abort();
+    await this.stopQuery(this.q);
+    try { this.q?.close(); } catch { /* already closed */ }
   }
 }
 

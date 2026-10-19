@@ -93,15 +93,17 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
   useEffect(() => { try { localStorage.setItem('vibe.mode', mode); } catch { /* ignore */ } }, [mode]);
   useEffect(() => { try { model ? localStorage.setItem(`vibe.model.${agent}`, model) : localStorage.removeItem(`vibe.model.${agent}`); } catch { /* ignore */ } }, [model, agent]);
 
+  const historyRequest = useRef(0);
   const loadHistory = () => {
+    const request = ++historyRequest.current;
     if (!cwd) return;
     setLoadingHistory(true);
     const p = scope === 'all'
       ? api.historyAll(300).then((rows) => rows.map((r) => ({ agent: r.agent, sessionId: r.sessionId, summary: r.title, lastModified: r.lastModified, cwd: r.cwd ?? undefined, pinned: r.pinned })))
       : api.history(cwd, 'all');
-    p.then(setHistory).catch(() => setHistory([])).finally(() => setLoadingHistory(false));
+    p.then((rows) => { if (request === historyRequest.current) setHistory(rows); }).catch(() => { if (request === historyRequest.current) setHistory([]); }).finally(() => { if (request === historyRequest.current) setLoadingHistory(false); });
   };
-  useEffect(() => { setHistory([]); loadHistory(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cwd, scope]);
+  useEffect(() => { setHistory([]); loadHistory(); return () => { historyRequest.current++; }; /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cwd, scope]);
 
   if (!cwd) return <div className="h-full flex items-center justify-center text-zinc-600 text-sm">{t('chat.openFolderFirst')}</div>;
   const shown = filter.trim() ? history.filter((h) => `${h.customTitle ?? ''} ${h.summary} ${h.firstPrompt ?? ''} ${h.cwd ?? ''}`.toLowerCase().includes(filter.toLowerCase())) : history;
@@ -232,7 +234,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
     const b = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
     stick.current = b; setAtBottom(b);
   };
-  const onWheel = (e: React.WheelEvent) => { if (e.deltaY < 0) { stick.current = false; setAtBottom(false); } };
+  const onWheel = (e: React.WheelEvent) => { if (e.deltaY < 0 && scroller.current && scroller.current.scrollHeight > scroller.current.clientHeight) { stick.current = false; setAtBottom(false); } };
 
   // What the agent is doing right now, for the CLI-style status line.
   const activity = (() => {
@@ -294,7 +296,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
           <span className="truncate">{activity}</span>
         </div>
       )}
-      <Composer cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
+      <Composer key={session.id} cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
         onSend={(text, atts) => { stick.current = true; setAtBottom(true); onSend(text, atts); requestAnimationFrame(scrollToBottom); }}
         onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments} />
     </div>

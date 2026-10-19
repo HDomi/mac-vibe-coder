@@ -5,6 +5,7 @@ import { CodexSession } from './agents/codex.js';
 import { which } from './shell.js';
 
 const BUFFER_LIMIT = 5000;
+const BUFFER_BYTES = 16 * 1024 * 1024;
 /** Sessions nobody is watching and that have been idle this long are closed to free their CLI process. */
 const ORPHAN_TTL_MS = 6 * 60 * 60 * 1000;
 const REAP_EVERY_MS = 10 * 60 * 1000;
@@ -17,10 +18,13 @@ interface Entry {
   createdAt: number;
   lastActivity: number;
   running: boolean;
+  closed: boolean;
+  bufferBytes: number;
 }
 
 export class SessionRegistry {
   private entries = new Map<string, Entry>();
+  private closing = false;
   private reaper: NodeJS.Timeout = setInterval(() => void this.reap(), REAP_EVERY_MS);
 
   constructor() { this.reaper.unref(); }
@@ -28,7 +32,7 @@ export class SessionRegistry {
   /** Close sessions with no subscribers that have been idle for ORPHAN_TTL_MS. */
   async reap(now = Date.now()) {
     for (const [id, e] of this.entries) {
-      if (e.subscribers.size === 0 && !e.running && now - e.lastActivity > ORPHAN_TTL_MS) {
+      if (e.closed && now - e.lastActivity > REAP_EVERY_MS || e.subscribers.size === 0 && !e.running && now - e.lastActivity > ORPHAN_TTL_MS) {
         console.log(`[mac-vibe-coder] reaping idle session ${id} (${e.session.agent})`);
         await this.close(id).catch(() => {});
       }
@@ -36,7 +40,7 @@ export class SessionRegistry {
   }
 
   list() {
-    return [...this.entries.values()].map((e) => ({
+    return [...this.entries.values()].filter((e) => !e.closed).map((e) => ({
       id: e.session.id, agent: e.session.agent, cwd: e.session.cwd, createdAt: e.createdAt,
       agentSessionId: (e.session as ClaudeSession | CodexSession).agentSessionId,
     }));
@@ -45,6 +49,7 @@ export class SessionRegistry {
   get(id: string) { return this.entries.get(id)?.session; }
 
   async start(cmd: Extract<ClientCommand, { type: 'session.start' }>, ws: WebSocket): Promise<AgentSession> {
+    if (this.closing) throw new Error('Server is shutting down');
     let session: ClaudeSession | CodexSession;
     if (cmd.agent === 'claude') {
       const claudePath = await which('claude');
@@ -57,10 +62,10 @@ export class SessionRegistry {
     } else {
       throw new Error(`Unknown agent: ${cmd.agent}`);
     }
-    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set([ws]), createdAt: Date.now(), lastActivity: Date.now(), running: false };
+    if (this.closing || ws.readyState !== ws.OPEN) throw new Error('Connection closed before session started');
+    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set([ws]), createdAt: Date.now(), lastActivity: Date.now(), running: false, closed: false, bufferBytes: 0 };
     this.entries.set(session.id, entry);
     session.onEvent((event) => this.broadcast(entry, event));
-    session.start();
     return session;
   }
 
@@ -78,30 +83,34 @@ export class SessionRegistry {
 
   /** Close every session so child agent processes (claude, codex app-server) do not outlive the server. */
   async closeAll() {
+    this.closing = true;
+    clearInterval(this.reaper);
     await Promise.allSettled([...this.entries.keys()].map((id) => this.close(id)));
   }
 
   async close(id: string) {
     const e = this.entries.get(id);
     if (!e) return;
-    await e.session.close();
     this.entries.delete(id);
+    await e.session.close();
   }
 
   private broadcast(e: Entry, event: AgentEvent) {
     const msg: ServerMessage = { sessionId: e.session.id, seq: ++e.seq, ts: Date.now(), event };
     e.lastActivity = msg.ts;
     if (event.kind === 'status') e.running = event.status === 'running' || event.status === 'compacting';
+    if (event.kind === 'status' && event.status === 'closed') e.closed = true;
     if (event.kind !== 'log') {
       e.buffer.push(msg);
-      if (e.buffer.length > BUFFER_LIMIT) e.buffer.splice(0, e.buffer.length - BUFFER_LIMIT);
+      e.bufferBytes += Buffer.byteLength(JSON.stringify(msg));
+      while (e.buffer.length > 1 && (e.buffer.length > BUFFER_LIMIT || e.bufferBytes > BUFFER_BYTES)) e.bufferBytes -= Buffer.byteLength(JSON.stringify(e.buffer.shift()!));
     }
     for (const ws of e.subscribers) safeSend(ws, msg);
   }
 }
 
 function safeSend(ws: WebSocket, msg: unknown) {
-  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+  try { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); } catch { /* socket closed between check and send */ }
 }
 
 export function attachWebSocket(wss: WebSocketServer, registry: SessionRegistry) {
@@ -109,10 +118,17 @@ export function attachWebSocket(wss: WebSocketServer, registry: SessionRegistry)
     ws.on('message', async (raw) => {
       let cmd: ClientCommand;
       try { cmd = JSON.parse(String(raw)); } catch { return; }
+      // Non-object frames ("null", 1, "x") would throw inside handle(); an unhandled rejection kills the server.
+      if (!cmd || typeof cmd !== 'object' || typeof (cmd as { type?: unknown }).type !== 'string') return;
       try {
         await handle(cmd, ws, registry);
       } catch (err) {
-        safeSend(ws, { sessionId: 'sessionId' in cmd ? cmd.sessionId : '', seq: 0, ts: Date.now(), event: { kind: 'error', message: (err as Error).message } });
+        if (cmd.type === 'session.start') {
+          safeSend(ws, { type: 'session.startFailed', requestId: cmd.requestId, requestCwd: cmd.cwd, message: (err as Error)?.message ?? String(err) });
+          return;
+        }
+        const sessionId = typeof (cmd as { sessionId?: unknown }).sessionId === 'string' ? (cmd as { sessionId: string }).sessionId : '';
+        safeSend(ws, { sessionId, seq: 0, ts: Date.now(), event: { kind: 'error', command: cmd.type, message: (err as Error)?.message ?? String(err) } });
       }
     });
     ws.on('close', () => registry.detachAll(ws));
@@ -126,7 +142,12 @@ async function handle(cmd: ClientCommand, ws: WebSocket, registry: SessionRegist
       return;
     case 'session.start': {
       const s = await registry.start(cmd, ws);
-      safeSend(ws, { type: 'session.started', sessionId: s.id, requestCwd: cmd.cwd, agent: cmd.agent });
+      safeSend(ws, { type: 'session.started', sessionId: s.id, requestCwd: cmd.cwd, requestId: cmd.requestId, agent: cmd.agent });
+      try { s.start(); } catch (err) {
+        safeSend(ws, { sessionId: s.id, seq: 0, ts: Date.now(), event: { kind: 'error', message: (err as Error).message } });
+        await registry.close(s.id);
+        safeSend(ws, { type: 'session.missing', sessionId: s.id });
+      }
       return;
     }
     case 'session.attach':

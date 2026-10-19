@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import React, { useState } from 'react';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
-import 'highlight.js/styles/github-dark.css';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { api } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
 import { openLightbox } from './Lightbox';
@@ -16,10 +16,24 @@ interface Props {
 }
 
 const EXTERNAL_RE = /^(https?:|mailto:|tel:|data:|blob:)/i;
+export const markdownSchema = {
+  ...defaultSchema,
+  attributes: { ...defaultSchema.attributes, '*': [...(defaultSchema.attributes?.['*'] ?? []), 'align'], img: [...(defaultSchema.attributes?.img ?? []), 'width', 'height'] },
+  protocols: { ...defaultSchema.protocols, href: ['http', 'https', 'mailto', 'file'], src: ['http', 'https', 'data'] },
+};
+
+function MarkdownImage({ url, label, alt, title }: { url: string; label: string; alt: string; title?: string }) {
+  useLang();
+  const [loaded, setLoaded] = useState(false);
+  // Remote images in agent output may encode conversation data in their URL. Fetch only on click.
+  if (/^(https?:)?\/\//i.test(url) && !loaded) return <button className="text-xs underline text-zinc-400" title={url} onClick={() => setLoaded(true)}>{t('preview.loadRemoteImage')}: {alt || label}</button>;
+  return <img src={url || undefined} alt={alt} title={title} className="max-w-full rounded-md cursor-zoom-in" onClick={() => openLightbox(url, label)} />;
+}
 
 function resolveLocal(href: string, baseDir?: string | null): string | null {
   if (!href || EXTERNAL_RE.test(href) || href.startsWith('#')) return null;
-  let p = href.startsWith('file://') ? decodeURIComponent(href.slice(7)) : href;
+  if (/^[a-z][\w+.-]*:/i.test(href) && !href.startsWith('file://')) return null;
+  let p = href.startsWith('file://') ? href.slice(7) : href;
   try { p = decodeURIComponent(p); } catch { /* keep as is */ }
   p = p.split('#')[0].split('?')[0];
   if (p.startsWith('~/')) return p;
@@ -63,9 +77,8 @@ export default function MarkdownView({ text, baseDir, className }: Props) {
     <div className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        // rehype-raw renders inline HTML (README badges, <p align="center">, <img>, <br/>). Local content only; React never executes scripts or string handlers.
-        rehypePlugins={[rehypeRaw, [rehypeHighlight, { detect: false, ignoreMissing: true }]]}
-        urlTransform={(url) => url}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSchema], [rehypeHighlight, { detect: false, ignoreMissing: true }]]}
+        urlTransform={(url, key) => key === 'src' && /^data:image\/(?:png|jpeg|gif|webp|avif);/i.test(url) || /^file:\/\//i.test(url) ? url : defaultUrlTransform(url)}
         components={{
           pre: ({ children }) => (
             <div className="relative group/code">
@@ -76,13 +89,13 @@ export default function MarkdownView({ text, baseDir, className }: Props) {
           img: ({ src, alt, title }) => {
             const local = resolveLocal(String(src ?? ''), baseDir);
             const url = local ? api.rawUrl(local) : String(src ?? '');
-            return <img src={url} alt={alt ?? ''} title={title ?? local ?? undefined} className="max-w-full rounded-md cursor-zoom-in" onClick={() => openLightbox(url, local ?? alt ?? undefined)} />;
+            return <MarkdownImage key={url} url={url} label={local ?? alt ?? ''} alt={alt ?? ''} title={title ?? local ?? undefined} />;
           },
           a: ({ href, children, title }) => {
             const h = String(href ?? '');
             const local = resolveLocal(h, baseDir);
             if (local) {
-              return <a href={api.rawUrl(local)} title={local} onClick={(e) => { e.preventDefault(); openLocalFile(local); }}>{children}</a>;
+              return <a href="#" title={local} onClick={(e) => { e.preventDefault(); openLocalFile(local); }}>{children}</a>;
             }
             if (h.startsWith('#')) return <a href={h} title={title}>{children}</a>;
             // External: let Electron's window-open handler send it to the default browser.

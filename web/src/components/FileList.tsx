@@ -93,8 +93,8 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
     const mod = ev.metaKey || ev.ctrlKey;
     const idx = anchor ? entries.findIndex((e) => e.path === anchor) : -1;
     const moveTo = (i: number) => { const e = entries[Math.max(0, Math.min(entries.length - 1, i))]; if (e) { setSelected(new Set([e.path])); setAnchor(e.path); } };
-    if (ev.key === 'ArrowDown') { ev.preventDefault(); moveTo(idx + 1); }
-    else if (ev.key === 'ArrowUp') { ev.preventDefault(); moveTo(idx - 1); }
+    if (!mod && ev.key === 'ArrowDown') { ev.preventDefault(); moveTo(idx + 1); }
+    else if (!mod && ev.key === 'ArrowUp') { ev.preventDefault(); moveTo(idx - 1); }
     else if (ev.key === 'Enter') { ev.preventDefault(); if (selectedEntries.length === 1) startRename(); }
     else if (mod && ev.key === 'ArrowDown') { ev.preventDefault(); const e = selectedEntries[0]; if (e) open(e); }
     else if (mod && ev.key === 'ArrowUp') { ev.preventDefault(); if (listing?.parent) onNavigate(listing.parent); }

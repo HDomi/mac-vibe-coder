@@ -26,8 +26,13 @@ class AppServerClient {
   constructor(codexPath: string, cwd: string) {
     this.proc = spawn(codexPath, ['app-server', '--listen', 'stdio://'], { cwd, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
     const rl = createInterface({ input: this.proc.stdout! });
-    rl.on('line', (line) => this.handleLine(line));
+    // A codex CLI update can change message shapes; a TypeError in a handler must not take the server down.
+    rl.on('line', (line) => {
+      try { this.handleLine(line); } catch (err) { this.onStderr(`[mac-vibe-coder] failed to handle app-server message: ${(err as Error).message}`); }
+    });
     this.proc.stderr!.on('data', (d) => this.onStderr(String(d)));
+    // EPIPE after the process died would otherwise be an unhandled 'error' event.
+    this.proc.stdin!.on('error', (err) => this.onStderr(`stdin error: ${err.message}`));
     this.proc.on('exit', (code) => {
       this.exited = true;
       for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error('codex app-server exited')); }
@@ -55,7 +60,7 @@ class AppServerClient {
   }
 
   private write(obj: Json) {
-    if (this.proc.stdin?.writable) this.proc.stdin.write(JSON.stringify(obj) + '\n');
+    if (!this.exited && this.proc.stdin?.writable) this.proc.stdin.write(JSON.stringify(obj) + '\n');
   }
 
   /** Send a request; rejects if the process is gone or no reply arrives within `timeoutMs` (never hangs a caller). */

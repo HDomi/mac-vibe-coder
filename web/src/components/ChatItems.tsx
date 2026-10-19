@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import MarkdownView, { CopyButton } from './MarkdownView';
 import type { ChatItem } from '../lib/chatStore';
 import { api } from '../lib/api';
@@ -51,7 +51,7 @@ export function UserItem({ item }: { item: Extract<ChatItem, { kind: 'user' }> }
   );
 }
 
-export function AssistantItem({ item, baseDir }: { item: Extract<ChatItem, { kind: 'assistant' }>; baseDir?: string }) {
+export const AssistantItem = memo(function AssistantItem({ item, baseDir }: { item: Extract<ChatItem, { kind: 'assistant' }>; baseDir?: string }) {
   useLang();
   const [showThinking, setShowThinking] = useState(false);
   return (
@@ -73,7 +73,7 @@ export function AssistantItem({ item, baseDir }: { item: Extract<ChatItem, { kin
       )}
     </div>
   );
-}
+});
 
 const SUBAGENT_TOOLS = new Set(['Agent', 'Task', 'SubAgent', 'SubAgentActivity']);
 

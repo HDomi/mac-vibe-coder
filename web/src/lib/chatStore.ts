@@ -80,7 +80,8 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       return next;
     case 'user': {
       // Live events carry clean text; replayed ones (Codex resume) may still include the appended path block.
-      const split = e.attachments.length ? { text: e.text, attachments: e.attachments } : splitAttachments(e.text);
+      const split = splitAttachments(e.text);
+      split.attachments = [...new Map([...split.attachments, ...e.attachments].map((a) => [a.path, a])).values()];
       // Confirm an optimistic local echo with the same text instead of appending a duplicate.
       const pendingIdx = items.findIndex((it) => it.kind === 'user' && it.pending && it.text === split.text);
       if (pendingIdx >= 0) items[pendingIdx] = { kind: 'user', id: uid(), text: split.text, attachments: split.attachments };
@@ -146,6 +147,13 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       next.status = e.status;
       if (e.status === 'running' && !next.turnStartedAt) next.turnStartedAt = Date.now();
       if (e.status === 'idle' || e.status === 'closed') next.turnStartedAt = undefined;
+      if (e.status === 'closed') {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.kind === 'user' && item.pending) items[i] = { ...item, pending: false };
+          if (item.kind === 'assistant' && item.streaming) items[i] = { ...item, streaming: false };
+        }
+      }
       if (e.permissionMode) next.permissionMode = e.permissionMode as PermissionModeId;
       return next;
     case 'result':
@@ -157,6 +165,15 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       next.turnStartedAt = undefined;
       return next;
     case 'error':
+      if ((seq === 0 && (!e.command || e.command === 'session.send')) || s.status === 'starting') {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.kind === 'user' && item.pending) items[i] = { ...item, pending: false };
+          if (item.kind === 'assistant' && item.streaming) items[i] = { ...item, streaming: false };
+        }
+        if (next.status !== 'closed') next.status = 'idle';
+        next.turnStartedAt = undefined;
+      }
       items.push({ kind: 'error', id: uid(), message: e.message });
       return next;
     case 'log':

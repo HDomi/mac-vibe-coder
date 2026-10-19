@@ -112,7 +112,7 @@ function AppInner() {
     if (window.vibe?.pickFolder) { const p = await window.vibe.pickFolder(); if (p) openProject(p); }
     else { const p = window.prompt(t('app.folderPathPrompt'), listing?.path ?? '~'); if (p) openProject(p); }
   };
-  const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActiveSession);
+  const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActiveSession).catch((e) => window.alert(e.message));
   const closeSession = (id: string) => {
     const s = S.sessions[id];
     if (!s) return;
@@ -135,6 +135,7 @@ function AppInner() {
   // Global keyboard shortcuts.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      if (document.querySelector('[data-update-locked="true"]')) return;
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
@@ -144,13 +145,21 @@ function AppInner() {
       else if (k === 'j') { e.preventDefault(); setRightCollapsed((v) => !v); }
       else if (k === 'k') { e.preventDefault(); window.dispatchEvent(new Event('vibe:focus-composer')); }
       else if (k === 'n' && !e.shiftKey) { e.preventDefault(); if (view === 'agent') setAgentActive('new'); else if (project) setActiveSession('new'); }
-      else if (k === 'w') { e.preventDefault(); if (session && !(session.status === 'running' && !window.confirm(t('app.confirmCloseRunning')))) { S.close(session.id); setActiveSession(null); } }
+      else if (k === 'w') {
+        e.preventDefault();
+        const target = view === 'agent' ? S.sessions[agentActive ?? ''] : session;
+        if (target) {
+          if ((target.status === 'running' || target.status === 'compacting') && !window.confirm(t('app.confirmCloseRunning'))) return;
+          S.close(target.id);
+          if (view === 'agent') setAgentActive(null); else setActiveSession(null);
+        }
+      }
       else if (k === '/') { e.preventDefault(); setShowTools(true); }
       else if (['1', '2', '3', '4'].includes(e.key) && !inText) { e.preventDefault(); setRightTab(rightTabs[Number(e.key) - 1][0]); setRightCollapsed(false); }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [project, session, S, view]);
+  }, [project, session, S, view, agentActive]);
 
   return (
       <div className="h-full flex flex-col">
@@ -255,7 +264,7 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
   useLang();
   const live = Object.values(S.sessions);
   const session = active && active !== 'new' ? S.sessions[active] ?? null : null;
-  const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActive);
+  const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActive).catch((e) => window.alert(e.message));
   return (
     <div className="flex-1 flex min-h-0 relative">
       <aside className="w-64 shrink-0 h-full flex flex-col border-r border-white/10 bg-[#0e1117]">

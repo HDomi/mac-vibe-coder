@@ -110,8 +110,8 @@ export const api = {
   health: () => req<{ ok: boolean; version: string; commit: string; builtAt: string | null }>('/api/health'),
   updateStatus: (force = false) => req<UpdateStatus>(`/api/update/status${force ? '?force=1' : ''}`),
   updateApplyUrl: (force = false) => `/api/update/apply${force ? '?force=1' : ''}`,
-  open: (path: string, app: 'terminal' | 'iterm' | 'finder' | 'vscode' | 'cursor' = 'terminal', command?: string) =>
-    req<{ ok: true }>('/api/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, app, command }) }),
+  open: (path: string, app: 'terminal' | 'iterm' | 'finder' | 'vscode' | 'cursor' = 'terminal') =>
+    req<{ ok: true }>('/api/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, app }) }),
   gitStatus: (cwd: string) => req<GitStatus>(`/api/git/status?cwd=${q(cwd)}`),
   gitDiff: (cwd: string, path: string, staged: boolean) => fetch(`/api/git/diff?cwd=${q(cwd)}&path=${q(path)}&staged=${staged ? 1 : 0}`).then((r) => r.text()),
   gitLog: (cwd: string, skip = 0, limit = 30) => req<{ commits: GitCommit[]; hasMore: boolean }>(`/api/git/log?cwd=${q(cwd)}&skip=${skip}&limit=${limit}`),

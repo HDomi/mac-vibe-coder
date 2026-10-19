@@ -5,36 +5,50 @@ import { syncLoginShellPath } from './shell.js';
 import { WebSocketServer } from 'ws';
 import { attachWebSocket, SessionRegistry } from './sessions.js';
 import { attachPty, killAllPtys } from './pty.js';
+import { rejectReason } from './guard.js';
+import { setShutdownHandler } from './lifecycle.js';
 
-export function startServer(port = PORT): Promise<ServerType> {
-  return new Promise(async (resolve, reject) => {
-    await syncLoginShellPath();
+export async function startServer(port = PORT): Promise<ServerType> {
+  await syncLoginShellPath();
+  return new Promise((resolve, reject) => {
     const registry = new SessionRegistry();
-    const app = createApp(registry);
+    const app = createApp(registry, port);
     const server = serve({ fetch: app.fetch, hostname: HOST, port }, (info) => {
       console.log(`[mac-vibe-coder] http://${info.address}:${info.port}`);
       resolve(server);
     });
     const http = server as import('node:http').Server;
-    const wss = new WebSocketServer({ noServer: true });
-    const ptyWss = new WebSocketServer({ noServer: true });
+    const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
+    const ptyWss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
     attachWebSocket(wss, registry);
     attachPty(ptyWss);
     let shuttingDown = false;
-    const shutdown = (signal: NodeJS.Signals) => {
+    // Single exit path: signals, update restart and /api/restart all close sessions and shells first.
+    const shutdown = (reason: string, code = 0) => {
       if (shuttingDown) return;
       shuttingDown = true;
-      console.log(`[mac-vibe-coder] ${signal}: closing sessions`);
-      const timer = setTimeout(() => process.exit(0), 4000);
+      console.log(`[mac-vibe-coder] ${reason}: closing sessions`);
+      // Stop accepting connections right away so a new app instance does not attach to a dying server.
+      http.close();
+      const timer = setTimeout(() => process.exit(code), 4000);
       killAllPtys();
-      registry.closeAll().finally(() => { clearTimeout(timer); process.exit(0); });
+      registry.closeAll().finally(() => { clearTimeout(timer); process.exit(code); });
     };
-    process.on('SIGTERM', shutdown);
-    process.on('SIGINT', shutdown);
+    setShutdownHandler(shutdown);
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
     http.on('upgrade', (req, socket, head) => {
-      const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+      let pathname: string;
+      try { pathname = new URL(req.url ?? '/', 'http://localhost').pathname; } catch { socket.destroy(); return; }
       const target = pathname === '/ws' ? wss : pathname === '/pty' ? ptyWss : null;
       if (!target) { socket.destroy(); return; }
+      // WebSockets are not covered by CORS: without this any web page could open a shell on /pty.
+      const reason = rejectReason({ host: req.headers.host, origin: req.headers.origin, secFetchSite: req.headers['sec-fetch-site'] as string | undefined }, port);
+      if (reason || shuttingDown) {
+        socket.write(`HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n`);
+        socket.destroy();
+        return;
+      }
       target.handleUpgrade(req, socket, head, (ws) => target.emit('connection', ws, req));
     });
     server.on('error', reject);

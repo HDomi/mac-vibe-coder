@@ -52,31 +52,10 @@ async function fetchClaude(): Promise<ClaudeUsage | null> {
 }
 
 const CODEX_AUTH = path.join(homedir(), '.codex', 'auth.json');
-const CODEX_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
-
 async function readCodexAuth() {
   const d = JSON.parse(await fs.readFile(CODEX_AUTH, 'utf8'));
   const accessToken = d?.tokens?.access_token ?? d?.access_token ?? null;
   return accessToken ? { accessToken: accessToken as string, accountId: (d?.tokens?.account_id ?? d?.account_id ?? null) as string | null, raw: d } : null;
-}
-
-async function refreshCodexAuth(raw: Record<string, unknown>) {
-  const tokens = raw.tokens as Record<string, string> | undefined;
-  if (!tokens?.refresh_token) return null;
-  const res = await fetch('https://auth.openai.com/oauth/token', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ client_id: CODEX_CLIENT_ID, grant_type: 'refresh_token', refresh_token: tokens.refresh_token, scope: 'openid profile email' }),
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!res.ok) return null;
-  const r = await res.json() as Record<string, string>;
-  if (!r.access_token) return null;
-  tokens.access_token = r.access_token;
-  if (r.id_token) tokens.id_token = r.id_token;
-  if (r.refresh_token) tokens.refresh_token = r.refresh_token;
-  raw.last_refresh = new Date().toISOString();
-  await fs.writeFile(CODEX_AUTH, JSON.stringify(raw, null, 2));
-  return { accessToken: r.access_token, accountId: tokens.account_id ?? null };
 }
 
 async function fetchCodex(): Promise<CodexUsage | null> {
@@ -87,12 +66,8 @@ async function fetchCodex(): Promise<CodexUsage | null> {
     if (a.accountId) headers['ChatGPT-Account-Id'] = a.accountId;
     return fetch('https://chatgpt.com/backend-api/wham/usage', { headers, signal: AbortSignal.timeout(7000) });
   };
-  let res = await request(auth);
-  if (res.status === 401) {
-    const refreshed = await refreshCodexAuth(auth.raw);
-    if (!refreshed) throw new Error('codex token refresh failed');
-    res = await request(refreshed);
-  }
+  const res = await request(auth);
+  if (res.status === 401) throw new Error('Codex login expired. Open the Codex CLI to refresh it.');
   if (!res.ok) throw new Error(`codex usage HTTP ${res.status}`);
   const d = await res.json() as Record<string, unknown>;
   const win = (o: unknown): UsageWindow | null => {

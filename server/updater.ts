@@ -1,11 +1,8 @@
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { run, streamShell } from './shell.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-/** Repository root: dist/server/updater.js -> ../.. ; server/updater.ts (tsx) -> .. */
-export const REPO_ROOT = path.resolve(__dirname, __dirname.includes(`${path.sep}dist${path.sep}`) ? '../..' : '..');
+import { REPO_ROOT } from './paths.js';
+export { REPO_ROOT };
 
 const CHECK_TTL_MS = 10 * 60 * 1000;
 /** Exit code that tells the launcher (Electron / launchd) to restart us after an update. */
@@ -30,6 +27,7 @@ export interface UpdateStatus {
 
 let cached: UpdateStatus | null = null;
 let applying = false;
+let checking: Promise<UpdateStatus> | null = null;
 export function isUpdating() { return applying; }
 
 async function git(args: string[], timeout = 60000) { return run('git', ['-C', REPO_ROOT, ...args], timeout); }
@@ -64,7 +62,14 @@ function rawBase(remoteUrl: string, branch: string): string | null {
 /** The build this process started with. Read once: a rebuild on disk is not "installed" until the server restarts. */
 const INSTALLED: BuildInfo = readBuildInfo();
 
-export async function checkUpdate(force = false): Promise<UpdateStatus> {
+export function checkUpdate(force = false): Promise<UpdateStatus> {
+  if (checking) return checking;
+  if (applying) return Promise.resolve(cached ?? { repo: REPO_ROOT, branch: null, installed: INSTALLED, remote: null, available: false, commits: [], checkedAt: Date.now(), error: 'An update is running' });
+  checking = readUpdate(force).finally(() => { checking = null; });
+  return checking;
+}
+
+async function readUpdate(force: boolean): Promise<UpdateStatus> {
   if (!force && cached && Date.now() - cached.checkedAt < CHECK_TTL_MS) return cached;
   const installed = INSTALLED;
   const status: UpdateStatus = { repo: REPO_ROOT, branch: null, installed, remote: null, available: false, commits: [], checkedAt: Date.now(), error: null };
@@ -72,6 +77,7 @@ export async function checkUpdate(force = false): Promise<UpdateStatus> {
     const branch = await git(['rev-parse', '--abbrev-ref', 'HEAD']);
     if (!branch.ok) throw new Error(branch.stderr || 'not a git repository');
     status.branch = branch.stdout;
+    if (status.branch === 'HEAD') throw new Error('Updates require a branch checkout, not detached HEAD.');
     const remoteUrl = (await git(['remote', 'get-url', 'origin'])).stdout;
     // Pushed commit: cheap, no object download.
     const ls = await git(['ls-remote', 'origin', `refs/heads/${status.branch}`], 30000);
@@ -116,35 +122,9 @@ export async function checkUpdate(force = false): Promise<UpdateStatus> {
  * A failure anywhere leaves the running installation untouched.
  */
 export function applyUpdate(onLine: (line: string, stream: 'stdout' | 'stderr') => void): Promise<number> {
-  const root = REPO_ROOT.replace(/"/g, '\\"');
-  const cmd = [
-    'set -e',
-    `cd "${root}"`,
-    'BRANCH="$(git rev-parse --abbrev-ref HEAD)"',
-    'REMOTE="$(git remote get-url origin)"',
-    'TMP="$(mktemp -d "${TMPDIR:-/tmp}/mvc-update.XXXXXX")"',
-    'trap \'echo "cleanup $TMP"; rm -rf "$TMP"\' EXIT',
-    `[ -d "${root}/runtime/node/bin" ] && export PATH="${root}/runtime/node/bin:$PATH" || true`,
-    'echo "▸ clone $BRANCH into $TMP"',
-    'git clone --quiet --depth 1 --branch "$BRANCH" "$REMOTE" "$TMP/src"',
-    'cd "$TMP/src"',
-    'echo "▸ npm ci (temp)"',
-    'npm ci --no-audit --no-fund',
-    'echo "▸ build (temp)"',
-    'npm run build',
-    `cd "${root}"`,
-    'echo "▸ fast-forward checkout"',
-    'git pull --ff-only || echo "warn: checkout not fast-forwarded (local changes?); artifacts still updated"',
-    'echo "▸ swap in built artifacts"',
-    `rsync -a --delete "$TMP/src/node_modules/" "${root}/node_modules/"`,
-    `rsync -a --delete "$TMP/src/dist/" "${root}/dist/"`,
-    `rsync -a --delete "$TMP/src/web/dist/" "${root}/web/dist/"`,
-    'echo "▸ brand runtime"',
-    'scripts/brand-electron.sh || true',
-    'echo "▸ done: $(git rev-parse --short HEAD)"',
-  ].join('\n');
+  const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
+  const cmd = `/bin/zsh ${quote(path.join(REPO_ROOT, 'scripts/apply-update.sh'))}`;
   if (applying) return Promise.reject(new Error('An update is already running'));
   applying = true;
-  cached = null;
-  return streamShell(cmd, onLine).finally(() => { applying = false; });
+  return (checking ?? Promise.resolve()).then(() => streamShell(cmd, onLine)).finally(() => { applying = false; cached = null; });
 }

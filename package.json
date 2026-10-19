@@ -1,14 +1,14 @@
 {
   "name": "mac-vibe-coder",
   "productName": "Mac Vibe Coder",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "private": true,
   "type": "module",
   "main": "dist/electron/main.cjs",
   "description": "맥환경에서의 로컬 바이브코딩을 도와주기위한 프로젝트",
   "scripts": {
     "icons": "env -u ELECTRON_RUN_AS_NODE electron scripts/generate-icons.cjs",
-    "dev": "concurrently -k -n web,server \"vite\" \"tsx watch server/index.ts\"",
+    "dev": "concurrently -k -n web,server \"vite\" \"MVC_DEV=1 tsx watch server/index.ts\"",
     "dev:app": "npm run build:main && env -u ELECTRON_RUN_AS_NODE VITE_DEV=1 electron .",
     "build:main": "tsc -p tsconfig.json && cp electron/preload.cjs dist/electron/preload.cjs",
     "build:web": "vite build",
@@ -16,8 +16,10 @@
     "start": "npm run build && env -u ELECTRON_RUN_AS_NODE electron .",
     "serve": "tsx server/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "test": "tsx --tsconfig web/tsconfig.json --test tests/*.test.ts tests/*.test.tsx",
+    "test:ui": "env -u ELECTRON_RUN_AS_NODE electron tests/smoke-ui.cjs",
     "app": "env -u ELECTRON_RUN_AS_NODE electron .",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true; scripts/brand-electron.sh || true",
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true; scripts/brand-electron.sh || true",
     "brand": "scripts/brand-electron.sh"
   },
   "dependencies": {
@@ -26,6 +28,7 @@
     "hono": "^4.7.0",
     "node-pty": "^1.1.0",
     "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {

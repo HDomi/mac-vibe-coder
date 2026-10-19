@@ -41,6 +41,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [cmdIdx, setCmdIdx] = useState(0);
   const ta = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(0);
@@ -56,12 +57,13 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
     return { query: m[1], start: caret - m[1].length - 1 };
   }, [text, caret]);
   useEffect(() => {
+    let alive = true;
     if (!mention || !cwd) { setFileHits([]); return; }
     if (fileTimer.current) window.clearTimeout(fileTimer.current);
     fileTimer.current = window.setTimeout(() => {
-      api.search(cwd, mention.query).then((h) => { setFileHits(h.slice(0, 10)); setFileIdx(0); }).catch(() => setFileHits([]));
+      api.search(cwd, mention.query).then((h) => { if (alive) { setFileHits(h.slice(0, 10)); setFileIdx(0); } }).catch(() => { if (alive) setFileHits([]); });
     }, 100);
-    return () => { if (fileTimer.current) window.clearTimeout(fileTimer.current); };
+    return () => { alive = false; if (fileTimer.current) window.clearTimeout(fileTimer.current); };
   }, [mention?.query, mention?.start, cwd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pickMention = (h: { path: string; rel: string; isDir: boolean }) => {
@@ -110,7 +112,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
     let uploaded: Attachment[] = [];
     if (toUpload.length) {
       setUploading(true);
-      try { uploaded = await api.attach(toUpload); } finally { setUploading(false); }
+      try { setUploadError(null); uploaded = await api.attach(toUpload); } catch (e) { setUploadError((e as Error).message); } finally { setUploading(false); }
     }
     setAttachments((a) => [...a, ...direct, ...uploaded].filter((x, i, arr) => arr.findIndex((y) => y.path === x.path) === i));
   }, []);
@@ -132,12 +134,13 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
 
   const submit = () => {
     const body = text.trim();
-    if (!body && attachments.length === 0) return;
+    if (disabled || uploading || (!body && attachments.length === 0)) return;
     onSend(body, attachments);
     setText(''); setAttachments([]);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return;
     if (mention && fileHits.length) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setFileIdx((i) => (i + 1) % fileHits.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setFileIdx((i) => (i - 1 + fileHits.length) % fileHits.length); return; }
@@ -172,6 +175,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
           ))}
         </div>
       )}
+      {uploadError && <div role="alert" className="text-xs text-red-300 mb-2">{uploadError}</div>}
       <div className="relative rounded-xl border border-white/15 bg-[#12151c] focus-within:border-white/30">
         {mention && fileHits.length > 0 && (
           <div className="absolute bottom-full left-2 mb-1 w-[480px] max-w-[95%] rounded-lg border border-white/10 bg-[#171a22] shadow-xl py-1 text-[13px] z-10">
@@ -211,7 +215,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
           {uploading && <span className="text-xs text-zinc-500">{t('composer.uploading')}</span>}
           <div className="flex-1" />
           {running && <button className="rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs px-3 py-1.5" onClick={onStop}>{t('composer.stop')}</button>}
-          <button className="rounded-md bg-blue-500/30 hover:bg-blue-500/40 text-xs px-3 py-1.5 disabled:opacity-40" disabled={disabled || (!text.trim() && !attachments.length)} onClick={submit}>{running ? t('composer.queue') : t('composer.send')}</button>
+          <button className="rounded-md bg-blue-500/30 hover:bg-blue-500/40 text-xs px-3 py-1.5 disabled:opacity-40" disabled={disabled || uploading || (!text.trim() && !attachments.length)} onClick={submit}>{running ? t('composer.queue') : t('composer.send')}</button>
         </div>
       </div>
     </div>

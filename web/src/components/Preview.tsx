@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { highlight, LANGUAGES, languageFor, rememberLanguage } from '../lib/highlight';
+import { highlight, highlightedLines, LANGUAGES, languageFor, rememberLanguage } from '../lib/highlight';
 import { CopyButton } from './MarkdownView';
 import MarkdownView from './MarkdownView';
 import { api, formatSize, type Entry } from '../lib/api';
@@ -12,7 +12,7 @@ function CodeView({ content, name, ext }: { content: string; name: string; ext: 
   useLang();
   const [lang, setLang] = useState(() => languageFor(name, ext));
   useEffect(() => { setLang(languageFor(name, ext)); }, [name, ext]);
-  const lines = useMemo(() => highlight(content, lang).split('\n'), [content, lang]);
+  const lines = useMemo(() => highlightedLines(highlight(content, lang)), [content, lang]);
   return (
     <div className="h-full flex flex-col">
       <div className="h-8 shrink-0 flex items-center gap-2 px-3 border-b border-white/5 text-[11px] text-zinc-500">

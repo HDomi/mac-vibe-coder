@@ -25,6 +25,7 @@ export class FsError extends Error {
 function wrap(err: unknown, p: string): never {
   const e = err as NodeJS.ErrnoException;
   if (e.code === 'ENOENT') throw new FsError('ENOENT', `Not found: ${p}`, 404);
+  if (e.code === 'EEXIST') throw new FsError('EEXIST', `Already exists: ${p}`, 409);
   if (e.code === 'EACCES' || e.code === 'EPERM') {
     throw new FsError('EACCES', `Permission denied: ${p}. Allow folder access for this app in macOS Privacy & Security settings.`, 403);
   }
@@ -97,6 +98,8 @@ export async function readText(p: string): Promise<{ content: string; truncated:
   try {
     const st = await fs.stat(abs);
     if (st.isDirectory()) throw new FsError('EISDIR', `Is a directory: ${abs}`, 400);
+    // FIFOs, sockets and devices would block a libuv thread or stream forever.
+    if (!st.isFile()) throw new FsError('ENOTFILE', `Not a regular file: ${abs}`, 400);
     const fh = await fs.open(abs, 'r');
     try {
       const len = Math.min(st.size, TEXT_LIMIT);
@@ -124,20 +127,24 @@ export async function rawFile(p: string, rangeHeader: string | undefined): Promi
   try {
     const st = await fs.stat(abs);
     if (st.isDirectory()) throw new FsError('EISDIR', `Is a directory: ${abs}`, 400);
+    if (!st.isFile()) throw new FsError('ENOTFILE', `Not a regular file: ${abs}`, 400);
     size = st.size;
   } catch (err) {
     if (err instanceof FsError) throw err;
     wrap(err, abs);
   }
   const mime = mimeOf(path.extname(abs));
-  const base = { 'Content-Type': mime, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
+  const base: Record<string, string> = { 'Content-Type': mime, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' };
+  // Served from the app's own origin: an .html/.svg opened as a document must not run script with
+  // access to the API. PDFs are exempt because Chromium refuses to render them in sandboxed frames.
+  if (mime !== 'application/pdf') base['Content-Security-Policy'] = "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'";
 
   const m = rangeHeader?.match(/^bytes=(\d*)-(\d*)$/);
   if (m) {
     let start = m[1] ? Number(m[1]) : 0;
-    let end = m[2] ? Number(m[2]) : size - 1;
+    let end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
     if (!m[1] && m[2]) { start = Math.max(0, size - Number(m[2])); end = size - 1; }
-    if (start >= size || end >= size || start > end) {
+    if (start >= size || start > end) {
       return { status: 416, headers: { ...base, 'Content-Range': `bytes */${size}` }, body: null };
     }
     const stream = Readable.toWeb(createReadStream(abs, { start, end })) as ReadableStream;
@@ -212,13 +219,14 @@ async function uniqueDest(dest: string): Promise<string> {
 }
 
 export async function mkdir(dir: string, name: string): Promise<string> {
+  if (typeof name !== 'string' || name.includes('/') || !name.trim() || name === '.' || name === '..') throw new FsError('EINVAL', 'Invalid name', 400);
   const abs = path.join(resolvePath(dir), name);
   try { await fs.mkdir(abs); return abs; } catch (err) { wrap(err, abs); }
 }
 
 export async function rename(p: string, newName: string): Promise<string> {
   const abs = resolvePath(p);
-  if (newName.includes('/') || !newName.trim()) throw new FsError('EINVAL', 'Invalid name', 400);
+  if (typeof newName !== 'string' || newName.includes('/') || !newName.trim() || newName === '.' || newName === '..') throw new FsError('EINVAL', 'Invalid name', 400);
   const dest = path.join(path.dirname(abs), newName);
   try { await fs.access(dest); throw new FsError('EEXIST', `Already exists: ${dest}`, 409); } catch (err) { if (err instanceof FsError) throw err; }
   try { await fs.rename(abs, dest); return dest; } catch (err) { wrap(err, abs); }
@@ -230,11 +238,16 @@ export async function transfer(paths: string[], destDir: string, move: boolean):
   const out: string[] = [];
   for (const p of paths) {
     const src = resolvePath(p);
+    if (move && path.dirname(src) === dir) { out.push(src); continue; }
     const dest = await uniqueDest(path.join(dir, path.basename(src)));
     if (src === dest) continue;
     try {
       if (move) {
-        try { await fs.rename(src, dest); } catch { await fs.cp(src, dest, { recursive: true }); await fs.rm(src, { recursive: true }); }
+        try { await fs.rename(src, dest); } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'EXDEV') throw err;
+          await fs.cp(src, dest, { recursive: true, errorOnExist: true, force: false });
+          await fs.rm(src, { recursive: true });
+        }
       } else {
         await fs.cp(src, dest, { recursive: true });
       }
@@ -256,9 +269,20 @@ export async function duplicate(p: string): Promise<string> {
 export async function trash(paths: string[]): Promise<void> {
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');
-  const list = paths.map((p) => `POSIX file "${resolvePath(p).replace(/"/g, '\\"')}"`).join(', ');
+  const abs = paths.map((p) => resolvePath(p));
+  if (!abs.length) return;
+  // Paths go in as argv, never spliced into the script: a crafted file name cannot escape the string.
+  const script = [
+    'on run argv',
+    'set targets to {}',
+    'repeat with p in argv',
+    'set end of targets to (POSIX file (p as text))',
+    'end repeat',
+    'tell application "Finder" to delete targets',
+    'end run',
+  ];
   try {
-    await promisify(execFile)('osascript', ['-e', `tell application "Finder" to delete {${list}}`], { timeout: 20000 });
+    await promisify(execFile)('osascript', [...script.flatMap((l) => ['-e', l]), '--', ...abs], { timeout: 20000 });
   } catch (err) {
     throw new FsError('ETRASH', `Could not move to Trash: ${(err as Error).message}`, 500);
   }
