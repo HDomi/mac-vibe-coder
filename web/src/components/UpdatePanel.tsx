@@ -73,7 +73,6 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
             <div className="text-xs text-zinc-400 space-y-0.5">
               <div>{t('update.installed')}: <span className="text-zinc-200">v{status.installed.version}</span> <span className="font-mono">{status.installed.commit}</span>{status.installed.builtAt ? ` · ${new Date(status.installed.builtAt).toLocaleString()}` : ''}</div>
               <div>{t('update.pushed')}: <span className="text-zinc-200">v{status.remote?.version ?? '?'}</span> <span className="font-mono">{status.remote?.commit ?? ''}</span> · {status.branch}</div>
-              {status.dirty && <div className="text-amber-300">{t('update.dirty')}</div>}
             </div>
           )}
           {status && status.available ? (
