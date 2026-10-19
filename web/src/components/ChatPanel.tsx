@@ -7,6 +7,7 @@ import { ApprovalItem, AssistantItem, QuestionItem, ResultItem, ToolItem, UserIt
 import { useContextMenu } from './ContextMenu';
 import { t, useLang } from '../lib/i18n';
 import ProjectIcon from './ProjectIcon';
+import AgentIcon from './AgentIcon';
 
 export interface StartOptions { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null }
 
@@ -159,7 +160,7 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
               { label: h.pinned ? t('common.deleteUnpinFirst') : t('common.deletePermanently'), danger: true, disabled: !!h.pinned, onClick: () => remove(h) },
             ])}>
             {h.pinned && <span title={t('common.pinned')}>📌</span>}
-            <span className={`text-[10px] rounded px-1.5 py-0.5 ${h.agent === 'codex' ? 'bg-emerald-500/15 text-emerald-200' : 'bg-blue-500/15 text-blue-200'}`}>{h.agent}</span>
+            <AgentIcon agent={h.agent} size={18} />
             <div className="flex-1 min-w-0">
               {renaming === h.sessionId
                 ? <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onClick={(e) => e.stopPropagation()} onBlur={() => rename(h)}
@@ -178,8 +179,11 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
 export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onSend, onApprove, onAnswer, onInterrupt, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments }: Props) {
   useLang();
   const scroller = useRef<HTMLDivElement>(null);
-  const stick = useRef(true);
+  const content = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);          // follow new content until the user scrolls up
+  const programmatic = useRef(false);  // ignore scroll events we caused ourselves
   const [atBottom, setAtBottom] = useState(true);
+  const [now, setNow] = useState(Date.now());
 
   const { top, childrenOf } = useMemo(() => {
     const childrenOf = new Map<string, ChatItem[]>();
@@ -192,10 +196,27 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
     return { top, childrenOf };
   }, [session?.items]);
 
+  const scrollToBottom = () => {
+    const el = scroller.current; if (!el) return;
+    programmatic.current = true;
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => { programmatic.current = false; });
+  };
+  // Follow content growth (streaming text, images, expanding cards) while stuck to the bottom.
   useEffect(() => {
-    const el = scroller.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [session?.items]);
+    const el = content.current; if (!el) return;
+    const ro = new ResizeObserver(() => { if (stick.current) scrollToBottom(); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [session?.id]);
+  useEffect(() => { if (stick.current) scrollToBottom(); }, [session?.items]);
+  useEffect(() => { stick.current = true; setAtBottom(true); scrollToBottom(); }, [session?.id]);
+  // 1s tick for the elapsed counter in the activity line.
+  useEffect(() => {
+    if (!session?.turnStartedAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [session?.turnStartedAt]);
 
   if (!session) return <StartScreen cwd={cwd} scope={scope} onStart={onStart} />;
 
@@ -204,12 +225,43 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
     if (running && !window.confirm(t('chat.confirmCloseRunning'))) return;
     onClose();
   };
-  const jump = () => { const el = scroller.current; if (el) { el.scrollTop = el.scrollHeight; stick.current = true; setAtBottom(true); } };
+  const jump = () => { stick.current = true; setAtBottom(true); scrollToBottom(); };
+  const onScroll = () => {
+    if (programmatic.current) return;
+    const el = scroller.current; if (!el) return;
+    const b = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    stick.current = b; setAtBottom(b);
+  };
+  const onWheel = (e: React.WheelEvent) => { if (e.deltaY < 0) { stick.current = false; setAtBottom(false); } };
+
+  // What the agent is doing right now, for the CLI-style status line.
+  const activity = (() => {
+    if (!running) return null;
+    if (session.status === 'compacting') return t('activity.compacting');
+    const items = session.items;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (it.kind === 'user') break;
+      if (it.kind === 'approval' && !it.decision) return t('activity.waitingApproval');
+      if (it.kind === 'question' && !it.resolved) return t('activity.waitingAnswer');
+    }
+    const openTool = [...items].reverse().find((it) => it.kind === 'tool' && !it.done) as Extract<ChatItem, { kind: 'tool' }> | undefined;
+    if (openTool) {
+      const isSub = ['Agent', 'Task', 'SubAgent'].includes(openTool.name);
+      const detail = (() => { const i = (openTool.input ?? {}) as Record<string, unknown>; const v = i.command ?? i.file_path ?? i.pattern ?? i.query ?? i.description ?? ''; return String(v).split('\n')[0].slice(0, 60); })();
+      return `${isSub ? t('activity.subagent') : t('activity.running', { tool: openTool.name })}${detail ? ` · ${detail}` : ''}`;
+    }
+    const last = items[items.length - 1];
+    if (last?.kind === 'assistant' && last.streaming && !last.text) return t('activity.thinking');
+    return t('activity.working');
+  })();
+  const elapsed = session.turnStartedAt ? Math.max(0, Math.round((now - session.turnStartedAt) / 1000)) : 0;
 
   return (
     <div className="h-full flex flex-col min-w-0">
       <div className="h-10 shrink-0 flex items-center gap-3 px-4 border-b border-white/10 text-xs">
         <span className={`w-2 h-2 rounded-full ${running ? 'bg-amber-400 animate-pulse' : session.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
+        <AgentIcon agent={session.agent} size={16} />
         <span className="font-medium text-zinc-200">{session.agent === 'codex' ? 'Codex' : 'Claude'}</span>
         <ModelSelect agent={session.agent} value={session.model ?? null} onChange={onModel} compact />
         <span className="text-zinc-500 truncate" title={session.cwd}>{session.cwd.split('/').slice(-2).join('/')}</span>
@@ -220,15 +272,23 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         <button className="text-zinc-400 hover:text-white" onClick={close} title={t('chat.closeSession')}>✕</button>
       </div>
       <div className="flex-1 min-h-0 relative">
-        <div ref={scroller} className="absolute inset-0 overflow-y-auto px-5 py-4 space-y-3"
-          onScroll={(e) => { const el = e.currentTarget; const b = el.scrollHeight - el.scrollTop - el.clientHeight < 60; stick.current = b; setAtBottom(b); }}>
-          {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}
-          {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd }))}
+        <div ref={scroller} className="absolute inset-0 overflow-y-auto" onScroll={onScroll} onWheel={onWheel}>
+          <div ref={content} className="px-5 py-4 space-y-3">
+            {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}
+            {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd }))}
+          </div>
         </div>
         {!atBottom && (
           <button onClick={jump} className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-[#1b1f2a] border border-white/15 px-3 py-1 text-xs text-zinc-300 shadow-lg hover:bg-[#242938]">{t('chat.jumpLatest')}</button>
         )}
       </div>
+      {activity && (
+        <div className="h-7 shrink-0 flex items-center gap-2 px-4 text-[11px] text-zinc-400 border-t border-white/5 bg-[#0e1117]">
+          <span className="inline-block w-3 h-3 rounded-full border-2 border-amber-400/70 border-t-transparent animate-spin" />
+          <span className="truncate">{activity}</span>
+          <span className="text-zinc-600 tabular-nums">{elapsed}s</span>
+        </div>
+      )}
       <Composer cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
         onSend={onSend} onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments} />
     </div>

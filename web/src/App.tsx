@@ -14,6 +14,8 @@ import Splitter, { usePaneWidth } from './components/Splitter';
 import { ContextMenuProvider, useContextMenu } from './components/ContextMenu';
 import QuickOpen from './components/QuickOpen';
 import { t, useLang } from './lib/i18n';
+import AgentIcon from './components/AgentIcon';
+import Lightbox from './components/Lightbox';
 
 const LS_CWD = 'vibe.cwd';
 const LS_PROJECT = 'vibe.project';
@@ -144,6 +146,7 @@ function AppInner() {
 
   return (
       <div className="h-full flex flex-col">
+        <Lightbox />
         <UsageBar mode={view} onMode={setView} />
         {view === 'agent' ? (
           <AgentView home={home?.home ?? '~'} S={S} active={agentActive} setActive={setAgentActive} />
@@ -163,7 +166,7 @@ function AppInner() {
                     <button key={s.id} onClick={() => setActiveSession(s.id)}
                       className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 whitespace-nowrap ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
-                      {s.agent === 'codex' ? 'Codex' : 'Claude'}
+                      <AgentIcon agent={s.agent} size={14} />
                       <span className="text-zinc-500">{(s.items.find((i) => i.kind === 'user') as { text?: string } | undefined)?.text?.slice(0, 18) ?? t('common.new')}</span>
                     </button>
                   ))}
@@ -258,7 +261,7 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
             <div key={s.id} onClick={() => setActive(s.id)}
               className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}>
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
-              <span className={`text-[10px] rounded px-1 ${s.agent === 'codex' ? 'bg-emerald-500/15 text-emerald-200' : 'bg-blue-500/15 text-blue-200'}`}>{s.agent}</span>
+              <AgentIcon agent={s.agent} size={16} />
               <span className="truncate flex-1">{(s.items.find((i) => i.kind === 'user') as { text?: string } | undefined)?.text?.slice(0, 40) ?? t('common.new')}</span>
               <span className="text-[10px] text-zinc-600 truncate max-w-[70px]" title={s.cwd}>{s.cwd.split('/').pop()}</span>
             </div>

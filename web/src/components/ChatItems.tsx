@@ -2,6 +2,7 @@ import { useState } from 'react';
 import MarkdownView, { CopyButton } from './MarkdownView';
 import type { ChatItem } from '../lib/chatStore';
 import { api } from '../lib/api';
+import { openLightbox } from './Lightbox';
 import { t, useLang } from '../lib/i18n';
 
 function summarizeInput(name: string, input: unknown): string {
@@ -26,7 +27,7 @@ export function UserItem({ item }: { item: Extract<ChatItem, { kind: 'user' }> }
         {item.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
             {item.attachments.map((a) => a.kind === 'image'
-              ? <img key={a.path} src={api.rawUrl(a.path)} alt={a.name} className="h-20 rounded-md object-cover" title={a.path} />
+              ? <img key={a.path} src={api.rawUrl(a.path)} alt={a.name} className="h-20 rounded-md object-cover cursor-zoom-in hover:opacity-90 transition-opacity" title={a.path} onClick={() => openLightbox(api.rawUrl(a.path), a.name)} />
               : <span key={a.path} className="text-xs bg-white/10 rounded px-2 py-1" title={a.path}>📎 {a.name}</span>)}
           </div>
         )}

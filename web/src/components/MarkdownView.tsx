@@ -5,6 +5,7 @@ import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
 import { api } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
+import { openLightbox } from './Lightbox';
 
 interface Props {
   text: string;
@@ -73,7 +74,7 @@ export default function MarkdownView({ text, baseDir, className }: Props) {
           img: ({ src, alt, title }) => {
             const local = resolveLocal(String(src ?? ''), baseDir);
             const url = local ? api.rawUrl(local) : String(src ?? '');
-            return <img src={url} alt={alt ?? ''} title={title ?? local ?? undefined} className="max-w-full rounded-md cursor-zoom-in" onClick={() => local && openLocalFile(local)} />;
+            return <img src={url} alt={alt ?? ''} title={title ?? local ?? undefined} className="max-w-full rounded-md cursor-zoom-in" onClick={() => openLightbox(url, local ?? alt ?? undefined)} />;
           },
           a: ({ href, children, title }) => {
             const h = String(href ?? '');

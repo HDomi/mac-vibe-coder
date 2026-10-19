@@ -18,6 +18,8 @@ export interface ChatSession {
   permissionMode: PermissionModeId;
   agentSessionId?: string;
   commands?: string[];
+  /** When the current turn started (ms); undefined while idle. */
+  turnStartedAt?: number;
   status: 'starting' | 'running' | 'idle' | 'compacting' | 'closed';
   items: ChatItem[];
   totalCostUsd: number;
@@ -51,6 +53,7 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       return next;
     case 'user':
       items.push({ kind: 'user', id: uid(), text: e.text, attachments: e.attachments });
+      next.turnStartedAt = next.turnStartedAt ?? Date.now();
       return next;
     case 'text.delta':
     case 'thinking.delta': {
@@ -108,6 +111,8 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
     }
     case 'status':
       next.status = e.status;
+      if (e.status === 'running' && !next.turnStartedAt) next.turnStartedAt = Date.now();
+      if (e.status === 'idle' || e.status === 'closed') next.turnStartedAt = undefined;
       if (e.permissionMode) next.permissionMode = e.permissionMode as PermissionModeId;
       return next;
     case 'result':
@@ -116,6 +121,7 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       next.totalCostUsd = e.costUsd;
       next.agentSessionId = e.agentSessionId ?? s.agentSessionId;
       next.status = 'idle';
+      next.turnStartedAt = undefined;
       return next;
     case 'error':
       items.push({ kind: 'error', id: uid(), message: e.message });

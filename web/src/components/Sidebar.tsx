@@ -4,6 +4,7 @@ import { useContextMenu, type MenuItem } from './ContextMenu';
 import { UpdateBadge } from './UpdatePanel';
 import { t, useLang } from '../lib/i18n';
 import ProjectIcon from './ProjectIcon';
+import AgentIcon from './AgentIcon';
 
 interface Props {
   home: HomeInfo | null;
@@ -22,16 +23,16 @@ interface Props {
 
 const DRAG_FAV = 'application/x-vibe-favorite';
 
-function Item({ label, path, active, onClick, onContextMenu, hint, indent, draggable, onDragStart, icon }: {
+function Item({ label, path, active, onClick, onContextMenu, hint, indent, draggable, onDragStart, icon, lead }: {
   label: string; path: string; active: boolean; onClick: () => void; onContextMenu?: (e: React.MouseEvent) => void; hint?: string; indent?: boolean;
-  draggable?: boolean; onDragStart?: (e: React.DragEvent) => void; icon?: boolean;
+  draggable?: boolean; onDragStart?: (e: React.DragEvent) => void; icon?: boolean; lead?: React.ReactNode;
 }) {
   return (
     <div
       className={`group flex items-center gap-2 rounded-md py-1.5 text-sm cursor-pointer select-none ${indent ? 'pl-6 pr-2' : 'px-2'} ${active ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}
       onClick={onClick} onContextMenu={onContextMenu} title={path} draggable={draggable} onDragStart={onDragStart}
     >
-      {icon ? <ProjectIcon path={path} name={label} size={18} /> : <span className="text-zinc-500">▸</span>}
+      {lead ?? (icon ? <ProjectIcon path={path} name={label} size={18} /> : <span className="text-zinc-500">▸</span>)}
       <span className="truncate flex-1">{label}</span>
       {hint && <span className="text-[10px] text-zinc-600">{hint}</span>}
     </div>
@@ -231,7 +232,7 @@ export default function Sidebar(p: Props) {
               <InlineInput value={s.title} onCancel={() => setRenaming(null)} onCommit={(v) => { setRenaming(null); if (v.trim() && v !== s.title) api.historyRename(s.agent, s.sessionId, v.trim(), s.cwd ?? undefined).then(reloadSessions).catch(() => {}); }} />
             </div>
           ) : (
-            <Item key={s.agent + s.sessionId} label={(s.pinned ? '📌 ' : '') + s.title} path={s.cwd ?? s.sessionId} active={false} hint={s.agent === 'codex' ? 'codex' : 'claude'}
+            <Item key={s.agent + s.sessionId} label={(s.pinned ? '📌 ' : '') + s.title} path={s.cwd ?? s.sessionId} active={false} lead={<AgentIcon agent={s.agent} size={16} />}
               onClick={() => p.onResumeSession(s)} onContextMenu={(e) => menu.open(e, sessionMenu(s))} />
           ))}
         </div>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import type { Attachment, PermissionModeId } from '../lib/agent';
 import { t, useLang } from '../lib/i18n';
+import { openLightbox } from './Lightbox';
 
 interface Props {
   /** Session working directory; root for "@" file mentions. */
@@ -163,7 +164,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
           {attachments.map((a) => (
             <div key={a.path} className="relative group" title={a.path}>
               {a.kind === 'image'
-                ? <img src={api.rawUrl(a.path)} alt={a.name} className="h-16 w-16 object-cover rounded-md border border-white/10" />
+                ? <img src={api.rawUrl(a.path)} alt={a.name} className="h-16 w-16 object-cover rounded-md border border-white/10 cursor-zoom-in" onClick={() => openLightbox(api.rawUrl(a.path), a.name)} />
                 : <div className="h-16 px-3 flex items-center text-xs bg-white/5 rounded-md border border-white/10 max-w-50 truncate">📎 {a.name}</div>}
               <button className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-zinc-800 border border-white/20 text-[10px] opacity-0 group-hover:opacity-100"
                 onClick={() => setAttachments((l) => l.filter((x) => x.path !== a.path))}>✕</button>
