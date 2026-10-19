@@ -35,7 +35,7 @@ Mac Vibe Coder 는 그걸 한 창에 모은다. 폴더를 고르면 그 폴더�
 | **미리보기** | Markdown(상대 경로 이미지 · 로컬 링크 해석 · 코드 하이라이트), 이미지, 영상(탐색 가능), 오디오, PDF, 텍스트 |
 | **터미널** | xterm.js + node-pty 로그인 셸, `claude` / `codex` TUI 원클릭, Terminal.app · Finder · VS Code · Cursor 로 열기 |
 | **Git** | 브랜치 전환 · 생성, fetch / pull / push, 상태 · diff · 스테이지 · 커밋 · Commit & Push, 최근 로그 |
-| **즐겨찾기** | 폴더 즐겨찾기, 그룹(폴더)으로 묶기 · 접기, 드래그로 이동, 최근 폴더 |
+| **즐겨찾기** | 폴더 즐겨찾기, 그룹(폴더)으로 묶기 · 접기, 드래그로 이동, 최근 폴더, 프로젝트 아이콘 자동 감지(public/favicon, Next app/icon, Godot project.godot, Tauri, Xcode AppIcon, .icns 등) |
 | **헤더** | Claude 5시간 · 주간 · 모델별, Codex 5시간 · 주간 남은 % 바, 업데이트 배지 |
 | **운영** | CLI 감지 + 설치/업데이트 버튼(공식 스크립트 · Homebrew · npm), 로그인 시 자동 실행, 창이 안 보일 때 완료/승인/질문 알림 |
 | **레이아웃** | 사이드바 · 우측 패널 접기(애니메이션), 구분선 드래그로 폭 조절, 전부 기억됨 |

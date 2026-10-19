@@ -71,6 +71,7 @@ export const api = {
   stat: (path: string) => req<Entry>(`/api/fs/stat?path=${q(path)}`),
   text: (path: string) => req<{ content: string; truncated: boolean; size: number }>(`/api/fs/text?path=${q(path)}`),
   rawUrl: (path: string) => `/api/fs/raw?path=${q(path)}`,
+  projectIconUrl: (path: string) => `/api/project-icon?path=${q(path)}`,
   favorites: () => req<Favorites>('/api/favorites'),
   addFavorite: (path: string, name?: string) => post<Favorites>('/api/favorites', { path, name }),
   removeFavorite: (path: string) => req<Favorites>(`/api/favorites?path=${q(path)}`, { method: 'DELETE' }),

@@ -3,6 +3,7 @@ import { api, type Favorite, type FavoriteGroup, type Favorites, type HomeInfo, 
 import { useContextMenu, type MenuItem } from './ContextMenu';
 import { UpdateBadge } from './UpdatePanel';
 import { t, useLang } from '../lib/i18n';
+import ProjectIcon from './ProjectIcon';
 
 interface Props {
   home: HomeInfo | null;
@@ -21,16 +22,16 @@ interface Props {
 
 const DRAG_FAV = 'application/x-vibe-favorite';
 
-function Item({ label, path, active, onClick, onContextMenu, hint, indent, draggable, onDragStart }: {
+function Item({ label, path, active, onClick, onContextMenu, hint, indent, draggable, onDragStart, icon }: {
   label: string; path: string; active: boolean; onClick: () => void; onContextMenu?: (e: React.MouseEvent) => void; hint?: string; indent?: boolean;
-  draggable?: boolean; onDragStart?: (e: React.DragEvent) => void;
+  draggable?: boolean; onDragStart?: (e: React.DragEvent) => void; icon?: boolean;
 }) {
   return (
     <div
       className={`group flex items-center gap-2 rounded-md py-1.5 text-sm cursor-pointer select-none ${indent ? 'pl-6 pr-2' : 'px-2'} ${active ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}
       onClick={onClick} onContextMenu={onContextMenu} title={path} draggable={draggable} onDragStart={onDragStart}
     >
-      <span className="text-zinc-500">▸</span>
+      {icon ? <ProjectIcon path={path} name={label} size={18} /> : <span className="text-zinc-500">▸</span>}
       <span className="truncate flex-1">{label}</span>
       {hint && <span className="text-[10px] text-zinc-600">{hint}</span>}
     </div>
@@ -93,8 +94,8 @@ export default function Sidebar(p: Props) {
         <div className="flex-1 flex flex-col items-center gap-1 overflow-hidden">
           {favorites.slice(0, 12).map((f) => (
             <button key={f.path} title={f.name} onClick={() => p.onNavigate(f.path)}
-              className={`w-7 h-7 rounded text-[11px] font-medium ${p.cwd === f.path ? 'bg-white/15 text-white' : 'bg-white/5 text-zinc-400 hover:bg-white/10'}`}>
-              {f.name.slice(0, 2).toUpperCase()}
+              className={`w-7 h-7 rounded flex items-center justify-center ${p.cwd === f.path ? 'bg-white/15 ring-1 ring-white/30' : 'hover:bg-white/10'}`}>
+              <ProjectIcon path={f.path} name={f.name} size={22} />
             </button>
           ))}
         </div>
@@ -161,7 +162,7 @@ export default function Sidebar(p: Props) {
       <InlineInput value={f.name} onCancel={() => setRenaming(null)} onCommit={(v) => { setRenaming(null); if (v.trim() && v !== f.name) apply(api.updateFavorite(f.path, { name: v })); }} />
     </div>
   ) : (
-    <Item key={f.path} label={f.name} path={f.path} active={p.cwd === f.path} indent={indent} onClick={() => p.onNavigate(f.path)} onContextMenu={(e) => menu.open(e, favMenu(f))}
+    <Item key={f.path} label={f.name} path={f.path} active={p.cwd === f.path} indent={indent} icon onClick={() => p.onNavigate(f.path)} onContextMenu={(e) => menu.open(e, favMenu(f))}
       draggable onDragStart={(e) => { e.dataTransfer.setData(DRAG_FAV, f.path); e.dataTransfer.effectAllowed = 'move'; }} />
   );
 
@@ -209,7 +210,7 @@ export default function Sidebar(p: Props) {
         {p.recent.length > 0 && (
           <Section title={t('sidebar.recent')} right={<button className="text-[10px] text-zinc-600 hover:text-zinc-300" onClick={() => Promise.all(p.recent.map((r) => api.removeRecent(r))).then(() => p.onRecentChange([])).catch(() => {})}>{t('sidebar.clear')}</button>}>
             {p.recent.slice(0, 8).map((r) => (
-              <Item key={r} label={r.split('/').pop() || r} path={r} active={p.cwd === r} onClick={() => p.onNavigate(r)} onContextMenu={(e) => menu.open(e, recentMenu(r))} />
+              <Item key={r} label={r.split('/').pop() || r} path={r} active={p.cwd === r} icon onClick={() => p.onNavigate(r)} onContextMenu={(e) => menu.open(e, recentMenu(r))} />
             ))}
           </Section>
         )}

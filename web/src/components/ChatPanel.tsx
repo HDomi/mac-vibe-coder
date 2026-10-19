@@ -6,6 +6,7 @@ import Composer from './Composer';
 import { ApprovalItem, AssistantItem, QuestionItem, ResultItem, ToolItem, UserItem } from './ChatItems';
 import { useContextMenu } from './ContextMenu';
 import { t, useLang } from '../lib/i18n';
+import ProjectIcon from './ProjectIcon';
 
 export interface StartOptions { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null }
 
@@ -121,7 +122,9 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
   return (
     <div className="h-full overflow-y-auto p-8 max-w-2xl mx-auto">
       <div className="text-xs text-zinc-500 mb-1">{scope === 'all' ? t('chat.agent') : t('chat.project')}</div>
-      <div className="text-lg font-medium mb-6 break-all">{scope === 'all' ? t('chat.freeConversation') : cwd}</div>
+      {scope === 'all'
+        ? <div className="text-lg font-medium mb-6">{t('chat.freeConversation')}</div>
+        : <div className="flex items-center gap-3 mb-6" title={cwd}><ProjectIcon path={cwd} name={cwd.split('/').pop() || cwd} size={40} /><div className="text-xl font-semibold truncate">{cwd.split('/').pop() || cwd}</div></div>}
       {scope === 'all' && <div className="text-xs text-zinc-500 -mt-4 mb-6">{t('chat.freeHint', { cwd })}</div>}
       <div className="flex items-center gap-1 mb-4 rounded-lg bg-white/5 p-1 w-fit text-sm">
         {(['claude', 'codex'] as AgentId[]).map((a) => (

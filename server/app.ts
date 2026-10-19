@@ -17,6 +17,7 @@ import { listClaudeModels } from './agents/claude.js';
 import { which, run } from './shell.js';
 import { applyUpdate, checkUpdate, readBuildInfo, RESTART_EXIT_CODE } from './updater.js';
 import { gitBranches, gitCheckout, gitCommit, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
+import { displayableIcon, findProjectIcon } from './icons.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // dist/server/app.js -> ../../web/dist ; server/app.ts (tsx) -> ../web/dist
@@ -61,6 +62,17 @@ export function createApp(registry?: SessionRegistry) {
   app.post('/api/fs/trash', async (c) => { const b = await c.req.json<{ paths: string[] }>(); await trash(b.paths); return c.json({ ok: true }); });
 
   const favPayload = (cfg: { favorites: unknown; groups: unknown }) => ({ favorites: cfg.favorites, groups: cfg.groups });
+  // Project icon auto-detected from common locations; 404 when none.
+  app.get('/api/project-icon', async (c) => {
+    const p = c.req.query('path');
+    if (!p) return c.json({ error: 'path required', code: 'BAD_REQUEST' }, 400);
+    const file = await findProjectIcon(p);
+    if (!file) return c.body(null, 404);
+    const shown = await displayableIcon(file).catch(() => file);
+    const res = await rawFile(shown, undefined);
+    return new Response(res.body, { status: res.status, headers: { ...res.headers, 'Cache-Control': 'private, max-age=300' } });
+  });
+
   app.get('/api/favorites', async (c) => c.json(favPayload(await loadConfig())));
   app.patch('/api/favorites', async (c) => {
     const body = await c.req.json<{ path: string; name?: string; group?: string | null }>();
