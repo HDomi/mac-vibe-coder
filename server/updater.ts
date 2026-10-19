@@ -75,19 +75,20 @@ export async function checkUpdate(force = false): Promise<UpdateStatus> {
     if (!ls.ok) throw new Error(ls.stderr || 'git ls-remote failed');
     const remoteCommit = (ls.stdout.split(/\s+/)[0] ?? '').slice(0, 7);
     if (!remoteCommit) throw new Error(`branch ${status.branch} not found on origin`);
-    // Pushed version: raw package.json from GitHub, falling back to the fetched ref.
+    // Pushed version: read package.json from the fetched ref (authoritative). raw.githubusercontent.com
+    // is only a fallback because its CDN can lag several minutes behind a push.
     let remoteVersion: string | null = null;
+    const fetched = await git(['fetch', '--quiet', 'origin', status.branch]);
+    if (fetched.ok) {
+      const show = await git(['show', `origin/${status.branch}:package.json`]);
+      if (show.ok) { try { remoteVersion = String(JSON.parse(show.stdout).version ?? ''); } catch { /* ignore */ } }
+    }
     const base = rawBase(remoteUrl, status.branch);
-    if (base) {
+    if (!remoteVersion && base) {
       try {
         const res = await fetch(`${base}/package.json?ts=${Date.now()}`, { signal: AbortSignal.timeout(8000), headers: { 'Cache-Control': 'no-cache' } });
         if (res.ok) remoteVersion = String((await res.json() as { version?: string }).version ?? '');
-      } catch { /* fall back below */ }
-    }
-    const fetched = await git(['fetch', '--quiet', 'origin', status.branch]);
-    if (!remoteVersion && fetched.ok) {
-      const show = await git(['show', `origin/${status.branch}:package.json`]);
-      if (show.ok) { try { remoteVersion = String(JSON.parse(show.stdout).version ?? ''); } catch { /* ignore */ } }
+      } catch { /* ignore */ }
     }
     status.remote = { version: remoteVersion ?? 'unknown', commit: remoteCommit, builtAt: null };
     const vcmp = remoteVersion ? compareVersions(remoteVersion, installed.version) : 0;
