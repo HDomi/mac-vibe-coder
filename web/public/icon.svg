@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <title>mac-vibe-coder</title>
+  <defs>
+    <linearGradient id="surface" x1="160" y1="80" x2="864" y2="944" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#263B60"/>
+      <stop offset=".52" stop-color="#141E33"/>
+      <stop offset="1" stop-color="#0B101C"/>
+    </linearGradient>
+    <linearGradient id="code" x1="250" y1="330" x2="774" y2="694" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E4F0FF"/>
+      <stop offset="1" stop-color="#80ACFF"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="386" y1="600" x2="638" y2="400" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#62D8FF"/>
+      <stop offset="1" stop-color="#A1FFD4"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="76" width="896" height="896" rx="204" fill="#000" fill-opacity=".18"/>
+  <rect x="64" y="64" width="896" height="896" rx="204" fill="url(#surface)"/>
+  <rect x="66" y="66" width="892" height="892" rx="202" stroke="#BDD8FF" stroke-opacity=".16" stroke-width="4"/>
+  <path d="M340 352 196 512 340 672M684 352 828 512 684 672" stroke="url(#code)" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M390 524H432L478 402 546 622 592 500H634" stroke="url(#wave)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

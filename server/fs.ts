@@ -1,0 +1,233 @@
+import fs from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import path from 'node:path';
+import { homedir } from 'node:os';
+import { Readable } from 'node:stream';
+import { mimeOf, previewKind, type PreviewKind } from './mime.js';
+
+export interface Entry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  size: number;
+  mtime: number;
+  ext: string;
+  hidden: boolean;
+  kind: PreviewKind;
+}
+
+export class FsError extends Error {
+  constructor(public code: string, message: string, public status = 500) {
+    super(message);
+  }
+}
+
+function wrap(err: unknown, p: string): never {
+  const e = err as NodeJS.ErrnoException;
+  if (e.code === 'ENOENT') throw new FsError('ENOENT', `Not found: ${p}`, 404);
+  if (e.code === 'EACCES' || e.code === 'EPERM') {
+    throw new FsError('EACCES', `Permission denied: ${p}. Allow folder access for this app in macOS Privacy & Security settings.`, 403);
+  }
+  if (e.code === 'ENOTDIR') throw new FsError('ENOTDIR', `Not a directory: ${p}`, 400);
+  throw new FsError(e.code ?? 'UNKNOWN', e.message ?? String(err), 500);
+}
+
+export function resolvePath(input: string | undefined): string {
+  if (!input || input === '~') return homedir();
+  if (input.startsWith('~/')) return path.join(homedir(), input.slice(2));
+  return path.resolve(input);
+}
+
+export async function listDir(dir: string): Promise<{ path: string; parent: string | null; entries: Entry[] }> {
+  const abs = resolvePath(dir);
+  try {
+    const dirents = await fs.readdir(abs, { withFileTypes: true });
+    const entries = await Promise.all(
+      dirents.map(async (d): Promise<Entry | null> => {
+        const full = path.join(abs, d.name);
+        try {
+          const st = await fs.stat(full);
+          const isDir = st.isDirectory();
+          const ext = isDir ? '' : path.extname(d.name);
+          return {
+            name: d.name,
+            path: full,
+            isDir,
+            size: st.size,
+            mtime: st.mtimeMs,
+            ext,
+            hidden: d.name.startsWith('.'),
+            kind: isDir ? 'binary' : previewKind(ext, d.name),
+          };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const list = entries.filter((e): e is Entry => e !== null);
+    list.sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1));
+    const parent = path.dirname(abs);
+    return { path: abs, parent: parent === abs ? null : parent, entries: list };
+  } catch (err) {
+    wrap(err, abs);
+  }
+}
+
+export async function statPath(p: string): Promise<Entry> {
+  const abs = resolvePath(p);
+  try {
+    const st = await fs.stat(abs);
+    const name = path.basename(abs);
+    const isDir = st.isDirectory();
+    const ext = isDir ? '' : path.extname(name);
+    return {
+      name, path: abs, isDir, size: st.size, mtime: st.mtimeMs, ext,
+      hidden: name.startsWith('.'),
+      kind: isDir ? 'binary' : previewKind(ext, name),
+    };
+  } catch (err) {
+    wrap(err, abs);
+  }
+}
+
+const TEXT_LIMIT = 2 * 1024 * 1024;
+
+export async function readText(p: string): Promise<{ content: string; truncated: boolean; size: number }> {
+  const abs = resolvePath(p);
+  try {
+    const st = await fs.stat(abs);
+    if (st.isDirectory()) throw new FsError('EISDIR', `Is a directory: ${abs}`, 400);
+    const fh = await fs.open(abs, 'r');
+    try {
+      const len = Math.min(st.size, TEXT_LIMIT);
+      const buf = Buffer.alloc(len);
+      await fh.read(buf, 0, len, 0);
+      return { content: buf.toString('utf8'), truncated: st.size > TEXT_LIMIT, size: st.size };
+    } finally {
+      await fh.close();
+    }
+  } catch (err) {
+    if (err instanceof FsError) throw err;
+    wrap(err, abs);
+  }
+}
+
+export interface RawResponse {
+  status: number;
+  headers: Record<string, string>;
+  body: ReadableStream | null;
+}
+
+export async function rawFile(p: string, rangeHeader: string | undefined): Promise<RawResponse> {
+  const abs = resolvePath(p);
+  let size: number;
+  try {
+    const st = await fs.stat(abs);
+    if (st.isDirectory()) throw new FsError('EISDIR', `Is a directory: ${abs}`, 400);
+    size = st.size;
+  } catch (err) {
+    if (err instanceof FsError) throw err;
+    wrap(err, abs);
+  }
+  const mime = mimeOf(path.extname(abs));
+  const base = { 'Content-Type': mime, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' };
+
+  const m = rangeHeader?.match(/^bytes=(\d*)-(\d*)$/);
+  if (m) {
+    let start = m[1] ? Number(m[1]) : 0;
+    let end = m[2] ? Number(m[2]) : size - 1;
+    if (!m[1] && m[2]) { start = Math.max(0, size - Number(m[2])); end = size - 1; }
+    if (start >= size || end >= size || start > end) {
+      return { status: 416, headers: { ...base, 'Content-Range': `bytes */${size}` }, body: null };
+    }
+    const stream = Readable.toWeb(createReadStream(abs, { start, end })) as ReadableStream;
+    return {
+      status: 206,
+      headers: { ...base, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': String(end - start + 1) },
+      body: stream,
+    };
+  }
+  const stream = Readable.toWeb(createReadStream(abs)) as ReadableStream;
+  return { status: 200, headers: { ...base, 'Content-Length': String(size) }, body: stream };
+}
+
+export async function homeInfo(): Promise<{ home: string; volumes: string[]; shortcuts: { name: string; path: string }[] }> {
+  const home = homedir();
+  let volumes: string[] = [];
+  try {
+    volumes = (await fs.readdir('/Volumes')).map((v) => path.join('/Volumes', v));
+  } catch { /* ignore */ }
+  const shortcuts = ['Desktop', 'Documents', 'Downloads', 'Dev']
+    .map((n) => ({ name: n, path: path.join(home, n) }));
+  const existing: { name: string; path: string }[] = [];
+  for (const s of shortcuts) {
+    try { await fs.access(s.path); existing.push(s); } catch { /* skip */ }
+  }
+  return { home, volumes, shortcuts: existing };
+}
+
+/* ── Mutations used by the file browser ───────────────────────────── */
+
+async function uniqueDest(dest: string): Promise<string> {
+  let candidate = dest;
+  for (let i = 2; i < 1000; i++) {
+    try { await fs.access(candidate); } catch { return candidate; }
+    const ext = path.extname(dest);
+    const base = ext ? dest.slice(0, -ext.length) : dest;
+    candidate = `${base} ${i}${ext}`;
+  }
+  throw new FsError('EEXIST', `Too many copies: ${dest}`, 409);
+}
+
+export async function mkdir(dir: string, name: string): Promise<string> {
+  const abs = path.join(resolvePath(dir), name);
+  try { await fs.mkdir(abs); return abs; } catch (err) { wrap(err, abs); }
+}
+
+export async function rename(p: string, newName: string): Promise<string> {
+  const abs = resolvePath(p);
+  if (newName.includes('/') || !newName.trim()) throw new FsError('EINVAL', 'Invalid name', 400);
+  const dest = path.join(path.dirname(abs), newName);
+  try { await fs.access(dest); throw new FsError('EEXIST', `Already exists: ${dest}`, 409); } catch (err) { if (err instanceof FsError) throw err; }
+  try { await fs.rename(abs, dest); return dest; } catch (err) { wrap(err, abs); }
+}
+
+/** Copy (or move) entries into a directory; names are de-duplicated like Finder. */
+export async function transfer(paths: string[], destDir: string, move: boolean): Promise<string[]> {
+  const dir = resolvePath(destDir);
+  const out: string[] = [];
+  for (const p of paths) {
+    const src = resolvePath(p);
+    const dest = await uniqueDest(path.join(dir, path.basename(src)));
+    if (src === dest) continue;
+    try {
+      if (move) {
+        try { await fs.rename(src, dest); } catch { await fs.cp(src, dest, { recursive: true }); await fs.rm(src, { recursive: true }); }
+      } else {
+        await fs.cp(src, dest, { recursive: true });
+      }
+      out.push(dest);
+    } catch (err) { wrap(err, src); }
+  }
+  return out;
+}
+
+export async function duplicate(p: string): Promise<string> {
+  const src = resolvePath(p);
+  const ext = path.extname(src);
+  const base = ext ? src.slice(0, -ext.length) : src;
+  const dest = await uniqueDest(`${base} copy${ext}`);
+  try { await fs.cp(src, dest, { recursive: true }); return dest; } catch (err) { wrap(err, src); }
+}
+
+/** Move to the macOS Trash via Finder so the user can restore it. */
+export async function trash(paths: string[]): Promise<void> {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const list = paths.map((p) => `POSIX file "${resolvePath(p).replace(/"/g, '\\"')}"`).join(', ');
+  try {
+    await promisify(execFile)('osascript', ['-e', `tell application "Finder" to delete {${list}}`], { timeout: 20000 });
+  } catch (err) {
+    throw new FsError('ETRASH', `Could not move to Trash: ${(err as Error).message}`, 500);
+  }
+}

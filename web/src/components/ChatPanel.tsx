@@ -1,0 +1,170 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ChatItem, ChatSession } from '../lib/chatStore';
+import type { AgentId, Attachment, PermissionModeId } from '../lib/agent';
+import { api, type HistorySession, type ModelInfo } from '../lib/api';
+import Composer from './Composer';
+import { ApprovalItem, AssistantItem, QuestionItem, ResultItem, ToolItem, UserItem } from './ChatItems';
+
+export interface StartOptions { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null }
+
+interface Props {
+  cwd: string | null;
+  session: ChatSession | null;
+  onStart: (cwd: string, opts?: StartOptions) => void;
+  onSend: (text: string, attachments: Attachment[]) => void;
+  onApprove: (requestId: string, decision: 'allow' | 'allow_always' | 'deny', message?: string) => void;
+  onAnswer: (requestId: string, answers: Record<string, string>) => void;
+  onInterrupt: () => void;
+  onMode: (m: PermissionModeId) => void;
+  onModel: (m: string | null) => void;
+  onClose: () => void;
+  pendingAttachments?: Attachment[];
+  onConsumeAttachments?: () => void;
+}
+
+const modelCache: Partial<Record<AgentId, ModelInfo[]>> = {};
+function useModels(agent: AgentId) {
+  const [models, setModels] = useState<ModelInfo[]>(modelCache[agent] ?? []);
+  useEffect(() => {
+    if (modelCache[agent]) { setModels(modelCache[agent]!); return; }
+    let alive = true;
+    api.models(agent).then((m) => { modelCache[agent] = m; if (alive) setModels(m); }).catch(() => {});
+    return () => { alive = false; };
+  }, [agent]);
+  return models;
+}
+
+export function ModelSelect({ agent, value, onChange, compact }: { agent: AgentId; value: string | null; onChange: (m: string | null) => void; compact?: boolean }) {
+  const models = useModels(agent);
+  const known = value && models.some((m) => m.id === value || m.name === value);
+  return (
+    <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} title="Model"
+      className={`bg-white/5 rounded-md outline-none ${compact ? 'text-[11px] px-1.5 py-0.5 max-w-[180px]' : 'text-xs px-2 py-1.5'}`}>
+      <option value="">Default model</option>
+      {value && !known && <option value={value}>{value}</option>}
+      {models.map((m) => <option key={m.id} value={m.id}>{m.name}{m.isDefault ? ' (default)' : ''}</option>)}
+    </select>
+  );
+}
+
+function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: { approve: Props['onApprove']; answer: Props['onAnswer']; cwd: string }): React.ReactNode {
+  switch (it.kind) {
+    case 'user': return <UserItem key={it.id} item={it} />;
+    case 'assistant': return <AssistantItem key={it.id} item={it} baseDir={actions.cwd} />;
+    case 'tool': {
+      const kids = childrenOf.get(it.id);
+      return <ToolItem key={it.id} item={it}>{kids?.map((k) => renderItem(k, childrenOf, actions))}</ToolItem>;
+    }
+    case 'approval': return <ApprovalItem key={it.id} item={it} onDecide={(d, m) => actions.approve(it.id, d, m)} />;
+    case 'question': return <QuestionItem key={it.id} item={it} onAnswer={(a) => actions.answer(it.id, a)} />;
+    case 'result': return <ResultItem key={it.id} item={it} />;
+    case 'error': return <div key={it.id} className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[13px] text-red-200 whitespace-pre-wrap">{it.message}</div>;
+    case 'system': return <div key={it.id} className="text-xs text-zinc-500 text-center py-1">{it.text}</div>;
+  }
+}
+
+const MODE_OPTIONS: { id: PermissionModeId; label: string }[] = [
+  { id: 'default', label: 'Default (ask per tool)' },
+  { id: 'acceptEdits', label: 'Auto-accept edits' },
+  { id: 'plan', label: 'Plan mode' },
+  { id: 'bypassPermissions', label: 'Allow everything' },
+];
+
+function StartScreen({ cwd, onStart }: { cwd: string | null; onStart: Props['onStart'] }) {
+  const [history, setHistory] = useState<HistorySession[]>([]);
+  const [mode, setMode] = useState<PermissionModeId>('default');
+  const [agent, setAgent] = useState<AgentId>(() => { try { return (localStorage.getItem('vibe.agent') as AgentId) || 'claude'; } catch { return 'claude'; } });
+  const [model, setModel] = useState<string | null>(() => { try { return localStorage.getItem(`vibe.model.${agent}`); } catch { return null; } });
+  useEffect(() => { try { localStorage.setItem('vibe.agent', agent); setModel(localStorage.getItem(`vibe.model.${agent}`)); } catch { /* ignore */ } }, [agent]);
+  useEffect(() => { try { model ? localStorage.setItem(`vibe.model.${agent}`, model) : localStorage.removeItem(`vibe.model.${agent}`); } catch { /* ignore */ } }, [model, agent]);
+  useEffect(() => {
+    if (!cwd) return;
+    let alive = true;
+    setHistory([]);
+    api.history(cwd, agent).then((h) => alive && setHistory(h)).catch(() => setHistory([]));
+    return () => { alive = false; };
+  }, [cwd, agent]);
+
+  if (!cwd) return <div className="h-full flex items-center justify-center text-zinc-600 text-sm">Open a folder on the left to start a session</div>;
+  const opts = (extra: Partial<StartOptions> = {}) => ({ permissionMode: mode, agent, model, ...extra });
+  return (
+    <div className="h-full overflow-y-auto p-8 max-w-2xl mx-auto">
+      <div className="text-xs text-zinc-500 mb-1">Project</div>
+      <div className="text-lg font-medium mb-6 break-all">{cwd}</div>
+      <div className="flex items-center gap-1 mb-4 rounded-lg bg-white/5 p-1 w-fit text-sm">
+        {(['claude', 'codex'] as AgentId[]).map((a) => (
+          <button key={a} onClick={() => setAgent(a)} className={`px-4 py-1.5 rounded-md ${agent === a ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white'}`}>{a === 'claude' ? 'Claude Code' : 'Codex'}</button>
+        ))}
+      </div>
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
+        <button className="rounded-lg bg-blue-500/30 hover:bg-blue-500/40 px-4 py-2 text-sm" onClick={() => onStart(cwd, opts())}>New {agent === 'claude' ? 'Claude' : 'Codex'} session</button>
+        <select value={mode} onChange={(e) => setMode(e.target.value as PermissionModeId)} className="bg-white/5 rounded-md text-xs px-2 py-1.5 outline-none">
+          {MODE_OPTIONS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
+        <ModelSelect agent={agent} value={model} onChange={setModel} />
+      </div>
+      <div className="text-xs text-zinc-500 mb-6">
+        {agent === 'codex' ? 'Codex: Default = workspace-write sandbox + approval on request · Plan = read-only · Allow everything = no sandbox' : 'Claude: uses your local claude login and ~/.claude settings'}
+      </div>
+      {history.length > 0 && (
+        <>
+          <div className="text-xs text-zinc-500 mb-2">Previous sessions in this folder</div>
+          <div className="space-y-1">
+            {history.map((h) => (
+              <button key={h.sessionId} className="w-full text-left rounded-lg border border-white/10 hover:bg-white/5 px-3 py-2" onClick={() => onStart(cwd, opts({ resume: h.sessionId }))}>
+                <div className="text-sm truncate">{h.customTitle || h.summary || h.firstPrompt || h.sessionId}</div>
+                <div className="text-[11px] text-zinc-500">{new Date(h.lastModified).toLocaleString()}{h.gitBranch ? ` · ${h.gitBranch}` : ''}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function ChatPanel({ cwd, session, onStart, onSend, onApprove, onAnswer, onInterrupt, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments }: Props) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+
+  const { top, childrenOf } = useMemo(() => {
+    const childrenOf = new Map<string, ChatItem[]>();
+    const top: ChatItem[] = [];
+    for (const it of session?.items ?? []) {
+      const parent = (it.kind === 'assistant' || it.kind === 'tool') ? it.parent : null;
+      if (parent) { const l = childrenOf.get(parent) ?? []; l.push(it); childrenOf.set(parent, l); }
+      else top.push(it);
+    }
+    return { top, childrenOf };
+  }, [session?.items]);
+
+  useEffect(() => {
+    const el = scroller.current;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
+  }, [session?.items]);
+
+  if (!session) return <StartScreen cwd={cwd} onStart={onStart} />;
+
+  const running = session.status === 'running' || session.status === 'compacting';
+  return (
+    <div className="h-full flex flex-col min-w-0">
+      <div className="h-10 shrink-0 flex items-center gap-3 px-4 border-b border-white/10 text-xs">
+        <span className={`w-2 h-2 rounded-full ${running ? 'bg-amber-400 animate-pulse' : session.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
+        <span className="font-medium text-zinc-200">{session.agent === 'codex' ? 'Codex' : 'Claude'}</span>
+        <ModelSelect agent={session.agent} value={session.model ?? null} onChange={onModel} compact />
+        <span className="text-zinc-500 truncate" title={session.cwd}>{session.cwd.split('/').slice(-2).join('/')}</span>
+        {session.status === 'compacting' && <span className="text-amber-300">Compacting context…</span>}
+        <div className="flex-1" />
+        {session.agent === 'claude' && <span className="text-zinc-500">${session.totalCostUsd.toFixed(3)}</span>}
+        <button className="text-zinc-400 hover:text-white" onClick={onClose} title="Close session">✕</button>
+      </div>
+      <div ref={scroller} className="flex-1 overflow-y-auto px-5 py-4 space-y-3"
+        onScroll={(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
+        {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.status === 'starting' ? 'Starting session…' : 'Send your first message'}</div>}
+        {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd }))}
+      </div>
+      <Composer disabled={session.status === 'closed'} running={running} mode={session.permissionMode}
+        onSend={onSend} onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments} />
+    </div>
+  );
+}
