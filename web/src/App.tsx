@@ -23,6 +23,7 @@ const LS_PROJECT = 'vibe.project';
 const LS_SIDEBAR = 'vibe.sidebar.collapsed';
 const LS_RIGHT = 'vibe.right.collapsed';
 const LS_MODE = 'vibe.mode.view';
+const LS_ACTIVE_SESSION = 'vibe.active.session';
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
 
@@ -47,7 +48,8 @@ function AppInner() {
   const [selected, setSelected] = useState<Entry | null>(null);
   const [showTools, setShowTools] = useState(false);
   const [rightTab, setRightTab] = useState<'files' | 'preview' | 'terminal' | 'git'>('files');
-  const [activeSession, setActiveSession] = useState<string | 'new' | null>(null);
+  // Remembered so an update/relaunch comes back to the tab that was on screen, not the new-session view.
+  const [activeSession, setActiveSession] = useState<string | 'new' | null>(() => { try { return localStorage.getItem(LS_ACTIVE_SESSION); } catch { return null; } });
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(LS_SIDEBAR) === '1'; } catch { return false; } });
   const [rightCollapsed, setRightCollapsed] = useState(() => { try { return localStorage.getItem(LS_RIGHT) === '1'; } catch { return false; } });
   const [dragging, setDragging] = useState(false);
@@ -57,6 +59,7 @@ function AppInner() {
   const [view, setView] = useState<ViewMode>(() => { try { return (localStorage.getItem(LS_MODE) as ViewMode) || 'ide'; } catch { return 'ide'; } });
   const [agentActive, setAgentActive] = useState<string | 'new' | null>(null);
   useEffect(() => { try { localStorage.setItem(LS_MODE, view); } catch { /* ignore */ } }, [view]);
+  useEffect(() => { try { activeSession ? localStorage.setItem(LS_ACTIVE_SESSION, activeSession) : localStorage.removeItem(LS_ACTIVE_SESSION); } catch { /* ignore */ } }, [activeSession]);
   const sidebar = usePaneWidth('vibe.w.sidebar', 256, 180, 480);
   const right = usePaneWidth('vibe.w.right', 420, 280, 1200);
   const S = useSessions();

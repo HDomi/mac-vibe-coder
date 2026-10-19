@@ -116,6 +116,22 @@ test('dead registry sessions no longer block updates', async () => {
   await registry.closeAll();
 });
 
+test('shutdown does not tell clients their sessions are closed', async () => {
+  const registry = new SessionRegistry();
+  const sent: any[] = [];
+  const ws = { readyState: 1, OPEN: 1, send: (data: string) => sent.push(JSON.parse(data)) };
+  const entry = { session: { id: 'live', agent: 'claude', cwd: '/tmp' }, buffer: [], seq: 0, subscribers: new Set([ws]), closed: false, bufferBytes: 0 };
+  (registry as any).entries.set('live', entry);
+  (registry as any).closing = true;
+  (registry as any).broadcast(entry, { kind: 'status', status: 'closed' });
+  assert.deepEqual(sent, []);
+  (registry as any).closing = false;
+  (registry as any).broadcast(entry, { kind: 'status', status: 'closed' });
+  assert.equal(sent.length, 1);
+  (registry as any).entries.clear();
+  await registry.closeAll();
+});
+
 test('session.started is sent before synchronous adapter initialization events', async () => {
   const wss = new EventEmitter();
   const sent: any[] = [];

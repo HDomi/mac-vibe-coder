@@ -103,6 +103,9 @@ export class SessionRegistry {
     e.lastActivity = msg.ts;
     if (event.kind === 'status') e.running = event.status === 'running' || event.status === 'compacting';
     if (event.kind === 'status' && event.status === 'closed') e.closed = true;
+    // Shutdown (update, restart) closes every session; clients must keep them remembered so they
+    // can be resumed against the new server instead of dropping them as finished.
+    if (this.closing && event.kind === 'status' && event.status === 'closed') return;
     if (event.kind !== 'log') {
       e.buffer.push(msg);
       e.bufferBytes += Buffer.byteLength(JSON.stringify(msg));
