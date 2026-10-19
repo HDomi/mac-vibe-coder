@@ -6,7 +6,7 @@ set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="/Applications/Mac Vibe Coder.app"
 cd "$ROOT"
-export PATH="$(/bin/zsh -lic 'echo -n "$PATH"' 2>/dev/null):$PATH"
+export PATH="$ROOT/runtime/node/bin:$(/bin/zsh -lic 'echo -n "$PATH"' 2>/dev/null):$PATH"
 unset ELECTRON_RUN_AS_NODE
 if [ ! -f dist/server/index.js ] || [ ! -f web/dist/index.html ]; then
   npm run build

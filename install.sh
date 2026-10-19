@@ -35,9 +35,30 @@ unset ELECTRON_RUN_AS_NODE
 
 step "Checking prerequisites"
 command -v git >/dev/null || fail "git not found. Install Xcode Command Line Tools: xcode-select --install"
-command -v node >/dev/null || fail "node not found. Install Node 20+ (e.g. brew install node, or nvm)."
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$NODE_MAJOR" -ge 20 ] || fail "Node $(node -v) is too old. Node 20 or newer is required."
+
+# Node: use the system one when it is 20+, otherwise download a standalone runtime into ./runtime
+# so the app never depends on a user-installed Node. The app also falls back to Electron's own Node.
+NODE_VERSION="v24.13.0"
+RUNTIME="$ROOT/runtime/node"
+if [ -x "$RUNTIME/bin/node" ]; then
+  export PATH="$RUNTIME/bin:$PATH"
+fi
+need_node=1
+if command -v node >/dev/null; then
+  NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+  [ "$NODE_MAJOR" -ge 20 ] && need_node=0
+fi
+if [ "$need_node" = "1" ]; then
+  step "Downloading Node $NODE_VERSION runtime into runtime/"
+  ARCH="$(uname -m)"; [ "$ARCH" = "arm64" ] && NARCH="arm64" || NARCH="x64"
+  TARBALL="node-$NODE_VERSION-darwin-$NARCH.tar.gz"
+  mkdir -p "$ROOT/runtime"
+  curl -fL --progress-bar "https://nodejs.org/dist/$NODE_VERSION/$TARBALL" -o "$ROOT/runtime/$TARBALL" || fail "Could not download Node. Check your network."
+  rm -rf "$RUNTIME"
+  tar -xzf "$ROOT/runtime/$TARBALL" -C "$ROOT/runtime" && mv "$ROOT/runtime/node-$NODE_VERSION-darwin-$NARCH" "$RUNTIME"
+  rm -f "$ROOT/runtime/$TARBALL"
+  export PATH="$RUNTIME/bin:$PATH"
+fi
 command -v npm >/dev/null || fail "npm not found."
 echo "node $(node -v) · npm $(npm -v) · git $(git --version | awk '{print $3}')"
 command -v claude >/dev/null && echo "claude $(claude --version 2>/dev/null | awk '{print $1}')" || echo "claude: not installed (install later from Settings)"

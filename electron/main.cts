@@ -1,13 +1,16 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
 import http from 'node:http';
 
 /*
- * Electron shell. The Node server (dist/server/index.js) runs as a child process
- * under the system Node so native modules (node-pty) use the Node ABI and the
- * server behaves identically in browser-only mode. macOS TCC attributes the
- * child's file access to this app, so folder permission prompts show the app name.
+ * Electron shell. The Node server (dist/server/index.js) runs as a child process.
+ * Runtime resolution order: bundled runtime/node (installer download) → system node
+ * from the user's interactive shell → Electron's own embedded Node (ELECTRON_RUN_AS_NODE).
+ * The last option always exists, so the app never depends on a user-installed Node.
+ * node-pty is N-API, so it loads under either ABI. macOS TCC attributes the child's
+ * file access to this app, so folder permission prompts show the app name.
  */
 
 const PORT = 11398;
@@ -28,11 +31,24 @@ let quitting = false;
 
 function loginShellLookup(cmd: string): Promise<string | null> {
   return new Promise((resolve) => {
-    execFile('/bin/zsh', ['-lc', `command -v ${cmd}`], { timeout: 8000 }, (err, stdout) => {
+    // -i so ~/.zshrc (where nvm lives) is sourced; -l for Homebrew paths from ~/.zprofile.
+    execFile('/bin/zsh', ['-lic', `command -v ${cmd}`], { timeout: 8000 }, (err, stdout) => {
       const p = stdout?.trim().split('\n').pop() ?? '';
       resolve(!err && p.startsWith('/') ? p : null);
     });
   });
+}
+
+/** Pick the Node runtime for the server; returns the executable and extra env. */
+async function resolveNode(): Promise<{ exe: string; env: NodeJS.ProcessEnv; label: string }> {
+  const bundled = path.join(REPO_ROOT, 'runtime', 'node', 'bin', 'node');
+  if (fs.existsSync(bundled)) return { exe: bundled, env: {}, label: 'bundled' };
+  const system = await loginShellLookup('node');
+  if (system) {
+    const major = await new Promise<number>((resolve) => execFile(system, ['-p', 'process.versions.node.split(".")[0]'], { timeout: 5000 }, (err, out) => resolve(err ? 0 : Number(out.trim()))));
+    if (major >= 20) return { exe: system, env: {}, label: `system ${system}` };
+  }
+  return { exe: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' }, label: 'electron' };
 }
 
 function healthy(): Promise<boolean> {
@@ -54,16 +70,13 @@ async function waitHealthy(ms: number): Promise<boolean> {
 
 async function startServer(): Promise<void> {
   if (await healthy()) return; // already running (e.g. `npm run serve`)
-  const node = await loginShellLookup('node');
-  if (!node) {
-    dialog.showErrorBox('Node.js 를 찾을 수 없음', 'node 가 PATH 에 없어 서버를 시작할 수 없어. nvm 또는 Homebrew 로 Node 24 를 설치해.');
-    app.quit();
-    return;
-  }
+  const runtime = await resolveNode();
   const entry = path.join(REPO_ROOT, 'dist', 'server', 'index.js');
-  const env = { ...process.env };
+  const env: NodeJS.ProcessEnv = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
-  server = spawn(node, [entry], { cwd: REPO_ROOT, env, stdio: ['ignore', 'inherit', 'inherit'] });
+  Object.assign(env, runtime.env);
+  console.log(`[mac-vibe-coder] server runtime: ${runtime.label}`);
+  server = spawn(runtime.exe, [entry], { cwd: REPO_ROOT, env, stdio: ['ignore', 'inherit', 'inherit'] });
   server.on('exit', (code) => {
     server = null;
     if (quitting) return;

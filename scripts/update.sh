@@ -4,7 +4,7 @@ set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="Mac Vibe Coder"
 cd "$ROOT"
-export PATH="$(/bin/zsh -lic 'echo -n "$PATH"' 2>/dev/null):$PATH"
+export PATH="$ROOT/runtime/node/bin:$(/bin/zsh -lic 'echo -n "$PATH"' 2>/dev/null):$PATH"
 unset ELECTRON_RUN_AS_NODE
 
 echo "▸ git pull"

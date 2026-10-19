@@ -48,7 +48,7 @@ cd mac-vibe-coder
 ./install.sh
 ```
 
-`install.sh` 가 하는 일: 의존성 설치 → 빌드 → Electron 런타임에 이름·아이콘·번들 id 입히기 → `/Applications/Mac Vibe Coder.app` 생성 → 실행.
+`install.sh` 가 하는 일: Node 확인(없으면 `runtime/` 에 내려받음) → 의존성 설치 → 빌드 → Electron 런타임에 이름·아이콘·번들 id 입히기 → `/Applications/Mac Vibe Coder.app` 생성 → 실행.
 앱 번들은 이 체크아웃을 가리키는 작은 런처라서, 이후 업데이트는 재설치 없이 `git pull` + 빌드만으로 끝난다.
 
 | 옵션 | 설명 |
@@ -61,7 +61,7 @@ cd mac-vibe-coder
 ### 요구 사항
 
 - macOS 14 이상 (Apple Silicon 에서 개발 · 검증)
-- Node.js 20 이상, git
+- git. Node.js 는 없어도 된다: `install.sh` 가 없으면 standalone Node 를 `runtime/` 에 내려받고, 앱 자체는 Electron 에 내장된 Node 로도 서버를 띄운다
 - Claude Code CLI(`claude`) 와/또는 Codex CLI(`codex`). 없으면 앱 안 Settings 에서 설치 가능. 로그인은 앱 안 터미널 탭에서 `claude` → `/login`, `codex login`.
 
 첫 실행 때 macOS 가 "Mac Vibe Coder 가 데스크탑 폴더에 접근하려 합니다" 를 물으면 허용한다.
@@ -136,6 +136,7 @@ cd mac-vibe-coder
 | 증상 | 원인 · 해결 |
 |------|------------|
 | 파일 목록이 `EACCES` | Desktop/Documents/Downloads 는 macOS 보호 폴더. 권한 팝업을 허용하거나 시스템 설정 › 개인정보 보호 및 보안 › 전체 디스크 접근 권한에 Mac Vibe Coder 추가. 오류 카드에 바로가기 있음 |
+| "Node.js 를 찾을 수 없음" 대화상자 | 구버전. 지금은 `runtime/node` → 시스템 node(인터랙티브 셸에서 nvm 포함 탐색) → Electron 내장 Node 순으로 자동 선택한다 |
 | `npm run app` 했는데 Electron 이 Node 로 실행됨 | VS Code 통합 터미널이 `ELECTRON_RUN_AS_NODE=1` 을 심는다. npm 스크립트와 `install.sh` 는 이 변수를 지우니 그걸로 실행 |
 | 메뉴바 · Dock 에 "Electron" 으로 표시 | `npm run brand` 한 번 실행 후 재시작. `npm install` 뒤엔 자동 적용 |
 | Codex 세션이 시작 화면에 안 보임 | 그 폴더에서 Codex 로 작업한 적이 없는 것. 목록은 폴더(cwd) 기준으로 필터된다 |
