@@ -166,8 +166,11 @@ export class ClaudeSession implements AgentSession {
           this.agentSessionId = m.session_id;
           this.emit({ kind: 'session.init', sessionId: this.id, agent: 'claude', cwd: m.cwd, model: m.model, permissionMode: m.permissionMode, agentSessionId: m.session_id, tools: m.tools, commands: (m.slash_commands ?? []).map((c) => `/${c}`) });
         } else if (m.subtype === 'status') {
-          const s = (m as { status?: string }).status;
-          this.emit({ kind: 'status', status: s === 'compacting' ? 'compacting' : 'running', permissionMode: (m as { permissionMode?: string }).permissionMode });
+          // SDKStatus is 'compacting' | 'requesting' | null; null just clears a transient status
+          // (e.g. after a permission-mode change) and must not look like a running turn.
+          const s = (m as { status?: string | null }).status;
+          const status = s === 'compacting' ? 'compacting' : s === 'requesting' ? 'running' : this.running ? 'running' : 'idle';
+          this.emit({ kind: 'status', status, permissionMode: (m as { permissionMode?: string }).permissionMode });
         }
         return;
       }
