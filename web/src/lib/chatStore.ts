@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentId, Attachment, PermissionModeId, Question } from './agent';
 
 export type ChatItem =
-  | { kind: 'user'; id: string; text: string; attachments: Attachment[]; pending?: boolean }
+  | { kind: 'user'; id: string; text: string; attachments: Attachment[]; pending?: boolean; /** Compaction summary injected by the CLI, not typed by the user. */ compact?: boolean }
   | { kind: 'assistant'; id: string; text: string; thinking: string; parent: string | null; streaming: boolean }
   | { kind: 'tool'; id: string; name: string; input: unknown; output: string | null; isError: boolean; parent: string | null; elapsed: number; done: boolean }
   | { kind: 'approval'; id: string; toolName: string; input: unknown; canAlwaysAllow: boolean; decision: string | null }
@@ -9,6 +9,18 @@ export type ChatItem =
   | { kind: 'result'; id: string; ok: boolean; text: string; costUsd: number; numTurns: number; durationMs: number }
   | { kind: 'error'; id: string; message: string }
   | { kind: 'system'; id: string; text: string };
+
+const COMPACT_PREFIX = 'This session is being continued from a previous conversation';
+/** Claude Code injects its compaction summary as a user turn; it must not be shown or titled as the user's words. */
+export function isCompactSummary(text: string): boolean { return text.trimStart().startsWith(COMPACT_PREFIX); }
+
+/** Tab / sidebar title: the first real user prompt, skipping compaction summaries. */
+export function sessionTitle(items: ChatItem[], max = 40): string | null {
+  for (const it of items) {
+    if (it.kind === 'user' && !it.compact && it.text.trim()) return it.text.trim().split('\n')[0].slice(0, max);
+  }
+  return null;
+}
 
 export interface ChatSession {
   id: string;
@@ -72,7 +84,7 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       // Confirm an optimistic local echo with the same text instead of appending a duplicate.
       const pendingIdx = items.findIndex((it) => it.kind === 'user' && it.pending && it.text === split.text);
       if (pendingIdx >= 0) items[pendingIdx] = { kind: 'user', id: uid(), text: split.text, attachments: split.attachments };
-      else items.push({ kind: 'user', id: uid(), text: split.text, attachments: split.attachments });
+      else items.push({ kind: 'user', id: uid(), text: split.text, attachments: split.attachments, compact: isCompactSummary(split.text) || undefined });
       next.turnStartedAt = next.turnStartedAt ?? Date.now();
       return next;
     }
@@ -159,7 +171,7 @@ export function itemsFromHistory(messages: Array<{ type: string; uuid: string; m
     const msg = m.message as { role?: string; content?: unknown } | undefined;
     const content = msg?.content;
     if (m.type === 'user') {
-      if (typeof content === 'string') { const s = splitAttachments(content); out.push({ kind: 'user', id: m.uuid, text: s.text, attachments: s.attachments }); continue; }
+      if (typeof content === 'string') { const s = splitAttachments(content); out.push({ kind: 'user', id: m.uuid, text: s.text, attachments: s.attachments, compact: isCompactSummary(s.text) || undefined }); continue; }
       if (!Array.isArray(content)) continue;
       const texts: string[] = [];
       for (const b of content as Array<Record<string, unknown>>) {
@@ -171,7 +183,7 @@ export function itemsFromHistory(messages: Array<{ type: string; uuid: string; m
           if (i >= 0) out[i] = { ...(out[i] as Extract<ChatItem, { kind: 'tool' }>), output: text, isError: Boolean(b.is_error), done: true };
         }
       }
-      if (texts.length && !m.parent_tool_use_id) { const s = splitAttachments(texts.join('\n')); out.push({ kind: 'user', id: m.uuid, text: s.text, attachments: s.attachments }); }
+      if (texts.length && !m.parent_tool_use_id) { const s = splitAttachments(texts.join('\n')); out.push({ kind: 'user', id: m.uuid, text: s.text, attachments: s.attachments, compact: isCompactSummary(s.text) || undefined }); }
     } else if (m.type === 'assistant' && Array.isArray(content)) {
       let text = ''; let thinking = '';
       for (const b of content as Array<Record<string, unknown>>) {

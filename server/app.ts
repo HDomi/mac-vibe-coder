@@ -16,6 +16,9 @@ import { codexThreadOp, listCodexModels, listCodexThreads } from './agents/codex
 import { listClaudeModels } from './agents/claude.js';
 import { which, run } from './shell.js';
 import { applyUpdate, checkUpdate, isUpdating, readBuildInfo, RESTART_EXIT_CODE } from './updater.js';
+/** Claude Code stores its compaction summary as a user turn; never surface it as a session title. */
+const isCompactSummary = (text?: string | null) => (text ?? '').trimStart().startsWith('This session is being continued from a previous conversation');
+
 import { gitBranches, gitCheckout, gitCommit, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
 import { displayableIcon, findProjectIcon } from './icons.js';
 
@@ -191,7 +194,7 @@ export function createApp(registry?: SessionRegistry) {
     const codex = codexPath ? await listCodexThreads(codexPath, dir).catch(() => []) : [];
     const pinned = new Set((await loadConfig()).pinnedSessions);
     const rows = [
-      ...claude.map((s) => ({ ...s, agent: 'claude' as const })),
+      ...claude.map((s) => ({ ...s, agent: 'claude' as const, firstPrompt: isCompactSummary(s.firstPrompt) ? '' : s.firstPrompt })),
       ...codex.map((s) => ({ ...s, agent: 'codex' as const })),
     ].map((s) => ({ ...s, pinned: pinned.has(`${s.agent}:${s.sessionId}`) }))
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastModified - a.lastModified);
@@ -234,7 +237,7 @@ export function createApp(registry?: SessionRegistry) {
     const codex = codexPath ? await listCodexThreads(codexPath, null, limit).catch(() => []) : [];
     const pinned = new Set((await loadConfig()).pinnedSessions);
     const rows = [
-      ...claude.map((s) => ({ agent: 'claude' as const, sessionId: s.sessionId, title: s.customTitle || s.summary || s.firstPrompt || s.sessionId, cwd: (s as { cwd?: string }).cwd ?? null, lastModified: s.lastModified })),
+      ...claude.map((s) => ({ agent: 'claude' as const, sessionId: s.sessionId, title: s.customTitle || s.summary || (isCompactSummary(s.firstPrompt) ? '' : s.firstPrompt) || s.sessionId, cwd: (s as { cwd?: string }).cwd ?? null, lastModified: s.lastModified })),
       ...codex.map((s) => ({ agent: 'codex' as const, sessionId: s.sessionId, title: s.summary || s.sessionId, cwd: s.cwd ?? null, lastModified: s.lastModified })),
     ].map((s) => ({ ...s, pinned: pinned.has(`${s.agent}:${s.sessionId}`) }))
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastModified - a.lastModified).slice(0, limit);

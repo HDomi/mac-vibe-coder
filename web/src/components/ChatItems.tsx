@@ -21,6 +21,20 @@ function summarizeInput(name: string, input: unknown): string {
 }
 
 export function UserItem({ item }: { item: Extract<ChatItem, { kind: 'user' }> }) {
+  useLang();
+  const [open, setOpen] = useState(false);
+  if (item.compact) {
+    return (
+      <div className="my-1 rounded-lg border border-dashed border-white/10 bg-white/[0.02] text-xs">
+        <button className="w-full flex items-center gap-2 px-3 py-1.5 text-zinc-400 hover:text-zinc-200" onClick={() => setOpen((v) => !v)}>
+          <span className="text-[10px]">{open ? '▾' : '▸'}</span>
+          <span>{t('chat.compactSummary')}</span>
+          <span className="ml-auto text-[10px] text-zinc-600">{t('chat.compactSummaryHint')}</span>
+        </button>
+        {open && <div className="px-3 pb-2 whitespace-pre-wrap text-zinc-400 max-h-80 overflow-auto">{item.text}</div>}
+      </div>
+    );
+  }
   return (
     <div className="flex justify-end">
       <div className={`max-w-[80%] rounded-2xl rounded-br-md bg-blue-500/20 px-4 py-2.5 text-[14px] whitespace-pre-wrap ${item.pending ? 'opacity-60' : ''}`}>
