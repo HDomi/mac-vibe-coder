@@ -11,6 +11,10 @@ async function loadPty(): Promise<PtyModule> {
 
 type ClientMsg = { type: 'input'; data: string } | { type: 'resize'; cols: number; rows: number };
 
+const live = new Set<import('node-pty').IPty>();
+/** Kill every shell we spawned (server shutdown). */
+export function killAllPtys() { for (const t of live) { try { t.kill(); } catch { /* ignore */ } } live.clear(); }
+
 /** Each WebSocket connection on /pty owns one shell. Query: cwd, cols, rows, cmd (optional initial command). */
 export function attachPty(wss: WebSocketServer) {
   wss.on('connection', async (ws: WebSocket, req) => {
@@ -32,8 +36,9 @@ export function attachPty(wss: WebSocketServer) {
       ws.close();
       return;
     }
+    live.add(term);
     term.onData((d) => { if (ws.readyState === ws.OPEN) ws.send(d); });
-    term.onExit(({ exitCode }) => { if (ws.readyState === ws.OPEN) { ws.send(`\r\n[process exited ${exitCode}]\r\n`); ws.close(); } });
+    term.onExit(({ exitCode }) => { live.delete(term); if (ws.readyState === ws.OPEN) { ws.send(`\r\n[process exited ${exitCode}]\r\n`); ws.close(); } });
     if (initial) setTimeout(() => term.write(initial + '\r'), 300);
     ws.on('message', (raw) => {
       let m: ClientMsg;
@@ -41,6 +46,6 @@ export function attachPty(wss: WebSocketServer) {
       if (m.type === 'input') term.write(m.data);
       else if (m.type === 'resize') term.resize(Math.max(2, m.cols), Math.max(1, m.rows));
     });
-    ws.on('close', () => term.kill());
+    ws.on('close', () => { live.delete(term); try { term.kill(); } catch { /* already gone */ } });
   });
 }

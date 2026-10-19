@@ -28,6 +28,7 @@ app.setName(APP_NAME);
 
 let server: ChildProcess | null = null;
 let quitting = false;
+let respawnDelay = 1500;
 
 function loginShellLookup(cmd: string): Promise<string | null> {
   return new Promise((resolve) => {
@@ -86,10 +87,13 @@ async function startServer(): Promise<void> {
       app.exit(0);
       return;
     }
-    // Crash: respawn after a short delay.
-    setTimeout(() => { void startServer(); }, 1500);
+    // Crash: respawn with exponential backoff (1.5s → 30s) so a persistent failure does not spin.
+    const delay = respawnDelay;
+    respawnDelay = Math.min(30000, respawnDelay * 2);
+    console.log(`[mac-vibe-coder] server exited (${code}); restarting in ${delay}ms`);
+    setTimeout(() => { void startServer(); }, delay);
   });
-  await waitHealthy(15000);
+  if (await waitHealthy(15000)) respawnDelay = 1500; // healthy start resets the backoff
 }
 
 async function createWindow() {

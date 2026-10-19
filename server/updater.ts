@@ -29,6 +29,8 @@ export interface UpdateStatus {
 }
 
 let cached: UpdateStatus | null = null;
+let applying = false;
+export function isUpdating() { return applying; }
 
 async function git(args: string[], timeout = 60000) { return run('git', ['-C', REPO_ROOT, ...args], timeout); }
 
@@ -138,6 +140,8 @@ export function applyUpdate(onLine: (line: string, stream: 'stdout' | 'stderr') 
     'scripts/brand-electron.sh || true',
     'echo "▸ done: $(git rev-parse --short HEAD)"',
   ].join('\n');
+  if (applying) return Promise.reject(new Error('An update is already running'));
+  applying = true;
   cached = null;
-  return streamShell(cmd, onLine);
+  return streamShell(cmd, onLine).finally(() => { applying = false; });
 }

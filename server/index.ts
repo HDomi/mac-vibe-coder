@@ -4,7 +4,7 @@ import { HOST, PORT } from './config.js';
 import { syncLoginShellPath } from './shell.js';
 import { WebSocketServer } from 'ws';
 import { attachWebSocket, SessionRegistry } from './sessions.js';
-import { attachPty } from './pty.js';
+import { attachPty, killAllPtys } from './pty.js';
 
 export function startServer(port = PORT): Promise<ServerType> {
   return new Promise(async (resolve, reject) => {
@@ -26,6 +26,7 @@ export function startServer(port = PORT): Promise<ServerType> {
       shuttingDown = true;
       console.log(`[mac-vibe-coder] ${signal}: closing sessions`);
       const timer = setTimeout(() => process.exit(0), 4000);
+      killAllPtys();
       registry.closeAll().finally(() => { clearTimeout(timer); process.exit(0); });
     };
     process.on('SIGTERM', shutdown);

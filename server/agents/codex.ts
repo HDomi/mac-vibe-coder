@@ -17,7 +17,8 @@ interface RpcPending { resolve: (v: unknown) => void; reject: (e: Error) => void
 class AppServerClient {
   private proc: ChildProcess;
   private nextId = 1;
-  private pending = new Map<number, RpcPending>();
+  private pending = new Map<number, RpcPending & { timer: NodeJS.Timeout }>();
+  exited = false;
   onNotification: (method: string, params: Json) => void = () => {};
   onRequest: (id: number | string, method: string, params: Json) => void = () => {};
   onExit: (code: number | null) => void = () => {};
@@ -28,10 +29,12 @@ class AppServerClient {
     rl.on('line', (line) => this.handleLine(line));
     this.proc.stderr!.on('data', (d) => this.onStderr(String(d)));
     this.proc.on('exit', (code) => {
-      for (const p of this.pending.values()) p.reject(new Error('codex app-server exited'));
+      this.exited = true;
+      for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error('codex app-server exited')); }
       this.pending.clear();
       this.onExit(code);
     });
+    this.proc.on('error', (err) => { this.exited = true; this.onStderr(`spawn error: ${err.message}`); });
   }
   onStderr: (text: string) => void = () => {};
 
@@ -42,6 +45,7 @@ class AppServerClient {
       const p = this.pending.get(Number(m.id));
       if (!p) return;
       this.pending.delete(Number(m.id));
+      clearTimeout(p.timer);
       if (m.error) p.reject(new Error((m.error as { message?: string }).message ?? JSON.stringify(m.error)));
       else p.resolve(m.result);
       return;
@@ -54,17 +58,20 @@ class AppServerClient {
     if (this.proc.stdin?.writable) this.proc.stdin.write(JSON.stringify(obj) + '\n');
   }
 
-  request<T = unknown>(method: string, params: Json = {}): Promise<T> {
+  /** Send a request; rejects if the process is gone or no reply arrives within `timeoutMs` (never hangs a caller). */
+  request<T = unknown>(method: string, params: Json = {}, timeoutMs = 120000): Promise<T> {
+    if (this.exited) return Promise.reject(new Error('codex app-server is not running'));
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`codex app-server did not answer ${method} within ${Math.round(timeoutMs / 1000)}s`)); }, timeoutMs);
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
       this.write({ id, method, params });
     });
   }
   notify(method: string, params: Json = {}) { this.write({ method, params }); }
   respond(id: number | string, result: Json) { this.write({ id, result }); }
   respondError(id: number | string, code: number, message: string) { this.write({ id, error: { code, message } }); }
-  kill() { this.proc.kill(); }
+  kill() { if (!this.exited) this.proc.kill(); }
 }
 
 export interface CodexSessionOptions {
@@ -110,6 +117,8 @@ export class CodexSession implements AgentSession {
   private closed = false;
   private ready: Promise<void> = Promise.resolve();
   private skills = new Map<string, string>(); // name -> path
+  /** False after the app-server unloads the thread (30 min idle); the next send resumes it. */
+  private threadLoaded = false;
 
   constructor(private opts: CodexSessionOptions) {
     this.cwd = opts.cwd;
@@ -124,6 +133,8 @@ export class CodexSession implements AgentSession {
   start() {
     this.ready = this.boot().catch((err) => {
       this.emit({ kind: 'error', message: (err as Error).message });
+      this.closed = true;
+      this.client?.kill(); // never leave a half-initialised app-server behind
       this.emit({ kind: 'status', status: 'closed' });
       throw err;
     });
@@ -149,6 +160,7 @@ export class CodexSession implements AgentSession {
     const thread = res.thread as Json;
     this.threadId = String(thread.id);
     this.agentSessionId = this.threadId;
+    this.threadLoaded = true;
     try {
       const sk = await c.request<Json>('skills/list', { cwds: [this.cwd] });
       for (const entry of (sk.data as Json[]) ?? []) {
@@ -277,7 +289,8 @@ export class CodexSession implements AgentSession {
         return;
       }
       case 'thread/closed':
-        if (!this.closed) { this.closed = true; this.emit({ kind: 'status', status: 'closed' }); }
+        // Idle unload by the app-server, not a failure: keep the session; resume lazily on next send.
+        if (String(p.threadId ?? this.threadId) === this.threadId) { this.threadLoaded = false; this.turnId = null; this.emit({ kind: 'status', status: 'idle' }); }
         return;
       case 'serverRequest/resolved': return;
       default: return;
@@ -367,15 +380,26 @@ export class CodexSession implements AgentSession {
     input.unshift({ type: 'text', text: body, text_elements: [] });
     this.emit({ kind: 'user', text, attachments });
     this.emit({ kind: 'status', status: 'running' });
-    if (this.turnId) {
-      // A turn is in flight: steer it instead of starting a new one.
-      await this.client.request('turn/steer', { threadId: this.threadId, input, expectedTurnId: this.turnId });
-      return;
+    try {
+      if (!this.threadLoaded) {
+        const pol0 = policyFor(this.mode, this.cwd);
+        await this.client.request('thread/resume', { threadId: this.threadId, cwd: this.cwd, approvalPolicy: pol0.approvalPolicy, sandbox: pol0.sandboxMode, model: this.model });
+        this.threadLoaded = true;
+      }
+      if (this.turnId) {
+        // A turn is in flight: steer it instead of starting a new one.
+        await this.client.request('turn/steer', { threadId: this.threadId, input, expectedTurnId: this.turnId });
+        return;
+      }
+      const pol = policyFor(this.mode, this.cwd);
+      this.lastAgentText = '';
+      const res = await this.client.request<Json>('turn/start', { threadId: this.threadId, input, approvalPolicy: pol.approvalPolicy, sandboxPolicy: pol.sandboxPolicy, cwd: this.cwd, model: this.model });
+      this.turnId = String((res.turn as Json)?.id ?? this.turnId);
+    } catch (err) {
+      // Do not leave the UI in a fake "working" state when the request itself failed.
+      this.emit({ kind: 'status', status: 'idle' });
+      throw err;
     }
-    const pol = policyFor(this.mode, this.cwd);
-    this.lastAgentText = '';
-    const res = await this.client.request<Json>('turn/start', { threadId: this.threadId, input, approvalPolicy: pol.approvalPolicy, sandboxPolicy: pol.sandboxPolicy, cwd: this.cwd, model: this.model });
-    this.turnId = String((res.turn as Json)?.id ?? this.turnId);
   }
 
   async interrupt() {
@@ -414,7 +438,7 @@ export async function listCodexThreads(codexPath: string, cwd: string | null, li
   try {
     await c.request('initialize', { clientInfo: { name: 'mac-vibe-coder', title: 'mac-vibe-coder', version: '0.1.0' }, capabilities: null });
     c.notify('initialized');
-    const res = await c.request<Json>('thread/list', { cwd: cwd ?? null, limit, sortKey: 'updated_at', sortDirection: 'desc', archived: false });
+    const res = await c.request<Json>('thread/list', { cwd: cwd ?? null, limit, sortKey: 'updated_at', sortDirection: 'desc', archived: false }, 30000);
     return ((res.data as Json[]) ?? []).map((t) => ({
       sessionId: String(t.id),
       summary: String(t.name ?? t.preview ?? ''),
@@ -433,7 +457,7 @@ export async function listCodexModels(codexPath: string): Promise<{ id: string; 
   try {
     await c.request('initialize', { clientInfo: { name: 'mac-vibe-coder', title: 'mac-vibe-coder', version: '0.1.0' }, capabilities: null });
     c.notify('initialized');
-    const res = await c.request<Json>('model/list', { includeHidden: false });
+    const res = await c.request<Json>('model/list', { includeHidden: false }, 30000);
     return ((res.data as Json[]) ?? []).filter((m) => !m.hidden).map((m) => ({ id: String(m.model ?? m.id), name: String(m.displayName ?? m.model), description: m.description ? String(m.description) : undefined, isDefault: Boolean(m.isDefault) }));
   } finally {
     c.kill();

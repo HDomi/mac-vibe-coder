@@ -25,14 +25,15 @@ interface Persisted { id: string; cwd: string; agent: AgentId; agentSessionId?: 
 
 export function useSessions() {
   const [sessions, setSessions] = useState<Record<string, ChatSession>>({});
-  const pendingStart = useRef(new Map<string, { cwd: string; resolve: (id: string) => void; preload: ChatItem[] }>());
+  const pendingStart = useRef(new Map<string, { cwd: string; resolve: (id: string) => void; preload: ChatItem[] }[]>());
 
   useEffect(() => {
     const off = agentClient.on((m: ServerMessage) => {
       if ('type' in m) {
         if (m.type === 'session.started') {
-          const p = pendingStart.current.get(m.requestCwd);
-          pendingStart.current.delete(m.requestCwd);
+          const queue = pendingStart.current.get(m.requestCwd) ?? [];
+          const p = queue.shift();
+          if (queue.length === 0) pendingStart.current.delete(m.requestCwd);
           setSessions((prev) => ({
             ...prev,
             [m.sessionId]: {
@@ -85,7 +86,9 @@ export function useSessions() {
       try { preload = itemsFromHistory(await api.historyMessages(cwd, opts.resume)); } catch { /* history is optional */ }
     }
     return new Promise<string>((resolve) => {
-      pendingStart.current.set(cwd, { cwd, resolve, preload });
+      const queue = pendingStart.current.get(cwd) ?? [];
+      queue.push({ cwd, resolve, preload });
+      pendingStart.current.set(cwd, queue);
       agentClient.send({ type: 'session.start', agent: opts.agent ?? 'claude', cwd, resume: opts.resume, permissionMode: opts.permissionMode, model: opts.model ?? undefined });
     });
   }, []);

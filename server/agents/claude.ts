@@ -322,8 +322,17 @@ export class ClaudeSession implements AgentSession {
   }
 }
 
-/** Model list as the CLI reports it; falls back to well-known aliases if the SDK call fails. */
+let modelCache: { at: number; list: { id: string; name: string; description?: string }[] } | null = null;
+
+/** Model list as the CLI reports it (cached 10 min so the list does not spawn a CLI per page load). */
 export async function listClaudeModels(claudePath: string): Promise<{ id: string; name: string; description?: string }[]> {
+  if (modelCache && Date.now() - modelCache.at < 10 * 60 * 1000) return modelCache.list;
+  const list = await fetchClaudeModels(claudePath);
+  modelCache = { at: Date.now(), list };
+  return list;
+}
+
+async function fetchClaudeModels(claudePath: string): Promise<{ id: string; name: string; description?: string }[]> {
   const q = query({ prompt: (async function* () { /* never yields */ })(), options: { pathToClaudeCodeExecutable: claudePath, cwd: process.env.HOME, env: process.env as Record<string, string>, persistSession: false } });
   try {
     const models = await Promise.race([

@@ -15,7 +15,7 @@ import { previewKind } from './mime.js';
 import { codexThreadOp, listCodexModels, listCodexThreads } from './agents/codex.js';
 import { listClaudeModels } from './agents/claude.js';
 import { which, run } from './shell.js';
-import { applyUpdate, checkUpdate, readBuildInfo, RESTART_EXIT_CODE } from './updater.js';
+import { applyUpdate, checkUpdate, isUpdating, readBuildInfo, RESTART_EXIT_CODE } from './updater.js';
 import { gitBranches, gitCheckout, gitCommit, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
 import { displayableIcon, findProjectIcon } from './icons.js';
 
@@ -299,13 +299,18 @@ export function createApp(registry?: SessionRegistry) {
   // Self-update from the git remote.
   app.get('/api/update/status', async (c) => c.json(await checkUpdate(c.req.query('force') === '1')));
   app.get('/api/update/apply', (c) => streamSSE(c, async (stream) => {
+    if (isUpdating()) {
+      await stream.writeSSE({ event: 'stderr', data: 'An update is already running.' });
+      await stream.writeSSE({ event: 'done', data: '1' });
+      return;
+    }
     if (registry && registry.list().length > 0 && c.req.query('force') !== '1') {
       await stream.writeSSE({ event: 'stderr', data: 'Active sessions exist; update deferred. Close them or force.' });
       await stream.writeSSE({ event: 'done', data: '1' });
       return;
     }
     await stream.writeSSE({ event: 'start', data: 'git pull --ff-only && npm ci && npm run build' });
-    const code = await applyUpdate((line, src) => { void stream.writeSSE({ event: src, data: line }); });
+    const code = await applyUpdate((line, src) => { stream.writeSSE({ event: src, data: line }).catch(() => {}); }).catch((e) => { stream.writeSSE({ event: 'stderr', data: String((e as Error).message) }).catch(() => {}); return 1; });
     await stream.writeSSE({ event: 'done', data: String(code) });
     if (code === 0) {
       await stream.writeSSE({ event: 'restart', data: String(RESTART_EXIT_CODE) });

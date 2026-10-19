@@ -5,6 +5,9 @@ import { CodexSession } from './agents/codex.js';
 import { which } from './shell.js';
 
 const BUFFER_LIMIT = 5000;
+/** Sessions nobody is watching and that have been idle this long are closed to free their CLI process. */
+const ORPHAN_TTL_MS = 6 * 60 * 60 * 1000;
+const REAP_EVERY_MS = 10 * 60 * 1000;
 
 interface Entry {
   session: AgentSession;
@@ -12,10 +15,25 @@ interface Entry {
   seq: number;
   subscribers: Set<WebSocket>;
   createdAt: number;
+  lastActivity: number;
+  running: boolean;
 }
 
 export class SessionRegistry {
   private entries = new Map<string, Entry>();
+  private reaper: NodeJS.Timeout = setInterval(() => void this.reap(), REAP_EVERY_MS);
+
+  constructor() { this.reaper.unref(); }
+
+  /** Close sessions with no subscribers that have been idle for ORPHAN_TTL_MS. */
+  async reap(now = Date.now()) {
+    for (const [id, e] of this.entries) {
+      if (e.subscribers.size === 0 && !e.running && now - e.lastActivity > ORPHAN_TTL_MS) {
+        console.log(`[mac-vibe-coder] reaping idle session ${id} (${e.session.agent})`);
+        await this.close(id).catch(() => {});
+      }
+    }
+  }
 
   list() {
     return [...this.entries.values()].map((e) => ({
@@ -39,7 +57,7 @@ export class SessionRegistry {
     } else {
       throw new Error(`Unknown agent: ${cmd.agent}`);
     }
-    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set([ws]), createdAt: Date.now() };
+    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set([ws]), createdAt: Date.now(), lastActivity: Date.now(), running: false };
     this.entries.set(session.id, entry);
     session.onEvent((event) => this.broadcast(entry, event));
     session.start();
@@ -72,6 +90,8 @@ export class SessionRegistry {
 
   private broadcast(e: Entry, event: AgentEvent) {
     const msg: ServerMessage = { sessionId: e.session.id, seq: ++e.seq, ts: Date.now(), event };
+    e.lastActivity = msg.ts;
+    if (event.kind === 'status') e.running = event.status === 'running' || event.status === 'compacting';
     if (event.kind !== 'log') {
       e.buffer.push(msg);
       if (e.buffer.length > BUFFER_LIMIT) e.buffer.splice(0, e.buffer.length - BUFFER_LIMIT);
