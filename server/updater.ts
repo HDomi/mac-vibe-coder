@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { run, streamShell } from './shell.js';
 
@@ -10,13 +11,19 @@ const CHECK_TTL_MS = 10 * 60 * 1000;
 /** Exit code that tells the launcher (Electron / launchd) to restart us after an update. */
 export const RESTART_EXIT_CODE = 75;
 
+export interface BuildInfo { version: string; commit: string; builtAt: string | null }
+
 export interface UpdateStatus {
   repo: string;
   branch: string | null;
-  local: string | null;
-  remote: string | null;
+  /** What the running app was built from (dist/build-info.json). */
+  installed: BuildInfo;
+  /** What is pushed to origin/<branch>. */
+  remote: BuildInfo | null;
+  /** True when the pushed version is newer, or same version but a different commit. */
+  available: boolean;
+  /** Commits the checkout is behind origin (informational). */
   behind: number;
-  ahead: number;
   dirty: boolean;
   commits: { hash: string; subject: string }[];
   checkedAt: number;
@@ -25,30 +32,75 @@ export interface UpdateStatus {
 
 let cached: UpdateStatus | null = null;
 
-async function git(args: string[]) { return run('git', ['-C', REPO_ROOT, ...args], 60000); }
+async function git(args: string[], timeout = 60000) { return run('git', ['-C', REPO_ROOT, ...args], timeout); }
+
+export function readBuildInfo(): BuildInfo {
+  try {
+    const raw = JSON.parse(readFileSync(path.join(REPO_ROOT, 'dist', 'build-info.json'), 'utf8'));
+    return { version: String(raw.version ?? 'dev'), commit: String(raw.commit ?? 'unknown'), builtAt: raw.builtAt ?? null };
+  } catch {
+    try { return { version: String(JSON.parse(readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')).version ?? 'dev'), commit: 'unknown', builtAt: null }; }
+    catch { return { version: 'dev', commit: 'unknown', builtAt: null }; }
+  }
+}
+
+/** Positive when a > b (semver-ish: numeric dot parts, prerelease ignored). */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.replace(/^v/, '').split('.').map((x) => parseInt(x, 10) || 0);
+  const pb = b.replace(/^v/, '').split('.').map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+/** Convert an origin URL (ssh or https) into a raw.githubusercontent.com base, or null for non-GitHub remotes. */
+function rawBase(remoteUrl: string, branch: string): string | null {
+  const m = remoteUrl.match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
+  return m ? `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${branch}` : null;
+}
 
 export async function checkUpdate(force = false): Promise<UpdateStatus> {
   if (!force && cached && Date.now() - cached.checkedAt < CHECK_TTL_MS) return cached;
-  const status: UpdateStatus = { repo: REPO_ROOT, branch: null, local: null, remote: null, behind: 0, ahead: 0, dirty: false, commits: [], checkedAt: Date.now(), error: null };
+  const installed = readBuildInfo();
+  const status: UpdateStatus = { repo: REPO_ROOT, branch: null, installed, remote: null, available: false, behind: 0, dirty: false, commits: [], checkedAt: Date.now(), error: null };
   try {
     const branch = await git(['rev-parse', '--abbrev-ref', 'HEAD']);
     if (!branch.ok) throw new Error(branch.stderr || 'not a git repository');
     status.branch = branch.stdout;
-    const fetch = await git(['fetch', '--quiet', 'origin']);
-    if (!fetch.ok) throw new Error(fetch.stderr || 'git fetch failed');
-    const upstream = `origin/${status.branch}`;
-    status.local = (await git(['rev-parse', '--short', 'HEAD'])).stdout;
-    const remote = await git(['rev-parse', '--short', upstream]);
-    if (!remote.ok) throw new Error(`no upstream ${upstream}`);
-    status.remote = remote.stdout;
-    const counts = (await git(['rev-list', '--left-right', '--count', `HEAD...${upstream}`])).stdout.split(/\s+/);
-    status.ahead = Number(counts[0] ?? 0);
-    status.behind = Number(counts[1] ?? 0);
-    status.dirty = (await git(['status', '--porcelain'])).stdout.length > 0;
-    if (status.behind > 0) {
-      const log = await git(['log', '--format=%h%x09%s', `HEAD..${upstream}`]);
-      status.commits = log.stdout.split('\n').filter(Boolean).map((l) => { const [hash, ...rest] = l.split('\t'); return { hash, subject: rest.join('\t') }; });
+    const remoteUrl = (await git(['remote', 'get-url', 'origin'])).stdout;
+    // Pushed commit: cheap, no object download.
+    const ls = await git(['ls-remote', 'origin', `refs/heads/${status.branch}`], 30000);
+    if (!ls.ok) throw new Error(ls.stderr || 'git ls-remote failed');
+    const remoteCommit = (ls.stdout.split(/\s+/)[0] ?? '').slice(0, 7);
+    if (!remoteCommit) throw new Error(`branch ${status.branch} not found on origin`);
+    // Pushed version: raw package.json from GitHub, falling back to the fetched ref.
+    let remoteVersion: string | null = null;
+    const base = rawBase(remoteUrl, status.branch);
+    if (base) {
+      try {
+        const res = await fetch(`${base}/package.json?ts=${Date.now()}`, { signal: AbortSignal.timeout(8000), headers: { 'Cache-Control': 'no-cache' } });
+        if (res.ok) remoteVersion = String((await res.json() as { version?: string }).version ?? '');
+      } catch { /* fall back below */ }
     }
+    const fetched = await git(['fetch', '--quiet', 'origin', status.branch]);
+    if (!remoteVersion && fetched.ok) {
+      const show = await git(['show', `origin/${status.branch}:package.json`]);
+      if (show.ok) { try { remoteVersion = String(JSON.parse(show.stdout).version ?? ''); } catch { /* ignore */ } }
+    }
+    status.remote = { version: remoteVersion ?? 'unknown', commit: remoteCommit, builtAt: null };
+    const vcmp = remoteVersion ? compareVersions(remoteVersion, installed.version) : 0;
+    status.available = vcmp > 0 || (vcmp === 0 && installed.commit !== 'unknown' && !remoteCommit.startsWith(installed.commit) && !installed.commit.startsWith(remoteCommit));
+    if (fetched.ok) {
+      const upstream = `origin/${status.branch}`;
+      const counts = (await git(['rev-list', '--left-right', '--count', `HEAD...${upstream}`])).stdout.split(/\s+/);
+      status.behind = Number(counts[1] ?? 0);
+      const since = installed.commit !== 'unknown' ? `${installed.commit}..${upstream}` : `HEAD..${upstream}`;
+      const log = await git(['log', '--format=%h%x09%s', '-20', since]);
+      if (log.ok) status.commits = log.stdout.split('\n').filter(Boolean).map((l) => { const [hash, ...rest] = l.split('\t'); return { hash, subject: rest.join('\t') }; });
+    }
+    status.dirty = (await git(['status', '--porcelain'])).stdout.length > 0;
   } catch (err) {
     status.error = (err as Error).message;
   }
@@ -82,7 +134,7 @@ export function applyUpdate(onLine: (line: string, stream: 'stdout' | 'stderr') 
     'npm run build',
     `cd "${root}"`,
     'echo "▸ fast-forward checkout"',
-    'git pull --ff-only',
+    'git pull --ff-only || echo "warn: checkout not fast-forwarded (local changes?); artifacts still updated"',
     'echo "▸ swap in built artifacts"',
     `rsync -a --delete "$TMP/src/node_modules/" "${root}/node_modules/"`,
     `rsync -a --delete "$TMP/src/dist/" "${root}/dist/"`,

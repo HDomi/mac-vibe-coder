@@ -38,7 +38,8 @@ export interface UsageSnapshot {
 export interface HistorySession { agent: 'claude' | 'codex'; sessionId: string; summary: string; lastModified: number; customTitle?: string; firstPrompt?: string; gitBranch?: string; cwd?: string; pinned?: boolean }
 export interface HistoryMessage { type: string; uuid: string; message: unknown; parent_tool_use_id: string | null }
 
-export interface UpdateStatus { repo: string; branch: string | null; local: string | null; remote: string | null; behind: number; ahead: number; dirty: boolean; commits: { hash: string; subject: string }[]; checkedAt: number; error: string | null }
+export interface BuildInfo { version: string; commit: string; builtAt: string | null }
+export interface UpdateStatus { repo: string; branch: string | null; installed: BuildInfo; remote: BuildInfo | null; available: boolean; behind: number; dirty: boolean; commits: { hash: string; subject: string }[]; checkedAt: number; error: string | null }
 
 export interface GitFile { path: string; index: string; worktree: string; staged: boolean; untracked: boolean }
 export interface GitBranch { name: string; current: boolean; remote: boolean; upstream: string | null }
@@ -104,7 +105,7 @@ export const api = {
   historyPin: (agent: 'claude' | 'codex', id: string, pinned: boolean) => post<{ ok: true }>('/api/history/pin', { agent, id, pinned }),
   historyDelete: (agent: 'claude' | 'codex', id: string, cwd?: string) => req<{ ok: true }>(`/api/history/${q(id)}?agent=${agent}${cwd ? `&cwd=${q(cwd)}` : ''}`, { method: 'DELETE' }),
   search: (cwd: string, query: string) => req<{ path: string; rel: string; isDir: boolean }[]>(`/api/fs/search?cwd=${q(cwd)}&q=${q(query)}`),
-  health: () => req<{ ok: boolean; version: string }>('/api/health'),
+  health: () => req<{ ok: boolean; version: string; commit: string; builtAt: string | null }>('/api/health'),
   updateStatus: (force = false) => req<UpdateStatus>(`/api/update/status${force ? '?force=1' : ''}`),
   updateApplyUrl: (force = false) => `/api/update/apply${force ? '?force=1' : ''}`,
   open: (path: string, app: 'terminal' | 'iterm' | 'finder' | 'vscode' | 'cursor' = 'terminal', command?: string) =>

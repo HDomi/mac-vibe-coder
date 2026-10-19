@@ -7,21 +7,20 @@ export function UpdateBadge() {
   useLang();
   const [st, setSt] = useState<UpdateStatus | null>(null);
   const [open, setOpen] = useState(false);
-  const [version, setVersion] = useState('');
   const [checking, setChecking] = useState(false);
   const load = (force = false) => { setChecking(true); return api.updateStatus(force).then(setSt).catch(() => {}).finally(() => setChecking(false)); };
   useEffect(() => {
-    api.health().then((h) => setVersion(h.version)).catch(() => {});
     load();
     const timer = setInterval(() => load(), 10 * 60 * 1000);
     return () => clearInterval(timer);
   }, []);
-  const behind = st?.behind ?? 0;
+  const available = !!st?.available;
+  const installed = st?.installed;
   return (
     <>
-      <button className={`titlebar-nodrag text-[11px] rounded-full px-2 py-0.5 ${behind > 0 ? 'bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30' : 'text-zinc-600 hover:text-zinc-300'}`}
-        onClick={() => setOpen(true)} title={st?.error ?? (behind > 0 ? t('update.commitsAvailable', { n: behind }) : t('update.upToDateTitle', { v: st?.local ?? '' }))}>
-        {behind > 0 ? t('update.badge', { n: behind }) : version ? `v${version}${st?.local ? ` · ${st.local}` : ''}` : '…'}
+      <button className={`titlebar-nodrag text-[11px] rounded-full px-2 py-0.5 ${available ? 'bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30' : 'text-zinc-600 hover:text-zinc-300'}`}
+        onClick={() => setOpen(true)} title={st?.error ?? (available ? t('update.availableTitle', { v: st?.remote?.version ?? '' }) : t('update.upToDateTitle', { v: installed?.version ?? '' }))}>
+        {available ? t('update.badgeVersion', { v: st?.remote?.version ?? '' }) : installed ? `v${installed.version}` : '…'}
       </button>
       {open && <UpdateModal status={st} checking={checking} onClose={() => setOpen(false)} onRefresh={() => load(true)} />}
     </>
@@ -71,21 +70,22 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
           {checking && <div className="text-zinc-500 text-xs">{t('update.checking')}</div>}
           {status?.error && <div className="text-amber-300 text-xs">{status.error}</div>}
           {status && !status.error && (
-            <div className="text-xs text-zinc-400">
-              {t('update.localRemote', { branch: status.branch ?? '', local: status.local ?? '', remote: status.remote ?? '' })}
-              {status.dirty && <span className="text-amber-300">{t('update.dirty')}</span>}
-              {status.ahead > 0 && <span>{t('update.ahead', { n: status.ahead })}</span>}
+            <div className="text-xs text-zinc-400 space-y-0.5">
+              <div>{t('update.installed')}: <span className="text-zinc-200">v{status.installed.version}</span> <span className="font-mono">{status.installed.commit}</span>{status.installed.builtAt ? ` · ${new Date(status.installed.builtAt).toLocaleString()}` : ''}</div>
+              <div>{t('update.pushed')}: <span className="text-zinc-200">v{status.remote?.version ?? '?'}</span> <span className="font-mono">{status.remote?.commit ?? ''}</span> · {status.branch}</div>
+              {status.dirty && <div className="text-amber-300">{t('update.dirty')}</div>}
             </div>
           )}
-          {status && status.behind > 0 ? (
+          {status && status.available ? (
             <div className="rounded-lg border border-white/10 divide-y divide-white/5">
+              {status.commits.length === 0 && <div className="px-3 py-1.5 text-xs text-zinc-500">{t('update.newBuildAvailable')}</div>}
               {status.commits.map((c) => (
                 <div key={c.hash} className="px-3 py-1.5 flex gap-3"><span className="font-mono text-zinc-500 text-xs">{c.hash}</span><span className="truncate">{c.subject}</span></div>
               ))}
             </div>
           ) : status && !status.error ? <div className="text-zinc-400">{t('update.upToDate')}</div> : null}
           <div className="flex gap-2">
-            <button disabled={phase === 'running' || phase === 'restarting' || !status || status.behind === 0}
+            <button disabled={phase === 'running' || phase === 'restarting' || !status || !status.available}
               className="rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 px-3 py-1.5 disabled:opacity-40" onClick={() => apply(false)}>
               {t('update.apply')}
             </button>
