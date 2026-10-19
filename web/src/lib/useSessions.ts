@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { agentClient, type AgentId, type Attachment, type PermissionModeId, type ServerMessage } from './agent';
 import { itemsFromHistory, reduceEvent, type ChatItem, type ChatSession } from './chatStore';
 import { api } from './api';
+import { t } from './i18n';
 
 const LS_ACTIVE = 'vibe.sessions';
 
@@ -9,9 +10,9 @@ function notifyIfHidden(e: { kind: string; text?: string; toolName?: string; ok?
   if (typeof Notification === 'undefined' || document.visibilityState === 'visible') return;
   if (Notification.permission !== 'granted') return;
   let title: string | null = null; let body = '';
-  if (e.kind === 'result') { title = e.ok ? 'Task finished' : 'Task failed'; body = (e.text ?? '').slice(0, 120); }
-  else if (e.kind === 'approval.request') { title = 'Approval needed'; body = `Allow ${e.toolName}?`; }
-  else if (e.kind === 'question.request') { title = 'Question'; body = 'The agent is waiting for your answer'; }
+  if (e.kind === 'result') { title = e.ok ? t('notif.finished') : t('notif.failed'); body = (e.text ?? '').slice(0, 120); }
+  else if (e.kind === 'approval.request') { title = t('notif.approval'); body = t('notif.allow', { tool: e.toolName ?? '' }); }
+  else if (e.kind === 'question.request') { title = t('notif.question'); body = t('notif.waiting'); }
   if (!title) return;
   try { new Notification(title, { body, silent: false }); } catch { /* ignore */ }
 }
@@ -44,7 +45,7 @@ export function useSessions() {
           setSessions((prev) => {
             const s = prev[m.sessionId];
             if (!s) return prev;
-            return { ...prev, [m.sessionId]: { ...s, status: 'closed', items: [...s.items, { kind: 'system', id: `gone-${m.sessionId}`, text: 'The server restarted and this session was lost. Resume it from the session list.' }] } };
+            return { ...prev, [m.sessionId]: { ...s, status: 'closed', items: [...s.items, { kind: 'system', id: `gone-${m.sessionId}`, text: t('session.lost') }] } };
           });
         }
         return;

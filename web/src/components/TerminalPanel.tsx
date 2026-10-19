@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
+import { t, useLang } from '../lib/i18n';
 
 interface Props {
   cwd: string | null;
@@ -15,6 +16,7 @@ interface Tab { id: number; title: string; cwd: string; cmd?: string }
 let nextId = 1;
 
 function TermView({ tab, visible, onExit }: { tab: Tab; visible: boolean; onExit: () => void }) {
+  useLang();
   const host = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<'connecting' | 'open' | 'closed'>('connecting');
 
@@ -52,12 +54,13 @@ function TermView({ tab, visible, onExit }: { tab: Tab; visible: boolean; onExit
   return (
     <div className={`absolute inset-0 ${visible ? '' : 'invisible'}`}>
       <div ref={host} className="absolute inset-0 p-2" />
-      {status !== 'open' && <div className="absolute top-2 right-3 text-[11px] text-zinc-500">{status === 'connecting' ? 'connecting…' : 'exited'}</div>}
+      {status !== 'open' && <div className="absolute top-2 right-3 text-[11px] text-zinc-500">{status === 'connecting' ? t('terminal.connecting') : t('terminal.exited')}</div>}
     </div>
   );
 }
 
 export default function TerminalPanel({ cwd, visible }: Props) {
+  useLang();
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [active, setActive] = useState<number | null>(null);
 
@@ -80,14 +83,14 @@ export default function TerminalPanel({ cwd, visible }: Props) {
             <button className="text-zinc-500 hover:text-red-300" onClick={(e) => { e.stopPropagation(); close(t.id); }}>✕</button>
           </div>
         ))}
-        <button className="px-2 py-1 text-zinc-400 hover:text-white" onClick={() => open()} title="New shell">＋</button>
+        <button className="px-2 py-1 text-zinc-400 hover:text-white" onClick={() => open()} title={t('terminal.newShell')}>＋</button>
         <div className="flex-1" />
-        <button className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-zinc-300" onClick={() => open('claude', 'claude')} title="Claude Code TUI">claude</button>
-        <button className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-zinc-300" onClick={() => open('codex', 'codex')} title="Codex TUI">codex</button>
+        <button className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-zinc-300" onClick={() => open('claude', 'claude')} title={t('terminal.claudeTui')}>claude</button>
+        <button className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-zinc-300" onClick={() => open('codex', 'codex')} title={t('terminal.codexTui')}>codex</button>
       </div>
       <div className="flex-1 relative bg-[#0b0d12]">
         {tabs.map((t) => <TermView key={t.id} tab={t} visible={visible && active === t.id} onExit={() => { /* keep tab to show exit message */ }} />)}
-        {tabs.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm">Press ＋ to open a shell</div>}
+        {tabs.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm">{t('terminal.pressPlus')}</div>}
       </div>
     </div>
   );

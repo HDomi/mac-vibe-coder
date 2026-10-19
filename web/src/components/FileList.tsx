@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, formatSize, type Entry, type Listing } from '../lib/api';
 import { useContextMenu, type MenuItem } from './ContextMenu';
+import { t, useLang } from '../lib/i18n';
 
 interface Props {
   listing: Listing | null;
@@ -19,6 +20,7 @@ interface Clipboard { paths: string[]; cut: boolean }
 let clipboard: Clipboard | null = null; // module-level so it survives re-renders and folder changes
 
 export default function FileList({ listing, error, isFavorite, onNavigate, onPreview, onToggleFavorite, onRefresh, onAttach }: Props) {
+  useLang();
   const menu = useContextMenu();
   const [showHidden, setShowHidden] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -34,7 +36,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
   const crumbs = listing ? listing.path.split('/').filter(Boolean) : [];
 
   useEffect(() => { setSelected(new Set()); setAnchor(null); setRenaming(null); }, [listing?.path]);
-  useEffect(() => { if (!note) return; const t = setTimeout(() => setNote(null), 3000); return () => clearTimeout(t); }, [note]);
+  useEffect(() => { if (!note) return; const timer = setTimeout(() => setNote(null), 3000); return () => clearTimeout(timer); }, [note]);
 
   const fail = (e: unknown) => setNote((e as Error).message ?? String(e));
 
@@ -59,7 +61,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
     if (!selectedEntries.length) return;
     clipboard = { paths: selectedEntries.map((e) => e.path), cut };
     void navigator.clipboard.writeText(clipboard.paths.join('\n'));
-    setNote(`${cut ? 'Cut' : 'Copied'} ${clipboard.paths.length} item(s)`);
+    setNote(t(cut ? 'files.cutItems' : 'files.copiedItems', { n: clipboard.paths.length }));
   };
   const paste = () => {
     if (!clipboard || !listing) return;
@@ -84,6 +86,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
     api.fsMkdir(listing.path, draft.trim()).then(onRefresh).catch(fail);
   };
   const duplicate = () => { const e = selectedEntries[0]; if (e) api.fsDuplicate(e.path).then(onRefresh).catch(fail); };
+  const newFolder = () => { setDraft(t('files.untitledFolder')); setCreating(true); };
 
   const onKey = useCallback((ev: React.KeyboardEvent) => {
     if (renaming || creating) return;
@@ -103,7 +106,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
     else if (mod && ev.key.toLowerCase() === 'd') { ev.preventDefault(); duplicate(); }
     else if (mod && ev.key === 'Backspace') { ev.preventDefault(); trash(); }
     else if (ev.key === 'Backspace' && !mod) { ev.preventDefault(); if (listing?.parent) onNavigate(listing.parent); }
-    else if (mod && ev.shiftKey && ev.key.toLowerCase() === 'n') { ev.preventDefault(); setDraft('untitled folder'); setCreating(true); }
+    else if (mod && ev.shiftKey && ev.key.toLowerCase() === 'n') { ev.preventDefault(); newFolder(); }
     else if (ev.key === 'Escape') setSelected(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, anchor, selectedEntries, listing, renaming, creating]);
@@ -113,43 +116,43 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
     if (!selected.has(e.path)) { setSelected(new Set([e.path])); setAnchor(e.path); }
     const many = sel.length > 1;
     return [
-      { label: e.isDir ? 'Open' : 'Preview', onClick: () => open(e) },
-      ...(onAttach ? [{ label: many ? `Attach ${sel.length} to Chat` : 'Attach to Chat', onClick: () => onAttach(sel) }] : []),
+      { label: e.isDir ? t('common.open') : t('files.preview'), onClick: () => open(e) },
+      ...(onAttach ? [{ label: many ? t('files.attachNToChat', { n: sel.length }) : t('files.attachToChat'), onClick: () => onAttach(sel) }] : []),
       { separator: true },
-      { label: 'Reveal in Finder', onClick: () => api.open(e.path, 'finder').catch(fail) },
-      ...(e.isDir ? [{ label: 'Open in Terminal', onClick: () => api.open(e.path, 'terminal').catch(fail) }] : []),
-      { label: 'Open in VS Code', onClick: () => api.open(e.path, 'vscode').catch(fail) },
-      { label: 'Open in Cursor', onClick: () => api.open(e.path, 'cursor').catch(fail) },
-      { label: many ? 'Copy Paths' : 'Copy Path', onClick: () => navigator.clipboard.writeText(sel.map((x) => x.path).join('\n')) },
+      { label: t('common.revealInFinder'), onClick: () => api.open(e.path, 'finder').catch(fail) },
+      ...(e.isDir ? [{ label: t('common.openInTerminal'), onClick: () => api.open(e.path, 'terminal').catch(fail) }] : []),
+      { label: t('common.openInVSCode'), onClick: () => api.open(e.path, 'vscode').catch(fail) },
+      { label: t('common.openInCursor'), onClick: () => api.open(e.path, 'cursor').catch(fail) },
+      { label: many ? t('common.copyPaths') : t('common.copyPath'), onClick: () => navigator.clipboard.writeText(sel.map((x) => x.path).join('\n')) },
       { separator: true },
-      { label: 'Copy', shortcut: '⌘C', onClick: () => { clipboard = { paths: sel.map((x) => x.path), cut: false }; setNote(`Copied ${sel.length}`); } },
-      { label: 'Cut', shortcut: '⌘X', onClick: () => { clipboard = { paths: sel.map((x) => x.path), cut: true }; setNote(`Cut ${sel.length}`); } },
-      { label: 'Paste', shortcut: '⌘V', disabled: !clipboard, onClick: paste },
-      { label: 'Duplicate', shortcut: '⌘D', disabled: many, onClick: () => api.fsDuplicate(e.path).then(onRefresh).catch(fail) },
-      { label: 'Rename', shortcut: '⏎', disabled: many, onClick: () => { setRenaming(e.path); setDraft(e.name); } },
+      { label: t('common.copy'), shortcut: '⌘C', onClick: () => { clipboard = { paths: sel.map((x) => x.path), cut: false }; setNote(t('files.copiedN', { n: sel.length })); } },
+      { label: t('common.cut'), shortcut: '⌘X', onClick: () => { clipboard = { paths: sel.map((x) => x.path), cut: true }; setNote(t('files.cutN', { n: sel.length })); } },
+      { label: t('common.paste'), shortcut: '⌘V', disabled: !clipboard, onClick: paste },
+      { label: t('files.duplicate'), shortcut: '⌘D', disabled: many, onClick: () => api.fsDuplicate(e.path).then(onRefresh).catch(fail) },
+      { label: t('files.renameItem'), shortcut: '⏎', disabled: many, onClick: () => { setRenaming(e.path); setDraft(e.name); } },
       { separator: true },
-      { label: 'Move to Trash', shortcut: '⌘⌫', danger: true, onClick: () => api.fsTrash(sel.map((x) => x.path)).then(() => { setSelected(new Set()); onRefresh(); }).catch(fail) },
+      { label: t('files.moveToTrash'), shortcut: '⌘⌫', danger: true, onClick: () => api.fsTrash(sel.map((x) => x.path)).then(() => { setSelected(new Set()); onRefresh(); }).catch(fail) },
     ];
   };
   const bgMenu = (): MenuItem[] => [
-    { label: 'New Folder', shortcut: '⇧⌘N', onClick: () => { setDraft('untitled folder'); setCreating(true); } },
-    { label: 'Paste', shortcut: '⌘V', disabled: !clipboard, onClick: paste },
+    { label: t('files.newFolderMenu'), shortcut: '⇧⌘N', onClick: newFolder },
+    { label: t('common.paste'), shortcut: '⌘V', disabled: !clipboard, onClick: paste },
     { separator: true },
-    { label: 'Open in Terminal', onClick: () => listing && api.open(listing.path, 'terminal').catch(fail) },
-    { label: 'Open in VS Code', onClick: () => listing && api.open(listing.path, 'vscode').catch(fail) },
-    { label: 'Open in Cursor', onClick: () => listing && api.open(listing.path, 'cursor').catch(fail) },
-    { label: 'Reveal in Finder', onClick: () => listing && api.open(listing.path, 'finder').catch(fail) },
-    { label: 'Copy Path', onClick: () => listing && navigator.clipboard.writeText(listing.path) },
+    { label: t('common.openInTerminal'), onClick: () => listing && api.open(listing.path, 'terminal').catch(fail) },
+    { label: t('common.openInVSCode'), onClick: () => listing && api.open(listing.path, 'vscode').catch(fail) },
+    { label: t('common.openInCursor'), onClick: () => listing && api.open(listing.path, 'cursor').catch(fail) },
+    { label: t('common.revealInFinder'), onClick: () => listing && api.open(listing.path, 'finder').catch(fail) },
+    { label: t('common.copyPath'), onClick: () => listing && navigator.clipboard.writeText(listing.path) },
     { separator: true },
-    { label: isFavorite ? 'Remove from Favorites' : 'Add to Favorites', onClick: onToggleFavorite },
-    { label: showHidden ? 'Hide Hidden Files' : 'Show Hidden Files', onClick: () => setShowHidden((v) => !v) },
-    { label: 'Refresh', onClick: onRefresh },
+    { label: isFavorite ? t('sidebar.removeFavorite') : t('sidebar.addFavorite'), onClick: onToggleFavorite },
+    { label: showHidden ? t('files.hideHidden') : t('files.showHidden'), onClick: () => setShowHidden((v) => !v) },
+    { label: t('common.refresh'), onClick: onRefresh },
   ];
 
   return (
     <div ref={root} tabIndex={0} onKeyDown={onKey} className="flex flex-col h-full min-w-0 outline-none">
       <div className="h-10 flex items-center gap-2 px-3 border-b border-white/10 text-sm">
-        <button className="px-2 py-1 rounded hover:bg-white/10 disabled:opacity-30" disabled={!listing?.parent} onClick={() => listing?.parent && onNavigate(listing.parent)} title="Parent folder (⌫)">↑</button>
+        <button className="px-2 py-1 rounded hover:bg-white/10 disabled:opacity-30" disabled={!listing?.parent} onClick={() => listing?.parent && onNavigate(listing.parent)} title={t('files.parentFolder')}>↑</button>
         <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap text-zinc-400">
           <span className="cursor-pointer hover:text-white" onClick={() => onNavigate('/')}>/</span>
           {crumbs.map((c, i) => {
@@ -158,9 +161,9 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
           })}
         </div>
         <div className="flex-1" />
-        {note && <span className="text-[11px] text-amber-300 truncate max-w-[160px]" title={note}>{note}</span>}
-        <button className="px-2 py-1 rounded hover:bg-white/10 text-zinc-400" onClick={() => { setDraft('untitled folder'); setCreating(true); }} title="New folder (⇧⌘N)">＋</button>
-        <button className="px-2 py-1 rounded hover:bg-white/10" onClick={onToggleFavorite} title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}>{isFavorite ? '★' : '☆'}</button>
+        {note && <span className="text-[11px] text-amber-300 truncate max-w-40" title={note}>{note}</span>}
+        <button className="px-2 py-1 rounded hover:bg-white/10 text-zinc-400" onClick={newFolder} title={t('files.newFolder')}>＋</button>
+        <button className="px-2 py-1 rounded hover:bg-white/10" onClick={onToggleFavorite} title={isFavorite ? t('sidebar.removeFavorite') : t('sidebar.addFavorite')}>{isFavorite ? '★' : '☆'}</button>
       </div>
 
       <div className="flex-1 overflow-y-auto" onContextMenu={(e) => menu.open(e, bgMenu())} onClick={(e) => { if (e.target === e.currentTarget) setSelected(new Set()); }}>
@@ -168,7 +171,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
           <div className="m-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm">
             <div className="font-medium text-red-300">{error.code}</div>
             <div className="text-zinc-300 mt-1 whitespace-pre-wrap">{error.message}</div>
-            {error.code === 'EACCES' && <a className="inline-block mt-3 text-xs underline text-blue-300" href="x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles">Open Full Disk Access settings</a>}
+            {error.code === 'EACCES' && <a className="inline-block mt-3 text-xs underline text-blue-300" href="x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles">{t('files.fullDisk')}</a>}
           </div>
         )}
         {listing && (
@@ -197,13 +200,13 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
                   <td className="py-1.5 pr-3 text-right text-zinc-600 whitespace-nowrap hidden lg:table-cell">{new Date(e.mtime).toLocaleDateString()}</td>
                 </tr>
               ))}
-              {entries.length === 0 && !creating && <tr><td className="p-6 text-center text-zinc-600" colSpan={4}>Empty folder</td></tr>}
+              {entries.length === 0 && !creating && <tr><td className="p-6 text-center text-zinc-600" colSpan={4}>{t('files.empty')}</td></tr>}
             </tbody>
           </table>
         )}
       </div>
       <div className="h-6 shrink-0 flex items-center px-3 text-[10px] text-zinc-600 border-t border-white/5">
-        {selected.size > 0 ? `${selected.size} selected` : `${entries.length} items`} · double-click to open · ⌘C/⌘X/⌘V · ⌘⌫ trash · ⏎ rename
+        {selected.size > 0 ? t('files.selected', { n: selected.size }) : t('files.items', { n: entries.length })} · {t('files.footerHint')}
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import MarkdownView, { CopyButton } from './MarkdownView';
 import type { ChatItem } from '../lib/chatStore';
 import { api } from '../lib/api';
+import { t, useLang } from '../lib/i18n';
 
 function summarizeInput(name: string, input: unknown): string {
   const i = (input ?? {}) as Record<string, unknown>;
@@ -36,6 +37,7 @@ export function UserItem({ item }: { item: Extract<ChatItem, { kind: 'user' }> }
 }
 
 export function AssistantItem({ item, baseDir }: { item: Extract<ChatItem, { kind: 'assistant' }>; baseDir?: string }) {
+  useLang();
   const [showThinking, setShowThinking] = useState(false);
   return (
     <div className={`group/msg relative ${item.parent ? 'ml-6 border-l border-white/10 pl-3' : ''}`}>
@@ -43,7 +45,7 @@ export function AssistantItem({ item, baseDir }: { item: Extract<ChatItem, { kin
       {item.thinking && (
         <div className="mb-1">
           <button className="text-[11px] text-zinc-500 hover:text-zinc-300" onClick={() => setShowThinking((v) => !v)}>
-            {showThinking ? '▾' : '▸'} Thinking{item.streaming && !item.text ? '…' : ''}
+            {showThinking ? '▾' : '▸'} {t('items.thinking')}{item.streaming && !item.text ? '…' : ''}
           </button>
           {showThinking && <div className="mt-1 text-xs text-zinc-500 whitespace-pre-wrap border-l-2 border-white/10 pl-2">{item.thinking}</div>}
         </div>
@@ -61,6 +63,7 @@ export function AssistantItem({ item, baseDir }: { item: Extract<ChatItem, { kin
 const SUBAGENT_TOOLS = new Set(['Agent', 'Task', 'SubAgent', 'SubAgentActivity']);
 
 export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: 'tool' }>; children?: React.ReactNode }) {
+  useLang();
   const [open, setOpen] = useState(false);
   const [showKids, setShowKids] = useState(true);
   const summary = summarizeInput(item.name, item.input);
@@ -70,7 +73,7 @@ export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: '
     <div className={`rounded-lg border ${item.isError ? 'border-red-500/30' : isSubagent && !item.done ? 'border-violet-400/40' : 'border-white/10'} ${isSubagent ? 'bg-violet-500/[0.04]' : 'bg-white/[0.03]'} text-[13px] ${item.parent ? 'ml-6' : ''}`}>
       <button className="w-full flex items-center gap-2 px-3 py-1.5 text-left" onClick={() => setOpen((v) => !v)}>
         <span className={`w-1.5 h-1.5 rounded-full ${item.done ? (item.isError ? 'bg-red-400' : 'bg-emerald-400') : 'bg-amber-400 animate-pulse'}`} />
-        {isSubagent && <span className={`text-[10px] rounded px-1.5 py-0.5 ${item.done ? 'bg-violet-500/15 text-violet-200' : 'bg-violet-500/25 text-violet-100 animate-pulse'}`}>{item.done ? 'subagent' : 'subagent working…'}</span>}
+        {isSubagent && <span className={`text-[10px] rounded px-1.5 py-0.5 ${item.done ? 'bg-violet-500/15 text-violet-200' : 'bg-violet-500/25 text-violet-100 animate-pulse'}`}>{item.done ? t('items.subagent') : t('items.subagentWorking')}</span>}
         <span className="font-medium text-zinc-200">{isSubagent ? String(i.subagent_type ?? i.description ?? item.name) : item.name}</span>
         <span className="truncate text-zinc-400 font-mono text-[12px] flex-1">{summary}</span>
         {!item.done && item.elapsed > 0 && <span className="text-zinc-500 text-[11px]">{Math.round(item.elapsed)}s</span>}
@@ -87,7 +90,7 @@ export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: '
       {children && (
         <div className="border-t border-white/10">
           <button className="w-full text-left px-3 py-1 text-[11px] text-zinc-500 hover:text-zinc-300" onClick={() => setShowKids((v) => !v)}>
-            {showKids ? '▾' : '▸'} {isSubagent ? 'subagent activity' : 'nested activity'}
+            {showKids ? '▾' : '▸'} {isSubagent ? t('items.subagentActivity') : t('items.nestedActivity')}
           </button>
           {showKids && <div className="px-2 pb-2 space-y-2 border-l-2 border-violet-400/30 ml-3">{children}</div>}
         </div>
@@ -97,15 +100,17 @@ export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: '
 }
 
 export function ApprovalItem({ item, onDecide }: { item: Extract<ChatItem, { kind: 'approval' }>; onDecide: (d: 'allow' | 'allow_always' | 'deny', message?: string) => void }) {
+  useLang();
   const [msg, setMsg] = useState('');
   const summary = summarizeInput(item.toolName, item.input);
   const i = (item.input ?? {}) as Record<string, unknown>;
+  const decisionLabel: Record<string, string> = { allow: t('items.allowed'), allow_always: t('items.alwaysAllowed'), deny: t('items.denied'), cancelled: t('items.cancelled') };
   return (
     <div className={`rounded-lg border ${item.decision ? 'border-white/10 opacity-70' : 'border-amber-400/40 bg-amber-400/5'} p-3 text-[13px]`}>
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-amber-300">Approval</span>
+        <span className="text-amber-300">{t('items.approval')}</span>
         <span className="font-medium">{item.toolName}</span>
-        {item.decision && <span className="ml-auto text-xs text-zinc-400">{{ allow: 'Allowed', allow_always: 'Always allowed', deny: 'Denied', cancelled: 'Cancelled' }[item.decision] ?? item.decision}</span>}
+        {item.decision && <span className="ml-auto text-xs text-zinc-400">{decisionLabel[item.decision] ?? item.decision}</span>}
       </div>
       <pre className="font-mono text-[12px] text-zinc-200 whitespace-pre-wrap break-all bg-black/30 rounded p-2 max-h-40 overflow-auto">{summary}</pre>
       {item.toolName === 'Edit' && typeof i.old_string === 'string' && (
@@ -129,10 +134,10 @@ export function ApprovalItem({ item, onDecide }: { item: Extract<ChatItem, { kin
       )}
       {!item.decision && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button className="rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 px-3 py-1" onClick={() => onDecide('allow')}>Allow</button>
-          {item.canAlwaysAllow && <button className="rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 px-3 py-1" onClick={() => onDecide('allow_always')}>Always allow</button>}
-          <button className="rounded bg-red-500/20 hover:bg-red-500/30 text-red-200 px-3 py-1" onClick={() => onDecide('deny', msg || undefined)}>Deny</button>
-          <input className="flex-1 min-w-[160px] bg-black/30 rounded px-2 py-1 text-xs outline-none" placeholder="Reason or alternative (optional)" value={msg} onChange={(e) => setMsg(e.target.value)} />
+          <button className="rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 px-3 py-1" onClick={() => onDecide('allow')}>{t('items.allow')}</button>
+          {item.canAlwaysAllow && <button className="rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 px-3 py-1" onClick={() => onDecide('allow_always')}>{t('items.alwaysAllow')}</button>}
+          <button className="rounded bg-red-500/20 hover:bg-red-500/30 text-red-200 px-3 py-1" onClick={() => onDecide('deny', msg || undefined)}>{t('items.deny')}</button>
+          <input className="flex-1 min-w-40 bg-black/30 rounded px-2 py-1 text-xs outline-none" placeholder={t('items.denyReason')} value={msg} onChange={(e) => setMsg(e.target.value)} />
         </div>
       )}
     </div>
@@ -140,6 +145,7 @@ export function ApprovalItem({ item, onDecide }: { item: Extract<ChatItem, { kin
 }
 
 export function QuestionItem({ item, onAnswer }: { item: Extract<ChatItem, { kind: 'question' }>; onAnswer: (answers: Record<string, string>) => void }) {
+  useLang();
   const [sel, setSel] = useState<Record<string, string[]>>({});
   const [other, setOther] = useState<Record<string, string>>({});
   const toggle = (q: string, label: string, multi: boolean) => {
@@ -160,7 +166,7 @@ export function QuestionItem({ item, onAnswer }: { item: Extract<ChatItem, { kin
   const complete = item.questions.every((q) => (sel[q.question]?.length ?? 0) > 0 || other[q.question]?.trim());
   return (
     <div className={`rounded-lg border ${item.resolved ? 'border-white/10 opacity-70' : 'border-blue-400/40 bg-blue-400/5'} p-3 text-[13px] space-y-3`}>
-      <div className="text-blue-300">Question</div>
+      <div className="text-blue-300">{t('items.question')}</div>
       {item.questions.map((q) => (
         <div key={q.question}>
           <div className="text-[11px] uppercase tracking-wide text-zinc-500">{q.header}</div>
@@ -177,25 +183,26 @@ export function QuestionItem({ item, onAnswer }: { item: Extract<ChatItem, { kin
               );
             })}
             {!item.resolved && (
-              <input className="bg-black/30 rounded-md px-3 py-1.5 text-xs outline-none border border-white/10" placeholder="Type your own answer (optional)"
+              <input className="bg-black/30 rounded-md px-3 py-1.5 text-xs outline-none border border-white/10" placeholder={t('items.ownAnswer')}
                 value={other[q.question] ?? ''} onChange={(e) => setOther((s) => ({ ...s, [q.question]: e.target.value }))} />
             )}
           </div>
         </div>
       ))}
       {!item.resolved && (
-        <button disabled={!complete} className="rounded bg-blue-500/30 hover:bg-blue-500/40 px-3 py-1 disabled:opacity-40" onClick={submit}>Send answers</button>
+        <button disabled={!complete} className="rounded bg-blue-500/30 hover:bg-blue-500/40 px-3 py-1 disabled:opacity-40" onClick={submit}>{t('items.sendAnswers')}</button>
       )}
     </div>
   );
 }
 
 export function ResultItem({ item }: { item: Extract<ChatItem, { kind: 'result' }> }) {
+  useLang();
   return (
     <div className="text-[11px] text-zinc-500 flex gap-3 justify-end">
-      <span>{item.ok ? 'Done' : 'Error'}</span>
+      <span>{item.ok ? t('items.done') : t('items.error')}</span>
       <span>{(item.durationMs / 1000).toFixed(1)}s</span>
-      <span>{item.numTurns} turns</span>
+      <span>{t('items.turns', { n: item.numTurns })}</span>
       <span>${item.costUsd.toFixed(3)}</span>
     </div>
   );

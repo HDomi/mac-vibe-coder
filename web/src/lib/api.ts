@@ -104,6 +104,7 @@ export const api = {
   historyPin: (agent: 'claude' | 'codex', id: string, pinned: boolean) => post<{ ok: true }>('/api/history/pin', { agent, id, pinned }),
   historyDelete: (agent: 'claude' | 'codex', id: string, cwd?: string) => req<{ ok: true }>(`/api/history/${q(id)}?agent=${agent}${cwd ? `&cwd=${q(cwd)}` : ''}`, { method: 'DELETE' }),
   search: (cwd: string, query: string) => req<{ path: string; rel: string; isDir: boolean }[]>(`/api/fs/search?cwd=${q(cwd)}&q=${q(query)}`),
+  health: () => req<{ ok: boolean; version: string }>('/api/health'),
   updateStatus: (force = false) => req<UpdateStatus>(`/api/update/status${force ? '?force=1' : ''}`),
   updateApplyUrl: (force = false) => `/api/update/apply${force ? '?force=1' : ''}`,
   open: (path: string, app: 'terminal' | 'iterm' | 'finder' | 'vscode' | 'cursor' = 'terminal', command?: string) =>

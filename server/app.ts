@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { duplicate, FsError, homeInfo, listDir, mkdir, rawFile, readText, rename, resolvePath, searchFiles, statPath, transfer, trash } from './fs.js';
 import { loadConfig, saveConfig } from './config.js';
@@ -22,6 +23,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // dist/server/app.js -> ../../web/dist ; server/app.ts (tsx) -> ../web/dist
 const WEB_DIST = path.resolve(__dirname, __dirname.includes(`${path.sep}dist${path.sep}`) ? '../../web/dist' : '../web/dist');
 
+// package.json version; npm_package_version is only set when started through npm scripts.
+const APP_VERSION: string = (() => {
+  try { return JSON.parse(readFileSync(path.resolve(WEB_DIST, '../../package.json'), 'utf8')).version ?? 'dev'; } catch { return 'dev'; }
+})();
+
 export function createApp(registry?: SessionRegistry) {
   const app = new Hono();
 
@@ -33,7 +39,7 @@ export function createApp(registry?: SessionRegistry) {
     return c.json({ error: err.message ?? 'Internal error', code: 'INTERNAL' }, 500);
   });
 
-  app.get('/api/health', (c) => c.json({ ok: true, version: process.env.npm_package_version ?? 'dev' }));
+  app.get('/api/health', (c) => c.json({ ok: true, version: APP_VERSION }));
   app.get('/api/home', async (c) => c.json(await homeInfo()));
 
   app.get('/api/fs/list', async (c) => c.json(await listDir(c.req.query('path') ?? '~')));

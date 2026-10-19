@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import type { Attachment, PermissionModeId } from '../lib/agent';
+import { t, useLang } from '../lib/i18n';
 
 interface Props {
   /** Session working directory; root for "@" file mentions. */
@@ -20,12 +21,12 @@ interface Props {
 }
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
-const MODES: { id: PermissionModeId; label: string; hint: string }[] = [
-  { id: 'default', label: 'Default', hint: 'Ask before each tool' },
-  { id: 'acceptEdits', label: 'Auto-edit', hint: 'File edits are auto-approved' },
-  { id: 'plan', label: 'Plan', hint: 'Read-only, plan first' },
-  { id: 'bypassPermissions', label: 'Allow all', hint: 'Run without approvals (careful)' },
-  { id: 'auto', label: 'Auto', hint: 'Claude: a classifier reviews each action instead of you' },
+const MODE_IDS: { id: PermissionModeId; key: string }[] = [
+  { id: 'default', key: 'composer.mode.default' },
+  { id: 'acceptEdits', key: 'composer.mode.acceptEdits' },
+  { id: 'plan', key: 'composer.mode.plan' },
+  { id: 'bypassPermissions', key: 'composer.mode.bypass' },
+  { id: 'auto', key: 'composer.mode.auto' },
 ];
 
 function toAttachment(path: string, name?: string): Attachment {
@@ -34,6 +35,7 @@ function toAttachment(path: string, name?: string): Attachment {
 }
 
 export default function Composer({ cwd, agent, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments }: Props) {
+  useLang();
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -128,9 +130,9 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
   };
 
   const submit = () => {
-    const t = text.trim();
-    if (!t && attachments.length === 0) return;
-    onSend(t, attachments);
+    const body = text.trim();
+    if (!body && attachments.length === 0) return;
+    onSend(body, attachments);
     setText(''); setAttachments([]);
   };
 
@@ -150,6 +152,9 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); }
   };
 
+  const modes = MODE_IDS.filter((m) => m.id !== 'auto' || agent === 'claude');
+  const modeHint = t(`${MODE_IDS.find((m) => m.id === mode)?.key ?? 'composer.mode.default'}.hint`);
+
   return (
     <div className={`border-t border-white/10 p-3 ${dragging ? 'bg-blue-500/10' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
@@ -159,7 +164,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
             <div key={a.path} className="relative group" title={a.path}>
               {a.kind === 'image'
                 ? <img src={api.rawUrl(a.path)} alt={a.name} className="h-16 w-16 object-cover rounded-md border border-white/10" />
-                : <div className="h-16 px-3 flex items-center text-xs bg-white/5 rounded-md border border-white/10 max-w-[200px] truncate">📎 {a.name}</div>}
+                : <div className="h-16 px-3 flex items-center text-xs bg-white/5 rounded-md border border-white/10 max-w-50 truncate">📎 {a.name}</div>}
               <button className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-zinc-800 border border-white/20 text-[10px] opacity-0 group-hover:opacity-100"
                 onClick={() => setAttachments((l) => l.filter((x) => x.path !== a.path))}>✕</button>
             </div>
@@ -176,36 +181,36 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
                 <span className="font-mono truncate">{h.rel}</span>
               </div>
             ))}
-            <div className="px-3 pt-1 text-[10px] text-zinc-600">@file: Tab / Enter inserts the path and attaches it · Esc to dismiss</div>
+            <div className="px-3 pt-1 text-[10px] text-zinc-600">{t('composer.mentionHint')}</div>
           </div>
         )}
         {cmdHits.length > 0 && (
-          <div className="absolute bottom-full left-2 mb-1 w-[360px] max-w-[90%] rounded-lg border border-white/10 bg-[#171a22] shadow-xl py-1 text-[13px] z-10">
+          <div className="absolute bottom-full left-2 mb-1 w-90 max-w-[90%] rounded-lg border border-white/10 bg-[#171a22] shadow-xl py-1 text-[13px] z-10">
             {cmdHits.map((c, i) => (
               <div key={c} onMouseEnter={() => setCmdIdx(i)} onMouseDown={(e) => { e.preventDefault(); setText(c + ' '); }}
                 className={`px-3 py-1 font-mono cursor-pointer ${i === cmdIdx ? 'bg-blue-500/20 text-white' : 'text-zinc-300'}`}>{c}</div>
             ))}
-            <div className="px-3 pt-1 text-[10px] text-zinc-600">Tab / Enter to complete · Esc to dismiss</div>
+            <div className="px-3 pt-1 text-[10px] text-zinc-600">{t('composer.cmdHint')}</div>
           </div>
         )}
         <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart ?? e.target.value.length); }} onPaste={onPaste}
           onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)} onClick={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)} onKeyUp={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
           disabled={disabled} onKeyDown={onKeyDown}
-          placeholder={disabled ? 'Start a session first' : running ? 'Type to queue or steer the running turn…' : 'Message…  (Enter to send · Shift+Enter newline · "/" commands · "@" files · drop or paste)'}
-          className="w-full bg-transparent px-4 pt-3 pb-2 text-[14px] outline-none resize-none min-h-[44px]" rows={1} />
+          placeholder={disabled ? t('composer.startFirst') : running ? t('composer.queueHint') : t('composer.placeholder')}
+          className="w-full bg-transparent px-4 pt-3 pb-2 text-[14px] outline-none resize-none min-h-11" rows={1} />
         <div className="flex items-center gap-2 px-2 pb-2">
           <select value={mode} onChange={(e) => onMode(e.target.value as PermissionModeId)} disabled={disabled}
-            className="bg-white/5 rounded-md text-xs px-2 py-1 outline-none" title={MODES.find((m) => m.id === mode)?.hint}>
-            {MODES.filter((m) => m.id !== 'auto' || agent === 'claude').map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            className="bg-white/5 rounded-md text-xs px-2 py-1 outline-none" title={modeHint}>
+            {modes.map((m) => <option key={m.id} value={m.id}>{t(m.key)}</option>)}
           </select>
           <label className="text-xs text-zinc-400 hover:text-white cursor-pointer px-2">
-            📎 Attach
+            📎 {t('composer.attach')}
             <input type="file" multiple className="hidden" onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
           </label>
-          {uploading && <span className="text-xs text-zinc-500">Uploading…</span>}
+          {uploading && <span className="text-xs text-zinc-500">{t('composer.uploading')}</span>}
           <div className="flex-1" />
-          {running && <button className="rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs px-3 py-1.5" onClick={onStop}>■ Stop</button>}
-          <button className="rounded-md bg-blue-500/30 hover:bg-blue-500/40 text-xs px-3 py-1.5 disabled:opacity-40" disabled={disabled || (!text.trim() && !attachments.length)} onClick={submit}>{running ? 'Queue ⏎' : 'Send ⏎'}</button>
+          {running && <button className="rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs px-3 py-1.5" onClick={onStop}>{t('composer.stop')}</button>}
+          <button className="rounded-md bg-blue-500/30 hover:bg-blue-500/40 text-xs px-3 py-1.5 disabled:opacity-40" disabled={disabled || (!text.trim() && !attachments.length)} onClick={submit}>{running ? t('composer.queue') : t('composer.send')}</button>
         </div>
       </div>
     </div>

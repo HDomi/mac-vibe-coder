@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type UsageSnapshot, type UsageWindow } from '../lib/api';
+import { t, useLang } from '../lib/i18n';
 
 export type ViewMode = 'ide' | 'agent';
 
@@ -14,10 +15,10 @@ function color(remain: number) {
 function resetLabel(ts: number | null) {
   if (!ts) return '';
   const diff = ts * 1000 - Date.now();
-  if (diff <= 0) return 'reset';
+  if (diff <= 0) return t('usage.reset');
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
-  return h > 0 ? `resets in ${h}h ${m}m` : `resets in ${m}m`;
+  return h > 0 ? t('usage.resetsIn', { h, m }) : t('usage.resetsInM', { m });
 }
 
 /** Tiny battery: remaining % fills the cell from the left. */
@@ -25,7 +26,7 @@ function Battery({ label, win }: { label: string; win: UsageWindow | null }) {
   if (!win) return null;
   const remain = Math.max(0, 100 - win.usedPct);
   return (
-    <div className="flex items-center gap-1" title={`${label}: ${win.usedPct}% used · ${resetLabel(win.resetsAt)}`}>
+    <div className="flex items-center gap-1" title={t('usage.used', { label, pct: win.usedPct, reset: resetLabel(win.resetsAt) })}>
       <span className="text-[10px] text-zinc-500">{label}</span>
       <span className="relative inline-flex items-center">
         <span className="w-[18px] h-[9px] rounded-[2px] border border-zinc-500/80 p-px flex">
@@ -39,6 +40,7 @@ function Battery({ label, win }: { label: string; win: UsageWindow | null }) {
 }
 
 export default function UsageBar({ mode, onMode }: Props) {
+  useLang();
   const [u, setU] = useState<UsageSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -61,7 +63,7 @@ export default function UsageBar({ mode, onMode }: Props) {
         {(['ide', 'agent'] as ViewMode[]).map((m) => (
           <button key={m} onClick={() => onMode(m)}
             className={`px-3 py-0.5 rounded text-[11px] font-medium transition-colors ${mode === m ? 'bg-white/15 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
-            {m === 'ide' ? 'IDE' : 'Agent'}
+            {m === 'ide' ? t('usage.ide') : t('usage.agent')}
           </button>
         ))}
       </div>
@@ -71,7 +73,7 @@ export default function UsageBar({ mode, onMode }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-400 font-medium">Claude</span>
             <Battery label="5h" win={u.claude.fiveHour} />
-            <Battery label="wk" win={u.claude.weekly} />
+            <Battery label={t('usage.week')} win={u.claude.weekly} />
             {u.claude.model && <Battery label={u.claude.model.name.slice(0, 5)} win={u.claude.model} />}
           </div>
         )}
@@ -80,11 +82,11 @@ export default function UsageBar({ mode, onMode }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-400 font-medium">Codex</span>
             <Battery label="5h" win={u.codex.fiveHour} />
-            <Battery label="wk" win={u.codex.weekly} />
+            <Battery label={t('usage.week')} win={u.codex.weekly} />
           </div>
         )}
-        {u && !u.claude && !u.codex && <span className="text-zinc-600">No usage data{u.errors.length ? ` · ${u.errors[0]}` : ''}</span>}
-        <button className={`titlebar-nodrag text-zinc-600 hover:text-zinc-300 ${loading ? 'animate-spin' : ''}`} onClick={() => load(true)} title="Refresh usage">↻</button>
+        {u && !u.claude && !u.codex && <span className="text-zinc-600">{t('usage.noData')}{u.errors.length ? ` · ${u.errors[0]}` : ''}</span>}
+        <button className={`titlebar-nodrag text-zinc-600 hover:text-zinc-300 ${loading ? 'animate-spin' : ''}`} onClick={() => load(true)} title={t('usage.refresh')}>↻</button>
       </div>
     </div>
   );

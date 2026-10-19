@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
+import { t, useLang } from '../lib/i18n';
 
 interface Hit { path: string; rel: string; isDir: boolean }
 
@@ -12,6 +13,7 @@ interface Props {
 
 /** ⌘P: fuzzy file search inside the project. Enter opens, ⌘Enter attaches to chat. */
 export default function QuickOpen({ cwd, onClose, onOpen, onAttach }: Props) {
+  useLang();
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<Hit[]>([]);
   const [idx, setIdx] = useState(0);
@@ -40,7 +42,7 @@ export default function QuickOpen({ cwd, onClose, onOpen, onAttach }: Props) {
   return (
     <div className="absolute inset-0 z-30 bg-black/50 flex items-start justify-center pt-[12vh]" onClick={onClose}>
       <div className="w-[640px] max-w-[92vw] rounded-xl bg-[#12151c] border border-white/10 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="Search files in project…  (Enter: preview · ⌘Enter: attach to chat)"
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder={t('quickopen.placeholder')}
           className="w-full bg-transparent px-4 py-3 text-sm outline-none border-b border-white/10" />
         <div ref={listRef} className="max-h-[50vh] overflow-y-auto py-1">
           {hits.map((h, i) => (
@@ -48,11 +50,11 @@ export default function QuickOpen({ cwd, onClose, onOpen, onAttach }: Props) {
               className={`px-4 py-1.5 text-sm flex items-center gap-2 cursor-pointer ${i === idx ? 'bg-blue-500/20' : ''}`}>
               <span>{h.isDir ? '📁' : '📄'}</span>
               <span className="truncate flex-1 font-mono text-[13px]">{h.rel}</span>
-              {i === idx && !h.isDir && <button className="text-[10px] text-zinc-400 hover:text-white" onClick={(e) => { e.stopPropagation(); onAttach(h); onClose(); }}>attach</button>}
+              {i === idx && !h.isDir && <button className="text-[10px] text-zinc-400 hover:text-white" onClick={(e) => { e.stopPropagation(); onAttach(h); onClose(); }}>{t('quickopen.attach')}</button>}
             </div>
           ))}
-          {!loading && hits.length === 0 && <div className="px-4 py-3 text-xs text-zinc-500">No matches</div>}
-          {loading && hits.length === 0 && <div className="px-4 py-3 text-xs text-zinc-500">Searching…</div>}
+          {!loading && hits.length === 0 && <div className="px-4 py-3 text-xs text-zinc-500">{t('quickopen.noMatches')}</div>}
+          {loading && hits.length === 0 && <div className="px-4 py-3 text-xs text-zinc-500">{t('quickopen.searching')}</div>}
         </div>
       </div>
     </div>

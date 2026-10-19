@@ -113,19 +113,38 @@ ipcMain.handle('login-item', (_e, enable: boolean | null) => {
   return app.getLoginItemSettings().openAtLogin;
 });
 
+type Lang = 'en' | 'ko';
+let language: Lang = 'en';
+const LANGS: { id: Lang; label: string }[] = [{ id: 'en', label: 'English' }, { id: 'ko', label: '한국어' }];
+
+function setLanguage(lang: Lang) {
+  if (lang !== 'en' && lang !== 'ko') return;
+  language = lang;
+  buildMenu();
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send('language', lang);
+}
+
 function buildMenu() {
   // An explicit menu gives the renderer the standard Edit shortcuts (Cmd+C/V/X/A) and
   // avoids the macOS "representedObject is not a WeakPtrToElectronMenuModelAsNSObject" noise.
+  const languageMenu: Electron.MenuItemConstructorOptions = {
+    label: language === 'ko' ? '언어' : 'Language',
+    submenu: LANGS.map((l) => ({ label: l.label, type: 'radio' as const, checked: language === l.id, click: () => setLanguage(l.id) })),
+  };
   const template: Electron.MenuItemConstructorOptions[] = [
     { role: 'appMenu' },
     { role: 'fileMenu' },
     { role: 'editMenu' },
     { role: 'viewMenu' },
+    languageMenu,
     { role: 'windowMenu' },
     { role: 'help', submenu: [{ label: 'Repository', click: () => { void shell.openExternal('https://github.com/HDomi/mac-vibe-coder'); } }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
+
+// The renderer reports its persisted language on load so the menu checkmark matches.
+ipcMain.on('language', (_e, lang: Lang) => { if (lang !== language) setLanguage(lang); });
 
 app.whenReady().then(async () => {
   app.dock?.setIcon(APP_ICON);

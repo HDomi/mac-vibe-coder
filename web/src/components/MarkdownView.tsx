@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
 import { api } from '../lib/api';
+import { t, useLang } from '../lib/i18n';
 
 interface Props {
   text: string;
@@ -37,11 +38,12 @@ export function openLocalFile(path: string) {
 }
 
 export function CopyButton({ text, className }: { text: string; className?: string }) {
+  useLang();
   const [done, setDone] = useState(false);
   return (
     <button className={`text-[10px] rounded px-1.5 py-0.5 bg-white/10 hover:bg-white/20 text-zinc-300 ${className ?? ''}`}
       onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1200); }); }}>
-      {done ? 'Copied' : 'Copy'}
+      {done ? t('common.copied') : t('common.copy')}
     </button>
   );
 }

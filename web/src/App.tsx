@@ -13,6 +13,7 @@ import GitPanel from './components/GitPanel';
 import Splitter, { usePaneWidth } from './components/Splitter';
 import { ContextMenuProvider, useContextMenu } from './components/ContextMenu';
 import QuickOpen from './components/QuickOpen';
+import { t, useLang } from './lib/i18n';
 
 const LS_CWD = 'vibe.cwd';
 const LS_PROJECT = 'vibe.project';
@@ -31,6 +32,7 @@ export default function App() {
 }
 
 function AppInner() {
+  useLang();
   const menu = useContextMenu();
   const [home, setHome] = useState<HomeInfo | null>(null);
   const [favorites, setFavorites] = useState<Favorites>({ favorites: [], groups: [] });
@@ -105,7 +107,7 @@ function AppInner() {
   };
   const pickFolder = async () => {
     if (window.vibe?.pickFolder) { const p = await window.vibe.pickFolder(); if (p) openProject(p); }
-    else { const p = window.prompt('Folder path', listing?.path ?? '~'); if (p) openProject(p); }
+    else { const p = window.prompt(t('app.folderPathPrompt'), listing?.path ?? '~'); if (p) openProject(p); }
   };
   const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActiveSession);
   const resumeSession = (s: RecentSession) => {
@@ -118,7 +120,7 @@ function AppInner() {
     if (!session && project) setActiveSession(null);
   };
 
-  const rightTabs = [['files', 'Files'], ['preview', 'Preview'], ['terminal', 'Terminal'], ['git', 'Git']] as const;
+  const rightTabs = [['files', t('app.tab.files')], ['preview', t('app.tab.preview')], ['terminal', t('app.tab.terminal')], ['git', t('app.tab.git')]] as const;
 
   // Global keyboard shortcuts.
   useEffect(() => {
@@ -132,7 +134,7 @@ function AppInner() {
       else if (k === 'j') { e.preventDefault(); setRightCollapsed((v) => !v); }
       else if (k === 'k') { e.preventDefault(); window.dispatchEvent(new Event('vibe:focus-composer')); }
       else if (k === 'n' && !e.shiftKey) { e.preventDefault(); if (view === 'agent') setAgentActive('new'); else if (project) setActiveSession('new'); }
-      else if (k === 'w') { e.preventDefault(); if (session && !(session.status === 'running' && !window.confirm('Session is running. Close it?'))) { S.close(session.id); setActiveSession(null); } }
+      else if (k === 'w') { e.preventDefault(); if (session && !(session.status === 'running' && !window.confirm(t('app.confirmCloseRunning')))) { S.close(session.id); setActiveSession(null); } }
       else if (k === '/') { e.preventDefault(); setShowTools(true); }
       else if (['1', '2', '3', '4'].includes(e.key) && !inText) { e.preventDefault(); setRightTab(rightTabs[Number(e.key) - 1][0]); setRightCollapsed(false); }
     };
@@ -162,10 +164,10 @@ function AppInner() {
                       className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 whitespace-nowrap ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
                       {s.agent === 'codex' ? 'Codex' : 'Claude'}
-                      <span className="text-zinc-500">{(s.items.find((i) => i.kind === 'user') as { text?: string } | undefined)?.text?.slice(0, 18) ?? 'new'}</span>
+                      <span className="text-zinc-500">{(s.items.find((i) => i.kind === 'user') as { text?: string } | undefined)?.text?.slice(0, 18) ?? t('common.new')}</span>
                     </button>
                   ))}
-                  <button className="px-2 py-1 text-zinc-400 hover:text-white" onClick={() => setActiveSession('new')} title="New session">＋</button>
+                  <button className="px-2 py-1 text-zinc-400 hover:text-white" onClick={() => setActiveSession('new')} title={t('app.newSession')}>＋</button>
                 </div>
               )}
               <div className="flex-1 min-h-0">
@@ -184,7 +186,7 @@ function AppInner() {
             {!rightCollapsed && <Splitter onStart={() => setDragging(true)} onEnd={() => setDragging(false)} onDrag={(dx) => right.setWidth(right.width - dx)} />}
             {rightCollapsed && (
               <div className="w-9 shrink-0 flex flex-col items-center border-l border-white/10 bg-[#0e1117] py-2 gap-1">
-                <button className="w-7 h-7 rounded hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(false)} title="Expand panel">«</button>
+                <button className="w-7 h-7 rounded hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(false)} title={t('app.expandPanel')}>«</button>
                 {rightTabs.map(([t, label]) => (
                   <button key={t} title={label} onClick={() => { setRightTab(t); setRightCollapsed(false); }}
                     className={`w-7 h-7 rounded text-[10px] ${rightTab === t ? 'bg-white/15 text-white' : 'text-zinc-500 hover:bg-white/10'}`}>{label.slice(0, 1)}</button>
@@ -199,17 +201,17 @@ function AppInner() {
                   ))}
                 </div>
                 {project && (
-                  <button className="shrink-0 self-center mr-1 px-2 py-1 rounded text-zinc-400 hover:text-white hover:bg-white/5" title="Open project in…"
+                  <button className="shrink-0 self-center mr-1 px-2 py-1 rounded text-zinc-400 hover:text-white hover:bg-white/5" title={t('app.openProjectIn')}
                     onClick={(e) => menu.open(e, [
-                      { label: 'Open in Terminal', onClick: () => api.open(project, 'terminal').catch(() => {}) },
-                      { label: 'Reveal in Finder', onClick: () => api.open(project, 'finder').catch(() => {}) },
-                      { label: 'Open in VS Code', onClick: () => api.open(project, 'vscode').catch(() => {}) },
-                      { label: 'Open in Cursor', onClick: () => api.open(project, 'cursor').catch(() => {}) },
+                      { label: t('common.openInTerminal'), onClick: () => api.open(project, 'terminal').catch(() => {}) },
+                      { label: t('common.revealInFinder'), onClick: () => api.open(project, 'finder').catch(() => {}) },
+                      { label: t('common.openInVSCode'), onClick: () => api.open(project, 'vscode').catch(() => {}) },
+                      { label: t('common.openInCursor'), onClick: () => api.open(project, 'cursor').catch(() => {}) },
                       { separator: true },
-                      { label: 'Copy Path', onClick: () => navigator.clipboard.writeText(project) },
-                    ])}>Open ▾</button>
+                      { label: t('common.copyPath'), onClick: () => navigator.clipboard.writeText(project) },
+                    ])}>{t('app.openMenu')}</button>
                 )}
-                <button className="shrink-0 self-center w-7 h-7 mr-1 rounded hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(true)} title="Collapse panel (⌘J)">»</button>
+                <button className="shrink-0 self-center w-7 h-7 mr-1 rounded hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(true)} title={t('app.collapsePanel')}>»</button>
               </div>
               <div className="flex-1 min-h-0 relative" style={{ minWidth: right.width }}>
                 <div className={`absolute inset-0 ${rightTab === 'files' ? '' : 'invisible'}`}>
@@ -237,6 +239,7 @@ function AppInner() {
 
 /** Agent mode: free conversation not tied to a project. Left: live sessions; center: chat / all previous conversations. */
 function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType<typeof useSessions>; active: string | 'new' | null; setActive: (v: string | 'new' | null) => void }) {
+  useLang();
   const live = Object.values(S.sessions);
   const session = active && active !== 'new' ? S.sessions[active] ?? null : null;
   const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActive);
@@ -244,19 +247,19 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
     <div className="flex-1 flex min-h-0 relative">
       <aside className="w-64 shrink-0 h-full flex flex-col border-r border-white/10 bg-[#0e1117]">
         <div className="h-10 flex items-center px-3 text-xs text-zinc-500">
-          <span className="font-medium text-zinc-400">Agent</span>
+          <span className="font-medium text-zinc-400">{t('app.agent')}</span>
           <div className="flex-1" />
-          <button className="px-2 py-1 rounded hover:bg-white/10 text-zinc-300" onClick={() => setActive('new')} title="New conversation (⌘N)">＋ New</button>
+          <button className="px-2 py-1 rounded hover:bg-white/10 text-zinc-300" onClick={() => setActive('new')} title={t('app.newConversation')}>{t('app.newBtn')}</button>
         </div>
         <div className="flex-1 overflow-y-auto px-2 py-1">
-          <div className="px-2 mb-1 text-[11px] uppercase tracking-wider text-zinc-500">Open sessions</div>
-          {live.length === 0 && <div className="px-2 text-xs text-zinc-600">Nothing open. Start a new conversation or resume one from the list.</div>}
+          <div className="px-2 mb-1 text-[11px] uppercase tracking-wider text-zinc-500">{t('app.openSessions')}</div>
+          {live.length === 0 && <div className="px-2 text-xs text-zinc-600">{t('app.nothingOpen')}</div>}
           {live.map((s) => (
             <div key={s.id} onClick={() => setActive(s.id)}
               className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}>
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
               <span className={`text-[10px] rounded px-1 ${s.agent === 'codex' ? 'bg-emerald-500/15 text-emerald-200' : 'bg-blue-500/15 text-blue-200'}`}>{s.agent}</span>
-              <span className="truncate flex-1">{(s.items.find((i) => i.kind === 'user') as { text?: string } | undefined)?.text?.slice(0, 40) ?? 'new'}</span>
+              <span className="truncate flex-1">{(s.items.find((i) => i.kind === 'user') as { text?: string } | undefined)?.text?.slice(0, 40) ?? t('common.new')}</span>
               <span className="text-[10px] text-zinc-600 truncate max-w-[70px]" title={s.cwd}>{s.cwd.split('/').pop()}</span>
             </div>
           ))}
