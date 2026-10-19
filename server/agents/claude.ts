@@ -62,6 +62,9 @@ export class ClaudeSession implements AgentSession {
   private pending = new Map<string, Pending>();
   private abort = new AbortController();
   private closed = false;
+  private running = false;
+  /** Incremented on every (re)launch so a superseded pump does not report 'closed'. */
+  private generation = 0;
 
   constructor(private opts: ClaudeSessionOptions) {
     this.cwd = opts.cwd;
@@ -77,13 +80,17 @@ export class ClaudeSession implements AgentSession {
     for (const l of this.listeners) l(e);
   }
 
-  start() {
+  start() { this.launch(); }
+
+  private launch() {
+    const gen = ++this.generation;
     const options: Options = {
       cwd: this.opts.cwd,
       pathToClaudeCodeExecutable: this.opts.claudePath,
       resume: this.opts.resume,
       permissionMode: this.opts.permissionMode ?? 'default',
-      allowDangerouslySkipPermissions: this.opts.permissionMode === 'bypassPermissions',
+      // Required for switching to bypassPermissions mid-session via setPermissionMode(); the user picks it explicitly in the UI.
+      allowDangerouslySkipPermissions: true,
       // Match `claude` CLI behaviour: the SDK's default system prompt is a minimal tool-calling
       // prompt, not Claude Code's. The preset restores the full prompt (coding guidance, safety rules).
       // settingSources is left at its default, which loads user/project/local settings and CLAUDE.md.
@@ -99,7 +106,7 @@ export class ClaudeSession implements AgentSession {
     };
     this.q = query({ prompt: this.input, options });
     this.emit({ kind: 'session.init', sessionId: this.id, agent: 'claude', cwd: this.cwd, permissionMode: options.permissionMode, agentSessionId: this.agentSessionId });
-    void this.pump();
+    void this.pump(this.q, gen);
     // The system/init message (and its slash_commands) only arrives with the first turn.
     // Ask over the control channel so "/" autocomplete works before anything is sent.
     void this.q.supportedCommands()
@@ -110,12 +117,13 @@ export class ClaudeSession implements AgentSession {
       .catch((err) => this.emit({ kind: 'log', text: `supportedCommands failed: ${(err as Error).message}` }));
   }
 
-  private async pump() {
+  private async pump(q: Query, gen: number) {
     try {
-      for await (const m of this.q!) this.handleMessage(m);
+      for await (const m of q) { if (gen !== this.generation) break; this.handleMessage(m); }
     } catch (err) {
-      if (!this.closed) this.emit({ kind: 'error', message: (err as Error).message ?? String(err) });
+      if (!this.closed && gen === this.generation) this.emit({ kind: 'error', message: (err as Error).message ?? String(err) });
     } finally {
+      if (gen !== this.generation) return; // superseded by a relaunch; the new pump owns the session
       this.closed = true;
       for (const [id, p] of this.pending) {
         p.resolve({ behavior: 'deny', message: 'Session closed' });
@@ -124,6 +132,31 @@ export class ClaudeSession implements AgentSession {
       this.pending.clear();
       this.emit({ kind: 'status', status: 'closed' });
     }
+  }
+
+  /**
+   * Restart the CLI process with a different launch-time permission mode, resuming the same
+   * conversation. Needed for bypassPermissions, which the CLI only accepts at launch.
+   */
+  private async relaunch(mode: PermissionModeId) {
+    const old = this.q;
+    this.generation++; // detach the old pump before tearing the process down
+    this.input.close();
+    for (const [id, p] of this.pending) {
+      p.resolve({ behavior: 'deny', message: 'Permission mode changed; please retry' });
+      this.emit({ kind: 'approval.resolved', requestId: id, decision: 'cancelled' });
+    }
+    this.pending.clear();
+    try { await old?.interrupt(); } catch { /* ignore */ }
+    this.abort.abort();
+    try { old?.close(); } catch { /* ignore */ }
+    this.input = new InputQueue();
+    this.abort = new AbortController();
+    this.opts = { ...this.opts, permissionMode: mode, resume: this.agentSessionId };
+    this.running = false;
+    this.closed = false;
+    this.launch();
+    this.emit({ kind: 'status', status: 'idle', permissionMode: mode });
   }
 
   private handleMessage(m: SDKMessage) {
@@ -183,6 +216,7 @@ export class ClaudeSession implements AgentSession {
           text: ok ? (m as { result: string }).result : (m as { errors?: string[] }).errors?.join('\n') ?? m.subtype,
           costUsd: m.total_cost_usd, numTurns: m.num_turns, durationMs: m.duration_ms, agentSessionId: m.session_id,
         });
+        this.running = false;
         this.emit({ kind: 'status', status: 'idle' });
         return;
       }
@@ -250,6 +284,7 @@ export class ClaudeSession implements AgentSession {
     if (mentions.length) body += `\n\nAttached file paths:\n${mentions.map((p) => `- ${p}`).join('\n')}`;
     content.push({ type: 'text', text: body });
     this.emit({ kind: 'user', text, attachments });
+    this.running = true;
     this.emit({ kind: 'status', status: 'running' });
     this.input.push({ type: 'user', message: { role: 'user', content: content as never }, parent_tool_use_id: null });
   }
@@ -264,8 +299,15 @@ export class ClaudeSession implements AgentSession {
   }
 
   async setPermissionMode(mode: PermissionModeId) {
-    await this.q?.setPermissionMode(mode);
-    this.emit({ kind: 'status', status: 'idle', permissionMode: mode });
+    try {
+      await this.q?.setPermissionMode(mode);
+      this.emit({ kind: 'status', status: this.running ? 'running' : 'idle', permissionMode: mode });
+    } catch (err) {
+      const msg = (err as Error).message ?? String(err);
+      // The CLI only accepts bypassPermissions as a launch-time flag: relaunch and resume.
+      if (/dangerously-skip-permissions/i.test(msg) || mode === 'bypassPermissions') { await this.relaunch(mode); return; }
+      this.emit({ kind: 'error', message: `Could not change permission mode: ${msg}` });
+    }
   }
 
   async close() {
