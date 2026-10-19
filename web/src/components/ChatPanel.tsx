@@ -290,7 +290,8 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         </div>
       )}
       <Composer cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
-        onSend={onSend} onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments} />
+        onSend={(text, atts) => { stick.current = true; setAtBottom(true); onSend(text, atts); requestAnimationFrame(scrollToBottom); }}
+        onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments} />
     </div>
   );
 }
