@@ -1,7 +1,7 @@
 {
   "name": "mac-vibe-coder",
   "productName": "Mac Vibe Coder",
-  "version": "0.3.19",
+  "version": "0.3.20",
   "private": true,
   "type": "module",
   "main": "dist/electron/main.cjs",
@@ -16,7 +16,7 @@
     "start": "npm run build && env -u ELECTRON_RUN_AS_NODE electron .",
     "serve": "tsx server/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
-    "test": "tsx --tsconfig web/tsconfig.json --test tests/*.test.ts tests/*.test.tsx",
+    "test": "LC_ALL=en_US.UTF-8 tsx --tsconfig web/tsconfig.json --test tests/*.test.ts tests/*.test.tsx",
     "test:ui": "env -u ELECTRON_RUN_AS_NODE electron tests/smoke-ui.cjs",
     "app": "env -u ELECTRON_RUN_AS_NODE electron .",
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true; scripts/brand-electron.sh || true",

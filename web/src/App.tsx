@@ -60,6 +60,11 @@ function AppInner() {
   const sidebar = usePaneWidth('vibe.w.sidebar', 256, 180, 480);
   const right = usePaneWidth('vibe.w.right', 420, 280, 1200);
   const S = useSessions();
+  // A session revived after a server restart gets a new id; keep it selected.
+  useEffect(() => {
+    if (activeSession && S.replaced[activeSession]) setActiveSession(S.replaced[activeSession]);
+    if (agentActive && S.replaced[agentActive]) setAgentActive(S.replaced[agentActive]);
+  }, [S.replaced, activeSession, agentActive]);
 
   useEffect(() => {
     api.home().then(setHome).catch(() => {});

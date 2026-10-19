@@ -48,6 +48,9 @@ export class SessionRegistry {
 
   get(id: string) { return this.entries.get(id)?.session; }
 
+  /** Sessions in the middle of a turn; restarting now would cut that turn off. */
+  runningCount() { return [...this.entries.values()].filter((e) => !e.closed && e.running).length; }
+
   async start(cmd: Extract<ClientCommand, { type: 'session.start' }>, ws: WebSocket): Promise<AgentSession> {
     if (this.closing) throw new Error('Server is shutting down');
     let session: ClaudeSession | CodexSession;

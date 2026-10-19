@@ -232,7 +232,7 @@ const en: Record<string, string> = {
   'update.ahead': ' · {n} ahead',
   'update.upToDate': 'Up to date.',
   'update.apply': 'Apply update',
-  'update.force': 'Force (ignore active sessions)',
+  'update.force': 'Stop running work and update',
   'update.reinstall': 'Reinstall latest',
   'update.reinstallHint': 'Clone, build and swap in the pushed version even if it looks up to date',
   'update.reinstallConfirm': 'Reinstall v{v} from the git remote? This rebuilds and restarts the app.',
@@ -300,6 +300,7 @@ const en: Record<string, string> = {
   'notif.question': 'Question',
   'notif.waiting': 'The agent is waiting for your answer',
   'session.lost': 'The server restarted and this session was lost. Resume it from the session list.',
+  'session.revived': 'The server restarted; reconnected to this conversation.',
 };
 
 const ko: Record<string, string> = {
@@ -519,7 +520,7 @@ const ko: Record<string, string> = {
   'update.ahead': ' · {n}개 앞섬',
   'update.upToDate': '최신 상태입니다.',
   'update.apply': '업데이트 적용',
-  'update.force': '강제 실행 (활성 세션 무시)',
+  'update.force': '실행 중인 작업 중단하고 업데이트',
   'update.reinstall': '최신 버전으로 재설치',
   'update.reinstallHint': '최신 상태로 보여도 푸시된 버전을 다시 받아 빌드하고 교체합니다',
   'update.reinstallConfirm': 'v{v}을(를) git 원격에서 다시 설치하시겠습니까? 다시 빌드하고 앱을 재시작합니다.',
@@ -581,6 +582,7 @@ const ko: Record<string, string> = {
   'notif.question': '질문',
   'notif.waiting': '에이전트가 답변을 기다리고 있습니다',
   'session.lost': '서버가 재시작되어 세션이 끊겼습니다. 세션 목록에서 다시 이어가 주세요.',
+  'session.revived': '서버가 재시작되어 이 대화에 다시 연결했습니다.',
 };
 
 const dict: Record<Lang, Record<string, string>> = { en, ko };

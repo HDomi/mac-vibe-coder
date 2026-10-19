@@ -324,8 +324,9 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
       await stream.writeSSE({ event: 'done', data: '1' });
       return;
     }
-    if (registry && registry.list().length > 0 && c.req.query('force') !== '1') {
-      await stream.writeSSE({ event: 'stderr', data: 'Active sessions exist; update deferred. Close them or force.' });
+    // Idle sessions are closed on restart and the client resumes them; only an in-flight turn would be lost.
+    if (registry && registry.runningCount() > 0 && c.req.query('force') !== '1') {
+      await stream.writeSSE({ event: 'stderr', data: 'A session is still working; update deferred. Wait for it to finish or force.' });
       await stream.writeSSE({ event: 'done', data: '1' });
       return;
     }

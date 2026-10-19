@@ -21,13 +21,20 @@ export function requestNotificationPermission() {
   if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission();
 }
 
-interface Persisted { id: string; cwd: string; agent: AgentId; agentSessionId?: string }
+interface Persisted { id: string; cwd: string; agent: AgentId; agentSessionId?: string; permissionMode?: PermissionModeId; model?: string }
+interface PendingStart { cwd: string; resolve: (id: string) => void; reject: (err: Error) => void; preload: ChatItem[]; replaces?: string }
+/** A revived session that goes missing again this soon is reported lost instead of looping. */
+const REVIVE_COOLDOWN_MS = 30000;
 
 export function useSessions() {
   const [sessions, setSessions] = useState<Record<string, ChatSession>>({});
   const sessionsRef = useRef(sessions);
   useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
-  const pendingStart = useRef(new Map<string, { cwd: string; resolve: (id: string) => void; reject: (err: Error) => void; preload: ChatItem[] }>());
+  const pendingStart = useRef(new Map<string, PendingStart>());
+  /** Old session id -> the id that replaced it after the server restarted. Views follow this to keep their selection. */
+  const [replaced, setReplaced] = useState<Record<string, string>>({});
+  const reviving = useRef(new Set<string>());
+  const revivedAt = useRef(new Map<string, number>());
 
   useEffect(() => {
     const off = agentClient.on((m: ServerMessage) => {
@@ -47,21 +54,34 @@ export function useSessions() {
         if (m.type === 'session.started') {
           const p = m.requestId ? pendingStart.current.get(m.requestId) : undefined;
           if (m.requestId) pendingStart.current.delete(m.requestId);
-          setSessions((prev) => ({
-            ...prev,
-            [m.sessionId]: {
-              id: m.sessionId, agent: m.agent ?? 'claude', cwd: m.requestCwd, permissionMode: 'default', status: 'starting',
-              items: p?.preload ?? [], totalCostUsd: 0, lastSeq: 0,
-            },
-          }));
+          const fresh: ChatSession = {
+            id: m.sessionId, agent: m.agent ?? 'claude', cwd: m.requestCwd, permissionMode: 'default', status: 'starting',
+            items: p?.preload ?? [], totalCostUsd: 0, lastSeq: 0,
+          };
+          const old = p?.replaces;
+          setSessions((prev) => {
+            const was = old ? prev[old] : undefined;
+            if (!old || !was) return { ...prev, [m.sessionId]: fresh };
+            // Keep the tab where it was and the conversation on screen; history replay (Claude) wins when available.
+            const items = fresh.items.length ? fresh.items : was.items.filter((it) => !it.id.startsWith('gone-')).map((it) =>
+              it.kind === 'assistant' ? { ...it, streaming: false } : it.kind === 'tool' ? { ...it, done: true } : it);
+            const revived: ChatSession = { ...fresh, permissionMode: was.permissionMode, model: was.model, agentSessionId: was.agentSessionId, items: [...items, { kind: 'system', id: `revived-${m.sessionId}`, text: t('session.revived') }] };
+            return Object.fromEntries(Object.entries(prev).map(([k, v]) => k === old ? [m.sessionId, revived] : [k, v]));
+          });
+          if (old) {
+            revivedAt.current.set(m.sessionId, Date.now());
+            setReplaced((r) => ({ ...r, [old]: m.sessionId }));
+          }
           p?.resolve(m.sessionId);
         } else if (m.type === 'session.missing') {
-          setSessions((prev) => {
-            const s = prev[m.sessionId];
-            if (!s) return prev;
-            const closed = reduceEvent(s, { kind: 'status', status: 'closed' }, 0);
-            return { ...prev, [m.sessionId]: { ...closed, items: [...closed.items, { kind: 'system', id: `gone-${m.sessionId}`, text: t('session.lost') }] } };
-          });
+          const s = sessionsRef.current[m.sessionId];
+          if (!s || reviving.current.has(s.id)) return;
+          if (Date.now() - (revivedAt.current.get(s.id) ?? 0) < REVIVE_COOLDOWN_MS) { markLost(s.id); return; }
+          // The server restarted (update, app relaunch): start the same conversation again instead of leaving a dead tab.
+          reviving.current.add(s.id);
+          startRef.current(s.cwd, { agent: s.agent, resume: s.agentSessionId, permissionMode: s.permissionMode, model: s.model, replaces: s.id })
+            .catch(() => markLost(s.id))
+            .finally(() => reviving.current.delete(s.id));
         }
         return;
       }
@@ -83,28 +103,36 @@ export function useSessions() {
     if (!saved.length) return;
     setSessions((prev) => {
       const next = { ...prev };
-      for (const p of saved) if (!next[p.id]) next[p.id] = { id: p.id, agent: p.agent, cwd: p.cwd, agentSessionId: p.agentSessionId, permissionMode: 'default', status: 'idle', items: [], totalCostUsd: 0, lastSeq: 0 };
+      for (const p of saved) if (!next[p.id]) next[p.id] = { id: p.id, agent: p.agent, cwd: p.cwd, agentSessionId: p.agentSessionId, permissionMode: p.permissionMode ?? 'default', model: p.model, status: 'idle', items: [], totalCostUsd: 0, lastSeq: 0 };
       return next;
     });
     agentClient.ready.then(() => { for (const p of saved) agentClient.send({ type: 'session.attach', sessionId: p.id }); });
   }, []);
 
   useEffect(() => {
-    const list: Persisted[] = Object.values(sessions).filter((s) => s.status !== 'closed').map((s) => ({ id: s.id, cwd: s.cwd, agent: s.agent, agentSessionId: s.agentSessionId }));
+    const list: Persisted[] = Object.values(sessions).filter((s) => s.status !== 'closed').map((s) => ({ id: s.id, cwd: s.cwd, agent: s.agent, agentSessionId: s.agentSessionId, permissionMode: s.permissionMode, model: s.model }));
     try { localStorage.setItem(LS_ACTIVE, JSON.stringify(list)); } catch { /* ignore */ }
   }, [sessions]);
 
-  const start = useCallback(async (cwd: string, opts: { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null } = {}) => {
+  const markLost = (id: string) => setSessions((prev) => {
+    const s = prev[id];
+    if (!s) return prev;
+    const closed = reduceEvent(s, { kind: 'status', status: 'closed' }, 0);
+    return { ...prev, [id]: { ...closed, items: [...closed.items, { kind: 'system', id: `gone-${id}`, text: t('session.lost') }] } };
+  });
+
+  const start = useCallback(async (cwd: string, opts: { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null; replaces?: string } = {}) => {
     let preload: ChatItem[] = [];
     if (opts.resume && (opts.agent ?? 'claude') === 'claude') {
       try { preload = itemsFromHistory(await api.historyMessages(cwd, opts.resume)); } catch { /* history is optional */ }
     }
     return new Promise<string>((resolve, reject) => {
       const requestId = crypto.randomUUID();
-      pendingStart.current.set(requestId, { cwd, resolve, reject, preload });
+      pendingStart.current.set(requestId, { cwd, resolve, reject, preload, replaces: opts.replaces });
       agentClient.send({ type: 'session.start', requestId, agent: opts.agent ?? 'claude', cwd, resume: opts.resume, permissionMode: opts.permissionMode, model: opts.model ?? undefined });
     });
   }, []);
+  const startRef = useRef(start);
 
   const send = useCallback((sessionId: string, text: string, attachments: Attachment[]) => {
     // Show the message immediately; the server's echo confirms it (see reducer) instead of adding a duplicate.
@@ -129,5 +157,5 @@ export function useSessions() {
     setSessions((prev) => { const n = { ...prev }; delete n[sessionId]; return n; });
   }, []);
 
-  return { sessions, start, send, approve, answer, interrupt, setMode, setModel, close };
+  return { sessions, replaced, start, send, approve, answer, interrupt, setMode, setModel, close };
 }
