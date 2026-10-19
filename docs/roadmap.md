@@ -7,7 +7,8 @@
 | M2 Codex | app-server JSON-RPC 어댑터, 통합 이벤트 스키마, Codex 스레드 목록/재개 | 완료 |
 | M3 운영 | xterm.js PTY 탭, Terminal.app/Finder 열기, git pull 자동 업데이트 + 재시작, launchd 스크립트 | 완료 (launchd 설치는 미실행) |
 | M4 확장 | 프로젝트별 멀티 세션 탭, git 패널(status/diff/stage/commit/log), 백그라운드 알림 | 완료 |
-| 다음 | 코드 하이라이트(shiki), mermaid, 세션 이름 변경, Gemini CLI 어댑터, 외부 접근(Tailscale + 인증) | 미착수 |
+| M5 UX | 우클릭 컨텍스트 메뉴, 파일 브라우저 단축키/복사·붙여넣기/휴지통, 즐겨찾기 그룹, 패널 접기·드래그 분할, 모델 선택, 세션 이름 변경·삭제, 슬래시 커맨드 자동완성, 퀵오픈(⌘P), 코드 하이라이트·복사, 전역 단축키, 로그인 시 실행 토글 | 완료 |
+| 다음 | mermaid, Gemini CLI 어댑터, 외부 접근(Tailscale + 인증), 세션 검색 | 미착수 |
 
 ## 첨부 파일 동작 규칙
 

@@ -1,5 +1,6 @@
 {
   "name": "mac-vibe-coder",
+  "productName": "Mac Vibe Coder",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,7 +17,8 @@
     "serve": "tsx server/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
     "app": "env -u ELECTRON_RUN_AS_NODE electron .",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true"
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true; scripts/brand-electron.sh || true",
+    "brand": "scripts/brand-electron.sh"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.303",
@@ -40,6 +42,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.0.0",
+    "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.0",
     "tailwindcss": "^4.1.0",
     "tsx": "^4.19.0",

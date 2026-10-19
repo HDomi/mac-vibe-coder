@@ -11,7 +11,8 @@ import ChatPanel, { type StartOptions } from './components/ChatPanel';
 import TerminalPanel from './components/TerminalPanel';
 import GitPanel from './components/GitPanel';
 import Splitter, { usePaneWidth } from './components/Splitter';
-import { ContextMenuProvider } from './components/ContextMenu';
+import { ContextMenuProvider, useContextMenu } from './components/ContextMenu';
+import QuickOpen from './components/QuickOpen';
 
 const LS_CWD = 'vibe.cwd';
 const LS_PROJECT = 'vibe.project';
@@ -21,6 +22,15 @@ const LS_RIGHT = 'vibe.right.collapsed';
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
 
 export default function App() {
+  return (
+    <ContextMenuProvider>
+      <AppInner />
+    </ContextMenuProvider>
+  );
+}
+
+function AppInner() {
+  const menu = useContextMenu();
   const [home, setHome] = useState<HomeInfo | null>(null);
   const [favorites, setFavorites] = useState<Favorites>({ favorites: [], groups: [] });
   const [recent, setRecent] = useState<string[]>([]);
@@ -37,6 +47,7 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [quickOpen, setQuickOpen] = useState(false);
   const sidebar = usePaneWidth('vibe.w.sidebar', 256, 180, 480);
   const right = usePaneWidth('vibe.w.right', 420, 280, 1200);
   const S = useSessions();
@@ -105,8 +116,27 @@ export default function App() {
 
   const rightTabs = [['files', 'Files'], ['preview', 'Preview'], ['terminal', 'Terminal'], ['git', 'Git']] as const;
 
+  // Global keyboard shortcuts.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const k = e.key.toLowerCase();
+      const inText = (e.target as HTMLElement)?.closest?.('input, textarea, [contenteditable]');
+      if (k === 'p' && !e.shiftKey) { e.preventDefault(); if (project) setQuickOpen((v) => !v); }
+      else if (k === 'b') { e.preventDefault(); setCollapsed((v) => !v); }
+      else if (k === 'j') { e.preventDefault(); setRightCollapsed((v) => !v); }
+      else if (k === 'k') { e.preventDefault(); window.dispatchEvent(new Event('vibe:focus-composer')); }
+      else if (k === 'n' && !e.shiftKey) { e.preventDefault(); if (project) setActiveSession('new'); }
+      else if (k === 'w') { e.preventDefault(); if (session && !(session.status === 'running' && !window.confirm('Session is running. Close it?'))) { S.close(session.id); setActiveSession(null); } }
+      else if (k === '/') { e.preventDefault(); setShowTools(true); }
+      else if (['1', '2', '3', '4'].includes(e.key) && !inText) { e.preventDefault(); setRightTab(rightTabs[Number(e.key) - 1][0]); setRightCollapsed(false); }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [project, session, S]);
+
   return (
-    <ContextMenuProvider>
       <div className="h-full flex flex-col">
         <UsageBar />
         <div className="flex-1 flex min-h-0 relative">
@@ -155,18 +185,24 @@ export default function App() {
               </div>
             )}
             <div style={{ width: rightCollapsed ? 0 : right.width }} className={`shrink-0 flex flex-col min-w-0 overflow-hidden ${paneTransition}`}>
-              <div className="h-10 shrink-0 flex items-center border-b border-white/10 text-xs" style={{ minWidth: right.width }}>
-                {rightTabs.map(([t, label]) => (
-                  <button key={t} className={`px-3 h-full ${rightTab === t ? 'text-white border-b-2 border-blue-400' : 'text-zinc-500 hover:text-zinc-300'}`} onClick={() => setRightTab(t)}>{label}</button>
-                ))}
-                <div className="flex-1" />
+              <div className="h-10 shrink-0 flex items-stretch border-b border-white/10 text-xs" style={{ minWidth: right.width }}>
+                <div className="flex-1 min-w-0 flex items-stretch overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {rightTabs.map(([t, label]) => (
+                    <button key={t} className={`shrink-0 px-3 ${rightTab === t ? 'text-white border-b-2 border-blue-400' : 'text-zinc-500 hover:text-zinc-300'}`} onClick={() => setRightTab(t)}>{label}</button>
+                  ))}
+                </div>
                 {project && (
-                  <div className="flex items-center gap-1 pr-2">
-                    <button className="px-2 py-1 rounded text-zinc-400 hover:text-white hover:bg-white/5" title="Open in Terminal.app" onClick={() => api.open(project, 'terminal').catch(() => {})}>Terminal</button>
-                    <button className="px-2 py-1 rounded text-zinc-400 hover:text-white hover:bg-white/5" title="Reveal in Finder" onClick={() => api.open(project, 'finder').catch(() => {})}>Finder</button>
-                  </div>
+                  <button className="shrink-0 self-center mr-1 px-2 py-1 rounded text-zinc-400 hover:text-white hover:bg-white/5" title="Open project in…"
+                    onClick={(e) => menu.open(e, [
+                      { label: 'Open in Terminal', onClick: () => api.open(project, 'terminal').catch(() => {}) },
+                      { label: 'Reveal in Finder', onClick: () => api.open(project, 'finder').catch(() => {}) },
+                      { label: 'Open in VS Code', onClick: () => api.open(project, 'vscode').catch(() => {}) },
+                      { label: 'Open in Cursor', onClick: () => api.open(project, 'cursor').catch(() => {}) },
+                      { separator: true },
+                      { label: 'Copy Path', onClick: () => navigator.clipboard.writeText(project) },
+                    ])}>Open ▾</button>
                 )}
-                <button className="w-7 h-7 mr-1 rounded hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(true)} title="Collapse panel">»</button>
+                <button className="shrink-0 self-center w-7 h-7 mr-1 rounded hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(true)} title="Collapse panel (⌘J)">»</button>
               </div>
               <div className="flex-1 min-h-0 relative" style={{ minWidth: right.width }}>
                 <div className={`absolute inset-0 ${rightTab === 'files' ? '' : 'invisible'}`}>
@@ -181,8 +217,12 @@ export default function App() {
             </div>
           </main>
           {showTools && <ToolsPanel onClose={() => setShowTools(false)} />}
+          {quickOpen && project && (
+            <QuickOpen cwd={project} onClose={() => setQuickOpen(false)}
+              onOpen={(h) => { if (h.isDir) navigate(h.path); else api.stat(h.path).then((e) => { setSelected(e); setRightTab('preview'); setRightCollapsed(false); }).catch(() => {}); }}
+              onAttach={(h) => { if (!h.isDir) attach([{ path: h.path, name: h.rel.split('/').pop() ?? h.rel, isDir: false, size: 0, mtime: 0, ext: '', hidden: false, kind: 'binary' }]); }} />
+          )}
         </div>
       </div>
-    </ContextMenuProvider>
   );
 }

@@ -13,6 +13,25 @@ function methodsFor(t: ToolStatus, inst: ToolsInfo['installers']): string[] {
   return m;
 }
 
+function GeneralSettings() {
+  const [login, setLogin] = useState<boolean | null>(null);
+  useEffect(() => { window.vibe?.loginItem?.(null).then(setLogin).catch(() => {}); }, []);
+  return (
+    <div className="rounded-lg border border-white/10 p-4 space-y-3">
+      <div className="font-medium">General</div>
+      {window.vibe?.isElectron ? (
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={!!login} disabled={login === null} onChange={(e) => window.vibe!.loginItem(e.target.checked).then(setLogin)} />
+          Open at login
+        </label>
+      ) : <div className="text-xs text-zinc-500">Running in the browser. Open-at-login is available in the app.</div>}
+      <div className="text-xs text-zinc-500 leading-relaxed">
+        Shortcuts: ⌘N new session · ⌘W close session · ⌘K focus composer · ⌘P quick open · ⌘B sidebar · ⌘J right panel · ⌘1–4 right tabs · ⌘/ this help
+      </div>
+    </div>
+  );
+}
+
 export default function ToolsPanel({ onClose }: Props) {
   const [info, setInfo] = useState<ToolsInfo | null>(null);
   const [log, setLog] = useState<{ line: string; err: boolean }[]>([]);
@@ -42,12 +61,13 @@ export default function ToolsPanel({ onClose }: Props) {
     <div className="absolute inset-0 z-20 bg-black/60 flex items-center justify-center" onClick={onClose}>
       <div className="w-[720px] max-w-[92vw] max-h-[85vh] rounded-xl bg-[#12151c] border border-white/10 shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center px-5 h-12 border-b border-white/10">
-          <div className="font-medium">CLI Tools</div>
+          <div className="font-medium">Settings</div>
           <div className="flex-1" />
           <button className="text-xs text-zinc-400 hover:text-white mr-3" onClick={refresh}>Re-detect</button>
           <button className="text-zinc-400 hover:text-white" onClick={onClose}>✕</button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto">
+          <GeneralSettings />
           {!info && <div className="text-sm text-zinc-500">Detecting…</div>}
           {info?.tools.map((t) => (
             <div key={t.id} className="rounded-lg border border-white/10 p-4">

@@ -58,6 +58,11 @@ export class SessionRegistry {
     for (const e of this.entries.values()) e.subscribers.delete(ws);
   }
 
+  /** Close every session so child agent processes (claude, codex app-server) do not outlive the server. */
+  async closeAll() {
+    await Promise.allSettled([...this.entries.keys()].map((id) => this.close(id)));
+  }
+
   async close(id: string) {
     const e = this.entries.get(id);
     if (!e) return;

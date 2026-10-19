@@ -166,6 +166,38 @@ export async function homeInfo(): Promise<{ home: string; volumes: string[]; sho
   return { home, volumes, shortcuts: existing };
 }
 
+/** Recursive file search for quick-open; skips heavy folders. Case-insensitive substring / subsequence match on the relative path. */
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.nuxt', 'target', '.venv', 'venv', '__pycache__', '.cache', 'Library', '.Trash', 'DerivedData', 'Pods']);
+export async function searchFiles(root: string, query: string, limit = 200): Promise<{ path: string; rel: string; isDir: boolean }[]> {
+  const base = resolvePath(root);
+  const q = query.toLowerCase().replace(/\s+/g, '');
+  const out: { path: string; rel: string; isDir: boolean; score: number }[] = [];
+  const subseq = (hay: string) => { let i = 0; for (const ch of hay) { if (ch === q[i]) i++; if (i === q.length) return true; } return q.length === 0; };
+  let visited = 0;
+  async function walk(dir: string, depth: number) {
+    if (out.length >= limit * 4 || depth > 8 || visited > 20000) return;
+    let dirents;
+    try { dirents = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const d of dirents) {
+      visited++;
+      if (d.name.startsWith('.') && d.name !== '.claude') continue;
+      const full = path.join(dir, d.name);
+      const rel = path.relative(base, full);
+      const lower = rel.toLowerCase();
+      if (d.isDirectory()) {
+        if (SKIP_DIRS.has(d.name)) continue;
+        if (q && subseq(lower)) out.push({ path: full, rel, isDir: true, score: lower.includes(q) ? 2 : 1 });
+        await walk(full, depth + 1);
+      } else if (!q || subseq(lower)) {
+        const name = d.name.toLowerCase();
+        out.push({ path: full, rel, isDir: false, score: name.startsWith(q) ? 5 : name.includes(q) ? 4 : lower.includes(q) ? 3 : 1 });
+      }
+    }
+  }
+  await walk(base, 0);
+  return out.sort((a, b) => b.score - a.score || a.rel.length - b.rel.length).slice(0, limit).map(({ path: p, rel, isDir }) => ({ path: p, rel, isDir }));
+}
+
 /* ── Mutations used by the file browser ───────────────────────────── */
 
 async function uniqueDest(dest: string): Promise<string> {

@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import type { Attachment, PermissionModeId } from '../lib/agent';
 
 interface Props {
+  /** Session working directory; root for "@" file mentions. */
+  cwd?: string;
   disabled: boolean;
   running: boolean;
   mode: PermissionModeId;
+  /** Slash commands / skills reported by the agent at session start. */
+  commands?: string[];
   onSend: (text: string, attachments: Attachment[]) => void;
   onStop: () => void;
   onMode: (m: PermissionModeId) => void;
@@ -27,18 +31,60 @@ function toAttachment(path: string, name?: string): Attachment {
   return { path, name: n, kind: IMAGE_RE.test(n) ? 'image' : 'file' };
 }
 
-export default function Composer({ disabled, running, mode, onSend, onStop, onMode, pendingAttachments, onConsumeAttachments }: Props) {
+export default function Composer({ cwd, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments }: Props) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [cmdIdx, setCmdIdx] = useState(0);
   const ta = useRef<HTMLTextAreaElement>(null);
+  const [caret, setCaret] = useState(0);
+  const [fileHits, setFileHits] = useState<{ path: string; rel: string; isDir: boolean }[]>([]);
+  const [fileIdx, setFileIdx] = useState(0);
+  const fileTimer = useRef<number | null>(null);
+
+  // "@" mention: the token containing the caret starts with "@" and has no whitespace.
+  const mention = useMemo(() => {
+    const before = text.slice(0, caret);
+    const m = before.match(/(?:^|\s)@([^\s@]*)$/);
+    if (!m) return null;
+    return { query: m[1], start: caret - m[1].length - 1 };
+  }, [text, caret]);
+  useEffect(() => {
+    if (!mention || !cwd) { setFileHits([]); return; }
+    if (fileTimer.current) window.clearTimeout(fileTimer.current);
+    fileTimer.current = window.setTimeout(() => {
+      api.search(cwd, mention.query).then((h) => { setFileHits(h.slice(0, 10)); setFileIdx(0); }).catch(() => setFileHits([]));
+    }, 100);
+    return () => { if (fileTimer.current) window.clearTimeout(fileTimer.current); };
+  }, [mention?.query, mention?.start, cwd]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pickMention = (h: { path: string; rel: string; isDir: boolean }) => {
+    if (!mention) return;
+    const rel = h.rel.includes(' ') ? `"${h.rel}"` : h.rel;
+    const next = text.slice(0, mention.start) + '@' + rel + ' ' + text.slice(caret);
+    setText(next);
+    if (!h.isDir) setAttachments((a) => (a.some((x) => x.path === h.path) ? a : [...a, toAttachment(h.path)]));
+    setFileHits([]);
+    requestAnimationFrame(() => { const el = ta.current; if (el) { const pos = mention.start + rel.length + 2; el.focus(); el.setSelectionRange(pos, pos); setCaret(pos); } });
+  };
+
+  // Slash-command autocomplete: active while the text is a single "/token" with no space.
+  const cmdQuery = useMemo(() => { const m = text.match(/^\/([\w.:-]*)$/); return m ? m[1].toLowerCase() : null; }, [text]);
+  const cmdHits = useMemo(() => (cmdQuery === null ? [] : commands.filter((c) => c.toLowerCase().includes(cmdQuery)).slice(0, 12)), [cmdQuery, commands]);
+  useEffect(() => setCmdIdx(0), [cmdQuery]);
 
   useEffect(() => {
     const el = ta.current; if (!el) return;
     el.style.height = '0px';
     el.style.height = Math.min(240, el.scrollHeight) + 'px';
   }, [text]);
+
+  useEffect(() => {
+    const focus = () => ta.current?.focus();
+    window.addEventListener('vibe:focus-composer', focus);
+    return () => window.removeEventListener('vibe:focus-composer', focus);
+  }, []);
 
   useEffect(() => {
     if (!pendingAttachments?.length) return;
@@ -86,6 +132,22 @@ export default function Composer({ disabled, running, mode, onSend, onStop, onMo
     setText(''); setAttachments([]);
   };
 
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mention && fileHits.length) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setFileIdx((i) => (i + 1) % fileHits.length); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setFileIdx((i) => (i - 1 + fileHits.length) % fileHits.length); return; }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); pickMention(fileHits[fileIdx]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setFileHits([]); return; }
+    }
+    if (cmdHits.length) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setCmdIdx((i) => (i + 1) % cmdHits.length); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setCmdIdx((i) => (i - 1 + cmdHits.length) % cmdHits.length); return; }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && cmdHits[cmdIdx] !== text)) { e.preventDefault(); setText(cmdHits[cmdIdx] + ' '); return; }
+      if (e.key === 'Escape') { setText(text + ' '); return; }
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); }
+  };
+
   return (
     <div className={`border-t border-white/10 p-3 ${dragging ? 'bg-blue-500/10' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
@@ -102,11 +164,32 @@ export default function Composer({ disabled, running, mode, onSend, onStop, onMo
           ))}
         </div>
       )}
-      <div className="rounded-xl border border-white/15 bg-[#12151c] focus-within:border-white/30">
-        <textarea ref={ta} value={text} onChange={(e) => setText(e.target.value)} onPaste={onPaste}
-          disabled={disabled}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }}
-          placeholder={disabled ? 'Start a session first' : 'Message… (Enter to send, Shift+Enter for newline, drop or paste files)'}
+      <div className="relative rounded-xl border border-white/15 bg-[#12151c] focus-within:border-white/30">
+        {mention && fileHits.length > 0 && (
+          <div className="absolute bottom-full left-2 mb-1 w-[480px] max-w-[95%] rounded-lg border border-white/10 bg-[#171a22] shadow-xl py-1 text-[13px] z-10">
+            {fileHits.map((h, i) => (
+              <div key={h.path} onMouseEnter={() => setFileIdx(i)} onMouseDown={(e) => { e.preventDefault(); pickMention(h); }}
+                className={`px-3 py-1 flex items-center gap-2 cursor-pointer ${i === fileIdx ? 'bg-blue-500/20 text-white' : 'text-zinc-300'}`}>
+                <span className="text-xs">{h.isDir ? '📁' : '📄'}</span>
+                <span className="font-mono truncate">{h.rel}</span>
+              </div>
+            ))}
+            <div className="px-3 pt-1 text-[10px] text-zinc-600">@file: Tab / Enter inserts the path and attaches it · Esc to dismiss</div>
+          </div>
+        )}
+        {cmdHits.length > 0 && (
+          <div className="absolute bottom-full left-2 mb-1 w-[360px] max-w-[90%] rounded-lg border border-white/10 bg-[#171a22] shadow-xl py-1 text-[13px] z-10">
+            {cmdHits.map((c, i) => (
+              <div key={c} onMouseEnter={() => setCmdIdx(i)} onMouseDown={(e) => { e.preventDefault(); setText(c + ' '); }}
+                className={`px-3 py-1 font-mono cursor-pointer ${i === cmdIdx ? 'bg-blue-500/20 text-white' : 'text-zinc-300'}`}>{c}</div>
+            ))}
+            <div className="px-3 pt-1 text-[10px] text-zinc-600">Tab / Enter to complete · Esc to dismiss</div>
+          </div>
+        )}
+        <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart ?? e.target.value.length); }} onPaste={onPaste}
+          onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)} onClick={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)} onKeyUp={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
+          disabled={disabled} onKeyDown={onKeyDown}
+          placeholder={disabled ? 'Start a session first' : running ? 'Type to queue or steer the running turn…' : 'Message…  (Enter to send · Shift+Enter newline · "/" commands · "@" files · drop or paste)'}
           className="w-full bg-transparent px-4 pt-3 pb-2 text-[14px] outline-none resize-none min-h-[44px]" rows={1} />
         <div className="flex items-center gap-2 px-2 pb-2">
           <select value={mode} onChange={(e) => onMode(e.target.value as PermissionModeId)} disabled={disabled}
@@ -119,9 +202,8 @@ export default function Composer({ disabled, running, mode, onSend, onStop, onMo
           </label>
           {uploading && <span className="text-xs text-zinc-500">Uploading…</span>}
           <div className="flex-1" />
-          {running
-            ? <button className="rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs px-3 py-1.5" onClick={onStop}>■ Stop</button>
-            : <button className="rounded-md bg-blue-500/30 hover:bg-blue-500/40 text-xs px-3 py-1.5 disabled:opacity-40" disabled={disabled || (!text.trim() && !attachments.length)} onClick={submit}>Send ⏎</button>}
+          {running && <button className="rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs px-3 py-1.5" onClick={onStop}>■ Stop</button>}
+          <button className="rounded-md bg-blue-500/30 hover:bg-blue-500/40 text-xs px-3 py-1.5 disabled:opacity-40" disabled={disabled || (!text.trim() && !attachments.length)} onClick={submit}>{running ? 'Queue ⏎' : 'Send ⏎'}</button>
         </div>
       </div>
     </div>

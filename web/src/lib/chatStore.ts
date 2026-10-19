@@ -17,6 +17,7 @@ export interface ChatSession {
   model?: string;
   permissionMode: PermissionModeId;
   agentSessionId?: string;
+  commands?: string[];
   status: 'starting' | 'running' | 'idle' | 'compacting' | 'closed';
   items: ChatItem[];
   totalCostUsd: number;
@@ -44,6 +45,7 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
     case 'session.init':
       next.agentSessionId = e.agentSessionId ?? s.agentSessionId;
       next.model = e.model ?? s.model;
+      if (e.commands?.length) next.commands = e.commands;
       if (e.permissionMode) next.permissionMode = e.permissionMode as PermissionModeId;
       if (s.status === 'starting') next.status = 'idle';
       return next;

@@ -84,6 +84,10 @@ export class ClaudeSession implements AgentSession {
       resume: this.opts.resume,
       permissionMode: this.opts.permissionMode ?? 'default',
       allowDangerouslySkipPermissions: this.opts.permissionMode === 'bypassPermissions',
+      // Match `claude` CLI behaviour: the SDK's default system prompt is a minimal tool-calling
+      // prompt, not Claude Code's. The preset restores the full prompt (coding guidance, safety rules).
+      // settingSources is left at its default, which loads user/project/local settings and CLAUDE.md.
+      systemPrompt: { type: 'preset', preset: 'claude_code', snapshot: true },
       model: this.opts.model,
       includePartialMessages: true,
       abortController: this.abort,
@@ -117,7 +121,7 @@ export class ClaudeSession implements AgentSession {
       case 'system': {
         if (m.subtype === 'init') {
           this.agentSessionId = m.session_id;
-          this.emit({ kind: 'session.init', sessionId: this.id, agent: 'claude', cwd: m.cwd, model: m.model, permissionMode: m.permissionMode, agentSessionId: m.session_id, tools: m.tools });
+          this.emit({ kind: 'session.init', sessionId: this.id, agent: 'claude', cwd: m.cwd, model: m.model, permissionMode: m.permissionMode, agentSessionId: m.session_id, tools: m.tools, commands: (m.slash_commands ?? []).map((c) => `/${c}`) });
         } else if (m.subtype === 'status') {
           const s = (m as { status?: string }).status;
           this.emit({ kind: 'status', status: s === 'compacting' ? 'compacting' : 'running', permissionMode: (m as { permissionMode?: string }).permissionMode });

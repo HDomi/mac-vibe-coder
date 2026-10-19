@@ -10,7 +10,7 @@ export type AssistantBlock =
   | { type: 'tool_use'; id: string; name: string; input: unknown };
 
 export type AgentEvent =
-  | { kind: 'session.init'; sessionId: string; agent: AgentId; cwd: string; model?: string; permissionMode?: string; agentSessionId?: string; tools?: string[] }
+  | { kind: 'session.init'; sessionId: string; agent: AgentId; cwd: string; model?: string; permissionMode?: string; agentSessionId?: string; tools?: string[]; commands?: string[] }
   | { kind: 'user'; text: string; attachments: Attachment[] }
   | { kind: 'text.delta'; text: string; parent: string | null }
   | { kind: 'thinking.delta'; text: string; parent: string | null }

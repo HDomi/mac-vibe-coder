@@ -17,6 +17,11 @@ const URL_PROD = `http://127.0.0.1:${PORT}`;
 const RESTART_EXIT_CODE = 75;
 const REPO_ROOT = path.resolve(__dirname, '../..');
 const APP_ICON = path.join(REPO_ROOT, 'web', 'public', 'icon.png');
+const APP_NAME = 'Mac Vibe Coder';
+
+// Name used by dialogs, the app menu title and notifications. The menu bar / Dock label of the
+// unpackaged Electron.app comes from its Info.plist, which scripts/brand-electron.sh patches.
+app.setName(APP_NAME);
 
 let server: ChildProcess | null = null;
 let quitting = false;
@@ -80,6 +85,7 @@ async function createWindow() {
     height: 920,
     minWidth: 900,
     minHeight: 600,
+    title: APP_NAME,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 14 },
     backgroundColor: '#0b0d12',

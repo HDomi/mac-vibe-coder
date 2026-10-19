@@ -108,6 +108,7 @@ export class CodexSession implements AgentSession {
   private lastAgentText = '';
   private closed = false;
   private ready: Promise<void> = Promise.resolve();
+  private skills = new Map<string, string>(); // name -> path
 
   constructor(private opts: CodexSessionOptions) {
     this.cwd = opts.cwd;
@@ -147,7 +148,15 @@ export class CodexSession implements AgentSession {
     const thread = res.thread as Json;
     this.threadId = String(thread.id);
     this.agentSessionId = this.threadId;
-    this.emit({ kind: 'session.init', sessionId: this.id, agent: 'codex', cwd: this.cwd, model: String(res.model ?? ''), permissionMode: this.mode, agentSessionId: this.threadId });
+    try {
+      const sk = await c.request<Json>('skills/list', { cwds: [this.cwd] });
+      for (const entry of (sk.data as Json[]) ?? []) {
+        for (const s of ((entry.skills as Json[] | undefined) ?? [])) {
+          if (s.enabled !== false && s.name) this.skills.set(String(s.name), String(s.path ?? ''));
+        }
+      }
+    } catch { /* skills are optional */ }
+    this.emit({ kind: 'session.init', sessionId: this.id, agent: 'codex', cwd: this.cwd, model: String(res.model ?? ''), permissionMode: this.mode, agentSessionId: this.threadId, commands: [...this.skills.keys()].map((n) => `/${n}`) });
     if (this.opts.resume) this.replay((thread.turns as Json[] | undefined) ?? []);
     this.emit({ kind: 'status', status: 'idle' });
   }
@@ -347,10 +356,21 @@ export class CodexSession implements AgentSession {
       else input.push({ type: 'mention', name: a.name, path: a.path });
     }
     const mentions = attachments.filter((a) => a.kind !== 'image').map((a) => `- ${a.path}`);
-    const body = mentions.length ? `${text}\n\nAttached file paths:\n${mentions.join('\n')}` : text;
+    let body = mentions.length ? `${text}\n\nAttached file paths:\n${mentions.join('\n')}` : text;
+    // "/skill-name rest" invokes a Codex skill, mirroring the TUI.
+    const m = body.match(/^\/([\w.-]+)\s*([\s\S]*)$/);
+    if (m && this.skills.has(m[1])) {
+      input.unshift({ type: 'skill', name: m[1], path: this.skills.get(m[1]) });
+      body = m[2];
+    }
     input.unshift({ type: 'text', text: body, text_elements: [] });
     this.emit({ kind: 'user', text, attachments });
     this.emit({ kind: 'status', status: 'running' });
+    if (this.turnId) {
+      // A turn is in flight: steer it instead of starting a new one.
+      await this.client.request('turn/steer', { threadId: this.threadId, input, expectedTurnId: this.turnId });
+      return;
+    }
     const pol = policyFor(this.mode, this.cwd);
     this.lastAgentText = '';
     const res = await this.client.request<Json>('turn/start', { threadId: this.threadId, input, approvalPolicy: pol.approvalPolicy, sandboxPolicy: pol.sandboxPolicy, cwd: this.cwd, model: this.model });
@@ -414,6 +434,19 @@ export async function listCodexModels(codexPath: string): Promise<{ id: string; 
     c.notify('initialized');
     const res = await c.request<Json>('model/list', { includeHidden: false });
     return ((res.data as Json[]) ?? []).filter((m) => !m.hidden).map((m) => ({ id: String(m.model ?? m.id), name: String(m.displayName ?? m.model), description: m.description ? String(m.description) : undefined, isDefault: Boolean(m.isDefault) }));
+  } finally {
+    c.kill();
+  }
+}
+
+/** Rename / archive Codex threads through a short-lived app-server. */
+export async function codexThreadOp(codexPath: string, op: 'rename' | 'delete', threadId: string, name?: string): Promise<void> {
+  const c = new AppServerClient(codexPath, process.env.HOME ?? '/');
+  try {
+    await c.request('initialize', { clientInfo: { name: 'mac-vibe-coder', title: 'mac-vibe-coder', version: '0.1.0' }, capabilities: null });
+    c.notify('initialized');
+    if (op === 'rename') await c.request('thread/name/set', { threadId, name: name ?? '' });
+    else await c.request('thread/archive', { threadId });
   } finally {
     c.kill();
   }

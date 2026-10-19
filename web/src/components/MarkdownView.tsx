@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import 'highlight.js/styles/github-dark.css';
 import { api } from '../lib/api';
 
 interface Props {
@@ -33,13 +36,38 @@ export function openLocalFile(path: string) {
   window.dispatchEvent(new CustomEvent('vibe:open-file', { detail: { path } }));
 }
 
+export function CopyButton({ text, className }: { text: string; className?: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button className={`text-[10px] rounded px-1.5 py-0.5 bg-white/10 hover:bg-white/20 text-zinc-300 ${className ?? ''}`}
+      onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1200); }); }}>
+      {done ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
+function textOf(node: React.ReactNode): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join('');
+  if (typeof node === 'object' && 'props' in node) return textOf((node as { props: { children?: React.ReactNode } }).props.children);
+  return '';
+}
+
 export default function MarkdownView({ text, baseDir, className }: Props) {
   return (
     <div className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[[rehypeHighlight, { detect: false, ignoreMissing: true }]]}
         urlTransform={(url) => url}
         components={{
+          pre: ({ children }) => (
+            <div className="relative group/code">
+              <CopyButton text={textOf(children)} className="absolute top-1.5 right-1.5 opacity-0 group-hover/code:opacity-100" />
+              <pre>{children}</pre>
+            </div>
+          ),
           img: ({ src, alt, title }) => {
             const local = resolveLocal(String(src ?? ''), baseDir);
             const url = local ? api.rawUrl(local) : String(src ?? '');

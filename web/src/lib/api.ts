@@ -35,7 +35,7 @@ export interface UsageSnapshot {
   codex: { fiveHour: UsageWindow | null; weekly: UsageWindow | null; plan: string | null } | null;
   errors: string[];
 }
-export interface HistorySession { sessionId: string; summary: string; lastModified: number; customTitle?: string; firstPrompt?: string; gitBranch?: string }
+export interface HistorySession { agent: 'claude' | 'codex'; sessionId: string; summary: string; lastModified: number; customTitle?: string; firstPrompt?: string; gitBranch?: string; cwd?: string }
 export interface HistoryMessage { type: string; uuid: string; message: unknown; parent_tool_use_id: string | null }
 
 export interface UpdateStatus { repo: string; branch: string | null; local: string | null; remote: string | null; behind: number; ahead: number; dirty: boolean; commits: { hash: string; subject: string }[]; checkedAt: number; error: string | null }
@@ -99,10 +99,13 @@ export const api = {
     for (const f of files) fd.append('files', f, f.name);
     return req<{ path: string; name: string; kind: 'image' | 'file'; mime?: string }[]>('/api/attach', { method: 'POST', body: fd });
   },
-  history: (cwd: string, agent: 'claude' | 'codex' = 'claude') => req<HistorySession[]>(`/api/history?cwd=${q(cwd)}&agent=${agent}`),
+  history: (cwd: string, agent: 'claude' | 'codex' | 'all' = 'all') => req<HistorySession[]>(`/api/history?cwd=${q(cwd)}&agent=${agent}`),
+  historyRename: (agent: 'claude' | 'codex', id: string, title: string, cwd?: string) => post<{ ok: true }>('/api/history/rename', { agent, id, title, cwd }),
+  historyDelete: (agent: 'claude' | 'codex', id: string, cwd?: string) => req<{ ok: true }>(`/api/history/${q(id)}?agent=${agent}${cwd ? `&cwd=${q(cwd)}` : ''}`, { method: 'DELETE' }),
+  search: (cwd: string, query: string) => req<{ path: string; rel: string; isDir: boolean }[]>(`/api/fs/search?cwd=${q(cwd)}&q=${q(query)}`),
   updateStatus: (force = false) => req<UpdateStatus>(`/api/update/status${force ? '?force=1' : ''}`),
   updateApplyUrl: (force = false) => `/api/update/apply${force ? '?force=1' : ''}`,
-  open: (path: string, app: 'terminal' | 'iterm' | 'finder' | 'vscode' = 'terminal', command?: string) =>
+  open: (path: string, app: 'terminal' | 'iterm' | 'finder' | 'vscode' | 'cursor' = 'terminal', command?: string) =>
     req<{ ok: true }>('/api/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, app, command }) }),
   gitStatus: (cwd: string) => req<GitStatus>(`/api/git/status?cwd=${q(cwd)}`),
   gitDiff: (cwd: string, path: string, staged: boolean) => fetch(`/api/git/diff?cwd=${q(cwd)}&path=${q(path)}&staged=${staged ? 1 : 0}`).then((r) => r.text()),

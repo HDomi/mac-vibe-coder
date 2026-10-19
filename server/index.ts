@@ -20,6 +20,16 @@ export function startServer(port = PORT): Promise<ServerType> {
     const ptyWss = new WebSocketServer({ noServer: true });
     attachWebSocket(wss, registry);
     attachPty(ptyWss);
+    let shuttingDown = false;
+    const shutdown = (signal: NodeJS.Signals) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      console.log(`[mac-vibe-coder] ${signal}: closing sessions`);
+      const timer = setTimeout(() => process.exit(0), 4000);
+      registry.closeAll().finally(() => { clearTimeout(timer); process.exit(0); });
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
     http.on('upgrade', (req, socket, head) => {
       const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
       const target = pathname === '/ws' ? wss : pathname === '/pty' ? ptyWss : null;

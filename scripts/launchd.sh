@@ -40,7 +40,7 @@ EOF
     launchctl bootstrap "gui/$(id -u)" "$PLIST"
     echo "installed: $PLIST"
     echo "log: $LOG"
-    echo "macOS 가 Desktop/Documents 접근 권한을 물으면 허용해. 안 뜨면 시스템 설정 > 개인정보 보호 > 전체 디스크 접근 권한에 Electron 추가."
+    echo "macOS 가 Desktop/Documents 접근 권한을 물으면 허용해. 안 뜨면 시스템 설정 > 개인정보 보호 > 전체 디스크 접근 권한에 Mac Vibe Coder 추가."
     ;;
   uninstall)
     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true

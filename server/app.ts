@@ -2,17 +2,17 @@ import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { duplicate, FsError, homeInfo, listDir, mkdir, rawFile, readText, rename, resolvePath, statPath, transfer, trash } from './fs.js';
+import { duplicate, FsError, homeInfo, listDir, mkdir, rawFile, readText, rename, resolvePath, searchFiles, statPath, transfer, trash } from './fs.js';
 import { loadConfig, saveConfig } from './config.js';
 import { streamSSE } from 'hono/streaming';
 import { detectTools, INSTALL_COMMANDS, UPDATE_COMMANDS, type InstallMethod, type ToolId } from './tools.js';
 import { streamShell } from './shell.js';
 import { getUsage } from './usage.js';
 import { saveAttachment } from './attachments.js';
-import { listSessions, getSessionMessages } from '@anthropic-ai/claude-agent-sdk';
+import { listSessions, getSessionMessages, renameSession, deleteSession } from '@anthropic-ai/claude-agent-sdk';
 import type { SessionRegistry } from './sessions.js';
 import { previewKind } from './mime.js';
-import { listCodexModels, listCodexThreads } from './agents/codex.js';
+import { codexThreadOp, listCodexModels, listCodexThreads } from './agents/codex.js';
 import { listClaudeModels } from './agents/claude.js';
 import { which, run } from './shell.js';
 import { applyUpdate, checkUpdate, RESTART_EXIT_CODE } from './updater.js';
@@ -166,14 +166,34 @@ export function createApp(registry?: SessionRegistry) {
   // Claude Code transcript history for a project directory.
   app.get('/api/history', async (c) => {
     const dir = resolvePath(c.req.query('cwd') ?? '~');
-    if (c.req.query('agent') === 'codex') {
-      const codexPath = await which('codex');
-      if (!codexPath) return c.json([]);
-      return c.json(await listCodexThreads(codexPath, dir));
-    }
-    const sessions = await listSessions({ dir, limit: 30 });
-    return c.json(sessions);
+    const agent = c.req.query('agent') ?? 'all';
+    const wantClaude = agent === 'claude' || agent === 'all';
+    const wantCodex = agent === 'codex' || agent === 'all';
+    const [claude, codexPath] = await Promise.all([
+      wantClaude ? listSessions({ dir, limit: 30 }).catch(() => []) : Promise.resolve([]),
+      wantCodex ? which('codex') : Promise.resolve(null),
+    ]);
+    const codex = codexPath ? await listCodexThreads(codexPath, dir).catch(() => []) : [];
+    const rows = [
+      ...claude.map((s) => ({ ...s, agent: 'claude' as const })),
+      ...codex.map((s) => ({ ...s, agent: 'codex' as const })),
+    ].sort((a, b) => b.lastModified - a.lastModified);
+    return c.json(rows);
   });
+  app.post('/api/history/rename', async (c) => {
+    const b = await c.req.json<{ agent: 'claude' | 'codex'; id: string; title: string; cwd?: string }>();
+    if (b.agent === 'codex') { const p = await which('codex'); if (p) await codexThreadOp(p, 'rename', b.id, b.title); }
+    else await renameSession(b.id, b.title, b.cwd ? { dir: resolvePath(b.cwd) } : undefined);
+    return c.json({ ok: true });
+  });
+  app.delete('/api/history/:id', async (c) => {
+    const agent = c.req.query('agent') ?? 'claude';
+    const cwd = c.req.query('cwd');
+    if (agent === 'codex') { const p = await which('codex'); if (p) await codexThreadOp(p, 'delete', c.req.param('id')); }
+    else await deleteSession(c.req.param('id'), cwd ? { dir: resolvePath(cwd) } : undefined);
+    return c.json({ ok: true });
+  });
+  app.get('/api/fs/search', async (c) => c.json(await searchFiles(c.req.query('cwd') ?? '~', c.req.query('q') ?? '', Number(c.req.query('limit') ?? 200))));
   app.get('/api/history/:id', async (c) => {
     const dir = resolvePath(c.req.query('cwd') ?? '~');
     const messages = await getSessionMessages(c.req.param('id'), { dir });
@@ -204,7 +224,7 @@ export function createApp(registry?: SessionRegistry) {
 
   // Open a folder in the native Terminal / iTerm / Finder / VS Code.
   app.post('/api/open', async (c) => {
-    const body = await c.req.json<{ path: string; app?: 'terminal' | 'iterm' | 'finder' | 'vscode'; command?: string }>();
+    const body = await c.req.json<{ path: string; app?: 'terminal' | 'iterm' | 'finder' | 'vscode' | 'cursor'; command?: string }>();
     const abs = resolvePath(body.path);
     const dirQ = abs.replace(/"/g, '\\"');
     const cmd = body.command ? body.command.replace(/"/g, '\\"') : '';
@@ -212,6 +232,7 @@ export function createApp(registry?: SessionRegistry) {
     let r;
     if (target === 'finder') r = await run('open', [abs]);
     else if (target === 'vscode') r = await run('open', ['-a', 'Visual Studio Code', abs]);
+    else if (target === 'cursor') r = await run('open', ['-a', 'Cursor', abs]);
     else if (target === 'iterm') {
       r = await run('osascript', ['-e', 'tell application "iTerm" to activate', '-e', 'tell application "iTerm" to create window with default profile',
         '-e', `tell application "iTerm" to tell current session of current window to write text "cd \"${dirQ}\"${cmd ? ' && ' + cmd : ''}"`]);

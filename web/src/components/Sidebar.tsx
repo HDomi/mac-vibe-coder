@@ -47,6 +47,8 @@ function Section({ title, children, right }: { title: string; children: React.Re
 function commonItems(path: string): MenuItem[] {
   return [
     { label: 'Open in Terminal', onClick: () => api.open(path, 'terminal').catch(() => {}) },
+    { label: 'Open in VS Code', onClick: () => api.open(path, 'vscode').catch(() => {}) },
+    { label: 'Open in Cursor', onClick: () => api.open(path, 'cursor').catch(() => {}) },
     { label: 'Reveal in Finder', onClick: () => api.open(path, 'finder').catch(() => {}) },
     { label: 'Copy Path', onClick: () => navigator.clipboard.writeText(path) },
   ];
@@ -65,7 +67,8 @@ function InlineInput({ value, onCommit, onCancel, className }: { value: string; 
 export default function Sidebar(p: Props) {
   const menu = useContextMenu();
   const [sessions, setSessions] = useState<RecentSession[]>([]);
-  const [renaming, setRenaming] = useState<{ kind: 'fav' | 'group'; id: string } | null>(null);
+  const [renaming, setRenaming] = useState<{ kind: 'fav' | 'group' | 'session'; id: string } | null>(null);
+  const reloadSessions = () => api.historyAll().then(setSessions).catch(() => {});
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [dragOver, setDragOver] = useState<string | null>(null);
 
@@ -152,7 +155,7 @@ export default function Sidebar(p: Props) {
   return (
     <aside className="h-full flex flex-col border-r border-white/10 bg-[#0e1117] min-w-0">
       <div className="h-10 flex items-center px-3 text-xs text-zinc-500">
-        <span className="flex-1 pl-1">mac-vibe-coder</span>
+        <span className="flex-1 pl-1 font-medium text-zinc-400">Mac Vibe Coder</span>
         <button className="w-6 h-6 rounded hover:bg-white/10 text-zinc-400" onClick={p.onToggle} title="Collapse sidebar">«</button>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-2">
@@ -205,10 +208,21 @@ export default function Sidebar(p: Props) {
         </div>
         <div className="flex-1 overflow-y-auto px-2 py-1">
           {sessions.length === 0 && <div className="px-2 py-2 text-xs text-zinc-600">No sessions yet</div>}
-          {sessions.map((s) => (
+          {sessions.map((s) => renaming?.kind === 'session' && renaming.id === s.sessionId ? (
+            <div key={s.agent + s.sessionId} className="px-2">
+              <InlineInput value={s.title} onCancel={() => setRenaming(null)} onCommit={(v) => { setRenaming(null); if (v.trim() && v !== s.title) api.historyRename(s.agent, s.sessionId, v.trim(), s.cwd ?? undefined).then(reloadSessions).catch(() => {}); }} />
+            </div>
+          ) : (
             <Item key={s.agent + s.sessionId} label={s.title} path={s.cwd ?? s.sessionId} active={false} hint={s.agent === 'codex' ? 'codex' : 'claude'}
               onClick={() => p.onResumeSession(s)}
-              onContextMenu={(e) => menu.open(e, [{ label: 'Resume', onClick: () => p.onResumeSession(s) }, ...(s.cwd ? [{ separator: true }, ...commonItems(s.cwd)] : [])])} />
+              onContextMenu={(e) => menu.open(e, [
+                { label: 'Resume', onClick: () => p.onResumeSession(s) },
+                { label: 'Rename…', onClick: () => setRenaming({ kind: 'session', id: s.sessionId }) },
+                { label: 'Copy session id', onClick: () => navigator.clipboard.writeText(s.sessionId) },
+                ...(s.cwd ? [{ separator: true }, ...commonItems(s.cwd)] : []),
+                { separator: true },
+                { label: s.agent === 'codex' ? 'Archive' : 'Delete', danger: true, onClick: () => { if (window.confirm(`${s.agent === 'codex' ? 'Archive' : 'Delete'} session “${s.title}”?`)) api.historyDelete(s.agent, s.sessionId, s.cwd ?? undefined).then(reloadSessions).catch(() => {}); } },
+              ])} />
           ))}
         </div>
       </div>

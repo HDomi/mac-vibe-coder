@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import MarkdownView from './MarkdownView';
+import MarkdownView, { CopyButton } from './MarkdownView';
 import type { ChatItem } from '../lib/chatStore';
 import { api } from '../lib/api';
 
@@ -38,7 +38,8 @@ export function UserItem({ item }: { item: Extract<ChatItem, { kind: 'user' }> }
 export function AssistantItem({ item, baseDir }: { item: Extract<ChatItem, { kind: 'assistant' }>; baseDir?: string }) {
   const [showThinking, setShowThinking] = useState(false);
   return (
-    <div className={`${item.parent ? 'ml-6 border-l border-white/10 pl-3' : ''}`}>
+    <div className={`group/msg relative ${item.parent ? 'ml-6 border-l border-white/10 pl-3' : ''}`}>
+      {item.text && !item.streaming && <CopyButton text={item.text} className="absolute -top-2 right-0 opacity-0 group-hover/msg:opacity-100" />}
       {item.thinking && (
         <div className="mb-1">
           <button className="text-[11px] text-zinc-500 hover:text-zinc-300" onClick={() => setShowThinking((v) => !v)}>
