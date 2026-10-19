@@ -22,9 +22,7 @@ export interface UpdateStatus {
   remote: BuildInfo | null;
   /** True when the pushed version is newer, or same version but a different commit. */
   available: boolean;
-  /** Commits the checkout is behind origin (informational). */
-  behind: number;
-  dirty: boolean;
+  /** Commits between the installed build and the pushed head (informational). */
   commits: { hash: string; subject: string }[];
   checkedAt: number;
   error: string | null;
@@ -64,7 +62,7 @@ function rawBase(remoteUrl: string, branch: string): string | null {
 export async function checkUpdate(force = false): Promise<UpdateStatus> {
   if (!force && cached && Date.now() - cached.checkedAt < CHECK_TTL_MS) return cached;
   const installed = readBuildInfo();
-  const status: UpdateStatus = { repo: REPO_ROOT, branch: null, installed, remote: null, available: false, behind: 0, dirty: false, commits: [], checkedAt: Date.now(), error: null };
+  const status: UpdateStatus = { repo: REPO_ROOT, branch: null, installed, remote: null, available: false, commits: [], checkedAt: Date.now(), error: null };
   try {
     const branch = await git(['rev-parse', '--abbrev-ref', 'HEAD']);
     if (!branch.ok) throw new Error(branch.stderr || 'not a git repository');
@@ -93,15 +91,11 @@ export async function checkUpdate(force = false): Promise<UpdateStatus> {
     status.remote = { version: remoteVersion ?? 'unknown', commit: remoteCommit, builtAt: null };
     const vcmp = remoteVersion ? compareVersions(remoteVersion, installed.version) : 0;
     status.available = vcmp > 0 || (vcmp === 0 && installed.commit !== 'unknown' && !remoteCommit.startsWith(installed.commit) && !installed.commit.startsWith(remoteCommit));
-    if (fetched.ok) {
-      const upstream = `origin/${status.branch}`;
-      const counts = (await git(['rev-list', '--left-right', '--count', `HEAD...${upstream}`])).stdout.split(/\s+/);
-      status.behind = Number(counts[1] ?? 0);
-      const since = installed.commit !== 'unknown' ? `${installed.commit}..${upstream}` : `HEAD..${upstream}`;
-      const log = await git(['log', '--format=%h%x09%s', '-20', since]);
+    // Commit list between the installed build and the pushed head (only when the installed commit is known locally).
+    if (fetched.ok && status.available && installed.commit !== 'unknown') {
+      const log = await git(['log', '--format=%h%x09%s', '-20', `${installed.commit}..origin/${status.branch}`]);
       if (log.ok) status.commits = log.stdout.split('\n').filter(Boolean).map((l) => { const [hash, ...rest] = l.split('\t'); return { hash, subject: rest.join('\t') }; });
     }
-    status.dirty = (await git(['status', '--porcelain'])).stdout.length > 0;
   } catch (err) {
     status.error = (err as Error).message;
   }

@@ -9,17 +9,14 @@ export function UpdateBadge() {
   const [open, setOpen] = useState(false);
   const [checking, setChecking] = useState(false);
   const load = (force = false) => { setChecking(true); return api.updateStatus(force).then(setSt).catch(() => {}).finally(() => setChecking(false)); };
-  useEffect(() => {
-    load();
-    const timer = setInterval(() => load(), 10 * 60 * 1000);
-    return () => clearInterval(timer);
-  }, []);
+  // Checked on app start, when the modal opens, and on manual refresh. No background polling.
+  useEffect(() => { load(true); }, []);
   const available = !!st?.available;
   const installed = st?.installed;
   return (
     <>
       <button className={`titlebar-nodrag text-[11px] rounded-full px-2 py-0.5 ${available ? 'bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30' : 'text-zinc-600 hover:text-zinc-300'}`}
-        onClick={() => setOpen(true)} title={st?.error ?? (available ? t('update.availableTitle', { v: st?.remote?.version ?? '' }) : t('update.upToDateTitle', { v: installed?.version ?? '' }))}>
+        onClick={() => { setOpen(true); void load(true); }} title={st?.error ?? (available ? t('update.availableTitle', { v: st?.remote?.version ?? '' }) : t('update.upToDateTitle', { v: installed?.version ?? '' }))}>
         {available ? t('update.badgeVersion', { v: st?.remote?.version ?? '' }) : installed ? `v${installed.version}` : '…'}
       </button>
       {open && <UpdateModal status={st} checking={checking} onClose={() => setOpen(false)} onRefresh={() => load(true)} />}
