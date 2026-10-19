@@ -56,9 +56,41 @@ export async function checkUpdate(force = false): Promise<UpdateStatus> {
   return status;
 }
 
-/** git pull + install + build, streamed line by line. Resolves with the exit code; caller restarts on 0. */
+/**
+ * Staged update, streamed line by line. Resolves with the exit code; caller restarts on 0.
+ * The new version is cloned, installed and built in a temporary directory first; only
+ * when that succeeds is the checkout fast-forwarded and the built artifacts
+ * (node_modules, dist, web/dist) swapped in. The temp directory is always removed.
+ * A failure anywhere leaves the running installation untouched.
+ */
 export function applyUpdate(onLine: (line: string, stream: 'stdout' | 'stderr') => void): Promise<number> {
-  const cmd = `cd "${REPO_ROOT}" && git pull --ff-only && npm ci --no-audit --no-fund && npm run build`;
+  const root = REPO_ROOT.replace(/"/g, '\\"');
+  const cmd = [
+    'set -e',
+    `cd "${root}"`,
+    'BRANCH="$(git rev-parse --abbrev-ref HEAD)"',
+    'REMOTE="$(git remote get-url origin)"',
+    'TMP="$(mktemp -d "${TMPDIR:-/tmp}/mvc-update.XXXXXX")"',
+    'trap \'echo "cleanup $TMP"; rm -rf "$TMP"\' EXIT',
+    `[ -d "${root}/runtime/node/bin" ] && export PATH="${root}/runtime/node/bin:$PATH" || true`,
+    'echo "▸ clone $BRANCH into $TMP"',
+    'git clone --quiet --depth 1 --branch "$BRANCH" "$REMOTE" "$TMP/src"',
+    'cd "$TMP/src"',
+    'echo "▸ npm ci (temp)"',
+    'npm ci --no-audit --no-fund',
+    'echo "▸ build (temp)"',
+    'npm run build',
+    `cd "${root}"`,
+    'echo "▸ fast-forward checkout"',
+    'git pull --ff-only',
+    'echo "▸ swap in built artifacts"',
+    `rsync -a --delete "$TMP/src/node_modules/" "${root}/node_modules/"`,
+    `rsync -a --delete "$TMP/src/dist/" "${root}/dist/"`,
+    `rsync -a --delete "$TMP/src/web/dist/" "${root}/web/dist/"`,
+    'echo "▸ brand runtime"',
+    'scripts/brand-electron.sh || true',
+    'echo "▸ done: $(git rev-parse --short HEAD)"',
+  ].join('\n');
   cached = null;
   return streamShell(cmd, onLine);
 }

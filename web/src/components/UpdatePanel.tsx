@@ -8,7 +8,8 @@ export function UpdateBadge() {
   const [st, setSt] = useState<UpdateStatus | null>(null);
   const [open, setOpen] = useState(false);
   const [version, setVersion] = useState('');
-  const load = (force = false) => api.updateStatus(force).then(setSt).catch(() => {});
+  const [checking, setChecking] = useState(false);
+  const load = (force = false) => { setChecking(true); return api.updateStatus(force).then(setSt).catch(() => {}).finally(() => setChecking(false)); };
   useEffect(() => {
     api.health().then((h) => setVersion(h.version)).catch(() => {});
     load();
@@ -22,12 +23,12 @@ export function UpdateBadge() {
         onClick={() => setOpen(true)} title={st?.error ?? (behind > 0 ? t('update.commitsAvailable', { n: behind }) : t('update.upToDateTitle', { v: st?.local ?? '' }))}>
         {behind > 0 ? t('update.badge', { n: behind }) : version ? `v${version}${st?.local ? ` · ${st.local}` : ''}` : '…'}
       </button>
-      {open && <UpdateModal status={st} onClose={() => setOpen(false)} onRefresh={() => load(true)} />}
+      {open && <UpdateModal status={st} checking={checking} onClose={() => setOpen(false)} onRefresh={() => load(true)} />}
     </>
   );
 }
 
-function UpdateModal({ status, onClose, onRefresh }: { status: UpdateStatus | null; onClose: () => void; onRefresh: () => void }) {
+function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateStatus | null; checking: boolean; onClose: () => void; onRefresh: () => void }) {
   useLang();
   const [log, setLog] = useState<{ line: string; err: boolean }[]>([]);
   const [phase, setPhase] = useState<'idle' | 'running' | 'restarting' | 'failed'>('idle');
@@ -60,11 +61,14 @@ function UpdateModal({ status, onClose, onRefresh }: { status: UpdateStatus | nu
         <div className="flex items-center px-5 h-12 border-b border-white/10">
           <div className="font-medium">{t('update.title')}</div>
           <div className="flex-1" />
-          <button className="text-xs text-zinc-400 hover:text-white mr-3" onClick={onRefresh}>{t('update.checkAgain')}</button>
+          <button className="text-xs text-zinc-400 hover:text-white mr-3 flex items-center gap-1 disabled:opacity-60" onClick={onRefresh} disabled={checking}>
+            <span className={`inline-block ${checking ? 'animate-spin' : ''}`}>↻</span>{checking ? t('update.checking') : t('update.checkAgain')}
+          </button>
           <button className="text-zinc-400 hover:text-white" onClick={onClose}>✕</button>
         </div>
         <div className="p-5 space-y-3 overflow-y-auto text-sm">
-          {!status && <div className="text-zinc-500">{t('update.checking')}</div>}
+          {!status && !checking && <div className="text-zinc-500">{t('update.checking')}</div>}
+          {checking && <div className="text-zinc-500 text-xs">{t('update.checking')}</div>}
           {status?.error && <div className="text-amber-300 text-xs">{status.error}</div>}
           {status && !status.error && (
             <div className="text-xs text-zinc-400">
