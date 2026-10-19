@@ -65,7 +65,7 @@ const SUBAGENT_TOOLS = new Set(['Agent', 'Task', 'SubAgent', 'SubAgentActivity']
 
 export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: 'tool' }>; children?: React.ReactNode }) {
   useLang();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true); // tool cards start expanded (input + output visible)
   const [showKids, setShowKids] = useState(true);
   const summary = summarizeInput(item.name, item.input);
   const isSubagent = SUBAGENT_TOOLS.has(item.name);
