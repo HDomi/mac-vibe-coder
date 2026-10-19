@@ -42,6 +42,7 @@ export interface BuildInfo { version: string; commit: string; builtAt: string | 
 export interface UpdateStatus { repo: string; branch: string | null; installed: BuildInfo; remote: BuildInfo | null; available: boolean; commits: { hash: string; subject: string }[]; checkedAt: number; error: string | null }
 
 export interface GitFile { path: string; index: string; worktree: string; staged: boolean; untracked: boolean }
+export interface GitCommit { hash: string; subject: string; author: string; date: string }
 export interface GitBranch { name: string; current: boolean; remote: boolean; upstream: string | null }
 export interface GitStatus { repo: boolean; root: string | null; branch: string | null; ahead: number; behind: number; files: GitFile[] }
 
@@ -113,7 +114,7 @@ export const api = {
     req<{ ok: true }>('/api/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, app, command }) }),
   gitStatus: (cwd: string) => req<GitStatus>(`/api/git/status?cwd=${q(cwd)}`),
   gitDiff: (cwd: string, path: string, staged: boolean) => fetch(`/api/git/diff?cwd=${q(cwd)}&path=${q(path)}&staged=${staged ? 1 : 0}`).then((r) => r.text()),
-  gitLog: (cwd: string) => req<{ hash: string; subject: string; author: string; date: string }[]>(`/api/git/log?cwd=${q(cwd)}`),
+  gitLog: (cwd: string, skip = 0, limit = 30) => req<{ commits: GitCommit[]; hasMore: boolean }>(`/api/git/log?cwd=${q(cwd)}&skip=${skip}&limit=${limit}`),
   gitStage: (cwd: string, paths: string[], action: 'add' | 'reset' | 'discard') =>
     req<{ ok: true }>('/api/git/stage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, paths, action }) }),
   gitBranches: (cwd: string) => req<GitBranch[]>(`/api/git/branches?cwd=${q(cwd)}`),

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import rehypeRaw from 'rehype-raw';
 import 'highlight.js/styles/github-dark.css';
 import { api } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
@@ -62,7 +63,8 @@ export default function MarkdownView({ text, baseDir, className }: Props) {
     <div className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypeHighlight, { detect: false, ignoreMissing: true }]]}
+        // rehype-raw renders inline HTML (README badges, <p align="center">, <img>, <br/>). Local content only; React never executes scripts or string handlers.
+        rehypePlugins={[rehypeRaw, [rehypeHighlight, { detect: false, ignoreMissing: true }]]}
         urlTransform={(url) => url}
         components={{
           pre: ({ children }) => (

@@ -57,11 +57,16 @@ export async function gitCommit(dir: string, message: string): Promise<{ ok: boo
   return { ok: r.ok, output: r.ok ? r.stdout : r.stderr || r.stdout };
 }
 
-export async function gitLog(dir: string, limit = 20): Promise<{ hash: string; subject: string; author: string; date: string }[]> {
+export interface GitCommit { hash: string; subject: string; author: string; date: string }
+
+/** A page of the commit log. `hasMore` is derived by asking for one extra row. */
+export async function gitLog(dir: string, skip = 0, limit = 30): Promise<{ commits: GitCommit[]; hasMore: boolean }> {
   const cwd = resolvePath(dir);
-  const r = await git(cwd, ['log', `-${limit}`, '--format=%h%x1f%s%x1f%an%x1f%ar']);
-  if (!r.ok) return [];
-  return r.stdout.split('\n').filter(Boolean).map((l) => { const [hash, subject, author, date] = l.split('\x1f'); return { hash, subject, author, date }; });
+  const lim = Math.max(1, Math.min(200, limit));
+  const r = await git(cwd, ['log', `--skip=${Math.max(0, skip)}`, `-${lim + 1}`, '--format=%h%x1f%s%x1f%an%x1f%ar']);
+  if (!r.ok) return { commits: [], hasMore: false };
+  const rows = r.stdout.split('\n').filter(Boolean).map((l) => { const [hash, subject, author, date] = l.split('\x1f'); return { hash, subject, author, date }; });
+  return { commits: rows.slice(0, lim), hasMore: rows.length > lim };
 }
 
 export interface GitBranch { name: string; current: boolean; remote: boolean; upstream: string | null }

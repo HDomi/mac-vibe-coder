@@ -30,6 +30,14 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
   const [phase, setPhase] = useState<'idle' | 'running' | 'restarting' | 'failed'>('idle');
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [log]);
+  // While an update runs (or the server restarts) the modal cannot be dismissed: the log is the only feedback.
+  const locked = phase === 'running' || phase === 'restarting';
+  const close = () => { if (!locked) onClose(); };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   const apply = (force = false) => {
     setPhase('running'); setLog([]);
@@ -52,15 +60,15 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
   };
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center" onClick={close}>
       <div className="w-[640px] max-w-[92vw] max-h-[85vh] rounded-xl bg-[#12151c] border border-white/10 shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center px-5 h-12 border-b border-white/10">
           <div className="font-medium">{t('update.title')}</div>
           <div className="flex-1" />
-          <button className="text-xs text-zinc-400 hover:text-white mr-3 flex items-center gap-1 disabled:opacity-60" onClick={onRefresh} disabled={checking}>
+          <button className="text-xs text-zinc-400 hover:text-white mr-3 flex items-center gap-1 disabled:opacity-60" onClick={onRefresh} disabled={checking || locked}>
             <span className={`inline-block ${checking ? 'animate-spin' : ''}`}>↻</span>{checking ? t('update.checking') : t('update.checkAgain')}
           </button>
-          <button className="text-zinc-400 hover:text-white" onClick={onClose}>✕</button>
+          <button className="text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed" onClick={close} disabled={locked} title={locked ? t('update.locked') : undefined}>✕</button>
         </div>
         <div className="p-5 space-y-3 overflow-y-auto text-sm">
           {!status && !checking && <div className="text-zinc-500">{t('update.checking')}</div>}
@@ -93,6 +101,7 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
             </button>
             {phase === 'failed' && <button className="rounded bg-white/5 hover:bg-white/10 px-3 py-1.5 text-xs" onClick={() => apply(true)}>{t('update.force')}</button>}
           </div>
+          {locked && <div className="text-amber-200/80 text-[11px]">{t('update.locked')}</div>}
           {phase === 'restarting' && <div className="text-emerald-300 text-xs animate-pulse">{t('update.restarting')}</div>}
           {log.length > 0 && (
             <div ref={logRef} className="rounded-lg bg-black/50 p-3 font-mono text-[12px] max-h-64 overflow-auto">
