@@ -42,7 +42,7 @@ export interface BuildInfo { version: string; commit: string; builtAt: string | 
 export interface UpdateStatus { repo: string; branch: string | null; installed: BuildInfo; remote: BuildInfo | null; available: boolean; commits: { hash: string; subject: string }[]; checkedAt: number; error: string | null }
 
 export interface GitFile { path: string; index: string; worktree: string; staged: boolean; untracked: boolean }
-export interface GitCommit { hash: string; subject: string; author: string; date: string }
+export interface GitCommit { hash: string; parents: string[]; refs: string[]; subject: string; author: string; date: string }
 export interface GitBranch { name: string; current: boolean; remote: boolean; upstream: string | null }
 export interface GitStatus { repo: boolean; root: string | null; branch: string | null; ahead: number; behind: number; files: GitFile[] }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type GitBranch, type GitCommit, type GitFile, type GitStatus } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
+import CommitGraph from './CommitGraph';
 
 interface Props { cwd: string | null; visible: boolean }
 
@@ -58,7 +59,7 @@ export default function GitPanel({ cwd, visible }: Props) {
     // First page only. Pages already scrolled in are kept when the head is unchanged.
     api.gitLog(cwd, 0, PAGE).then((r) => {
       const cur = logRef.current;
-      if (cur.length > r.commits.length && cur[0]?.hash === r.commits[0]?.hash) return;
+      if (cur.length > r.commits.length && JSON.stringify(cur.slice(0, r.commits.length)) === JSON.stringify(r.commits)) return;
       setLog(r.commits); setHasMore(r.hasMore);
     }).catch(() => { setLog([]); setHasMore(false); });
   }, [cwd]);
@@ -192,22 +193,7 @@ export default function GitPanel({ cwd, visible }: Props) {
                 {!hasMore && log.length > 0 && <span>{t('git.allLoaded')}</span>}
               </SectionHeader>
               {log.length === 0 && <div className="px-3 py-3 text-[11px] text-zinc-600">{t('git.noCommits')}</div>}
-              <div className="py-1">
-                {log.map((c, i) => (
-                  <div key={c.hash} className="relative flex items-start gap-2 pl-6 pr-3 py-1 text-xs hover:bg-white/5">
-                    <span className="absolute left-3 top-0 bottom-0 w-px bg-white/10" style={{ top: i === 0 ? '50%' : 0, bottom: i === log.length - 1 && !hasMore ? '50%' : 0 }} />
-                    <span className="absolute left-[9.5px] top-[11px] w-[5px] h-[5px] rounded-full bg-violet-400" />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-zinc-200" title={c.subject}>{c.subject}</div>
-                      <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-                        <span className="font-mono px-1 rounded bg-white/5 text-zinc-400">{c.hash}</span>
-                        <span className="truncate">{c.author}</span>
-                        <span className="ml-auto whitespace-nowrap">{c.date}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <CommitGraph commits={log} />
               <div ref={sentinelRef} className="px-3 py-2 text-[10px] text-zinc-600 text-center">
                 {loadingMore ? <span className="animate-pulse">{t('git.loadingMore')}</span> : hasMore ? <button className="hover:text-zinc-300" onClick={loadMore}>{t('git.loadMore')}</button> : null}
               </div>
