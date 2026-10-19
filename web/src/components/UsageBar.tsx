@@ -34,7 +34,7 @@ function Battery({ label, win }: { label: string; win: UsageWindow | null }) {
         </span>
         <span className="w-[2px] h-[4px] bg-zinc-500/80 rounded-r-[1px] ml-px" />
       </span>
-      <span className="text-[10px] tabular-nums text-zinc-400 w-5">{remain}</span>
+      <span className="text-[10px] tabular-nums text-zinc-400 w-7">{remain}%</span>
     </div>
   );
 }
