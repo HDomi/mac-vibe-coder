@@ -21,8 +21,8 @@ export function requestNotificationPermission() {
   if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission();
 }
 
-interface Persisted { id: string; cwd: string; agent: AgentId; agentSessionId?: string; permissionMode?: PermissionModeId; model?: string }
-interface PendingStart { cwd: string; resolve: (id: string) => void; reject: (err: Error) => void; preload: ChatItem[]; replaces?: string }
+interface Persisted { id: string; cwd: string; agent: AgentId; agentSessionId?: string; permissionMode?: PermissionModeId; model?: string; historyLen?: number }
+interface PendingStart { cwd: string; resolve: (id: string) => void; reject: (err: Error) => void; preload: ChatItem[]; historyLen?: number; replaces?: string }
 /** A revived session that goes missing again this soon is reported lost instead of looping. */
 const REVIVE_COOLDOWN_MS = 30000;
 
@@ -35,13 +35,15 @@ export function useSessions() {
   const [replaced, setReplaced] = useState<Record<string, string>>({});
   const reviving = useRef(new Set<string>());
   const revivedAt = useRef(new Map<string, number>());
+  /** Sessions whose buffered events are already covered by the full saved history (legacy entries). */
+  const skipReplay = useRef(new Set<string>());
 
   useEffect(() => {
     const off = agentClient.on((m: ServerMessage) => {
       if ('type' in m) {
         if (m.type === 'reconnected') {
           // The server lost this socket's subscriptions; re-attach every live session from where we left off.
-          for (const s of Object.values(sessionsRef.current)) if (s.status !== 'closed') agentClient.send({ type: 'session.attach', sessionId: s.id, after: s.lastSeq });
+          for (const s of Object.values(sessionsRef.current)) if (s.status !== 'closed') agentClient.send({ type: 'session.attach', sessionId: s.id, after: s.lastSeq || (skipReplay.current.has(s.id) ? Number.MAX_SAFE_INTEGER : 0) });
           return;
         }
         if (m.type === 'pong') return;
@@ -56,7 +58,7 @@ export function useSessions() {
           if (m.requestId) pendingStart.current.delete(m.requestId);
           const fresh: ChatSession = {
             id: m.sessionId, agent: m.agent ?? 'claude', cwd: m.requestCwd, permissionMode: 'default', status: 'starting',
-            items: p?.preload ?? [], totalCostUsd: 0, lastSeq: 0,
+            items: p?.preload ?? [], historyLen: p?.historyLen, totalCostUsd: 0, lastSeq: 0,
           };
           const old = p?.replaces;
           setSessions((prev) => {
@@ -103,14 +105,33 @@ export function useSessions() {
     if (!saved.length) return;
     setSessions((prev) => {
       const next = { ...prev };
-      for (const p of saved) if (!next[p.id]) next[p.id] = { id: p.id, agent: p.agent, cwd: p.cwd, agentSessionId: p.agentSessionId, permissionMode: p.permissionMode ?? 'default', model: p.model, status: 'idle', items: [], totalCostUsd: 0, lastSeq: 0 };
+      for (const p of saved) if (!next[p.id]) next[p.id] = { id: p.id, agent: p.agent, cwd: p.cwd, agentSessionId: p.agentSessionId, historyLen: p.historyLen, permissionMode: p.permissionMode ?? 'default', model: p.model, status: 'idle', items: [], totalCostUsd: 0, lastSeq: 0 };
       return next;
     });
-    agentClient.ready.then(() => { for (const p of saved) agentClient.send({ type: 'session.attach', sessionId: p.id }); });
+    for (const p of saved) void reattach(p);
   }, []);
 
+  /**
+   * The server buffer only holds events since the session started, so a resumed Claude session
+   * must get its earlier conversation from the saved history before the buffer is replayed.
+   */
+  const reattach = async (p: Persisted) => {
+    let after = 0;
+    if (p.agent === 'claude' && p.agentSessionId && p.historyLen !== 0) {
+      try {
+        const all = await api.historyMessages(p.cwd, p.agentSessionId);
+        // Entries saved before historyLen existed: show the full history and skip the replay it already contains.
+        const items = itemsFromHistory(p.historyLen === undefined ? all : all.slice(0, p.historyLen));
+        if (p.historyLen === undefined) { after = Number.MAX_SAFE_INTEGER; skipReplay.current.add(p.id); }
+        setSessions((prev) => prev[p.id] ? { ...prev, [p.id]: { ...prev[p.id], items: [...items, ...prev[p.id].items], historyLen: p.historyLen ?? all.length } } : prev);
+      } catch { /* history is optional */ }
+    }
+    await agentClient.ready;
+    agentClient.send({ type: 'session.attach', sessionId: p.id, after });
+  };
+
   useEffect(() => {
-    const list: Persisted[] = Object.values(sessions).filter((s) => s.status !== 'closed').map((s) => ({ id: s.id, cwd: s.cwd, agent: s.agent, agentSessionId: s.agentSessionId, permissionMode: s.permissionMode, model: s.model }));
+    const list: Persisted[] = Object.values(sessions).filter((s) => s.status !== 'closed').map((s) => ({ id: s.id, cwd: s.cwd, agent: s.agent, agentSessionId: s.agentSessionId, permissionMode: s.permissionMode, model: s.model, historyLen: s.historyLen }));
     try { localStorage.setItem(LS_ACTIVE, JSON.stringify(list)); } catch { /* ignore */ }
   }, [sessions]);
 
@@ -123,12 +144,16 @@ export function useSessions() {
 
   const start = useCallback(async (cwd: string, opts: { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null; replaces?: string } = {}) => {
     let preload: ChatItem[] = [];
-    if (opts.resume && (opts.agent ?? 'claude') === 'claude') {
-      try { preload = itemsFromHistory(await api.historyMessages(cwd, opts.resume)); } catch { /* history is optional */ }
+    let historyLen: number | undefined;
+    if ((opts.agent ?? 'claude') === 'claude') {
+      historyLen = 0;
+      if (opts.resume) {
+        try { const msgs = await api.historyMessages(cwd, opts.resume); preload = itemsFromHistory(msgs); historyLen = msgs.length; } catch { /* history is optional */ }
+      }
     }
     return new Promise<string>((resolve, reject) => {
       const requestId = crypto.randomUUID();
-      pendingStart.current.set(requestId, { cwd, resolve, reject, preload, replaces: opts.replaces });
+      pendingStart.current.set(requestId, { cwd, resolve, reject, preload, historyLen, replaces: opts.replaces });
       agentClient.send({ type: 'session.start', requestId, agent: opts.agent ?? 'claude', cwd, resume: opts.resume, permissionMode: opts.permissionMode, model: opts.model ?? undefined });
     });
   }, []);

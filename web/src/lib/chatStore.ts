@@ -29,6 +29,8 @@ export interface ChatSession {
   model?: string;
   permissionMode: PermissionModeId;
   agentSessionId?: string;
+  /** Claude only: how many saved history messages were shown when this session started (resume). Server buffer replay covers the rest. */
+  historyLen?: number;
   commands?: string[];
   /** When the current turn started (ms); undefined while idle. */
   turnStartedAt?: number;
