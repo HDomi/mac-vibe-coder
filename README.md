@@ -28,15 +28,16 @@ Mac Vibe Coder 는 그걸 한 창에 모은다. 폴더를 고르면 그 폴더�
 
 | 영역 | 내용 |
 |------|------|
-| **에이전트 채팅** | Claude Code / Codex 선택, 토큰 스트리밍, 도구 실행 카드, 승인 카드(허용 · 항상 허용 · 거부+사유), 질문 카드, 권한 모드 · 모델 즉시 전환, 중단, 실행 중 큐잉/steer |
-| **세션** | 프로젝트별 멀티 세션 탭, 이전 세션 이어하기(두 에이전트 모두), 이름 변경 · 삭제, 전체 프로젝트 최근 세션 목록 |
-| **입력** | `/` 슬래시 커맨드 · 스킬 자동완성, `@` 파일 멘션(프로젝트 루트 기준 퍼지 검색 + 자동 첨부), Finder 드롭 · 파일 트리 드롭 · 클립보드 이미지 붙여넣기 |
-| **파일** | 탐색기(싱글클릭 선택 · 더블클릭 열기, 확장자·파일명·폴더명별 [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) 아이콘), ⌘C/⌘X/⌘V 복사·이동, 복제, 이름 변경, 새 폴더, 휴지통(Finder 경유 · 복원 가능), 우클릭 메뉴, 퀵오픈 ⌘P |
+| **에이전트 채팅** | Claude Code / Codex 선택, 토큰 스트리밍, 도구 실행 카드, 승인 카드(허용 · 항상 허용 · 거부+사유), 질문 카드, 권한 모드 · 모델 즉시 전환, 중단, 실행 중 큐잉/steer, 입력창 위 할 일 체크리스트, ⌘F 대화 검색, 메시지 단위 파일 되돌리기(Claude) |
+| **세션** | 프로젝트별 멀티 세션 탭(고정 · 최근 활동순 정렬 · 승인/질문 대기 뱃지), 입력창 옆 백그라운드 세션 표시, 이전 세션 이어하기(두 에이전트 모두), 이름 변경 · 삭제, 전체 프로젝트 최근 세션 목록 |
+| **입력** | `/` 슬래시 커맨드 · 스킬 자동완성, `@` 파일 멘션(프로젝트 루트 기준 퍼지 검색 + 자동 첨부), Finder 드롭 · 파일 트리 드롭 · 클립보드 이미지 붙여넣기, 저장한 프롬프트 넣기 |
+| **파일** | 탐색기(싱글클릭 선택 · 더블클릭 열기, 확장자·파일명·폴더명별 [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) 아이콘), ⌘C/⌘X/⌘V 복사·이동, 복제, 이름 변경, 새 폴더, 휴지통(Finder 경유 · 복원 가능), 우클릭 메뉴, 현재 폴더 안 파일 이름 검색, 퀵오픈 ⌘P |
 | **미리보기** | Markdown(상대 경로 이미지 · 로컬 링크 해석 · 코드 하이라이트), 이미지, 영상(탐색 가능), 오디오, PDF, 텍스트 |
-| **터미널** | xterm.js + node-pty 로그인 셸, `claude` / `codex` TUI 원클릭, Terminal.app · Finder · VS Code · Cursor 로 열기 |
-| **Git** | 브랜치 전환 · 생성, fetch / pull / push, 상태 · diff · 스테이지 · 커밋 · Commit & Push, 최근 로그 |
+| **브라우저** | CDP 로 붙은 Chrome 페이지(주소창 · 뒤로/앞으로 · 새로고침 · 탭 전환), 캡처 → 채팅 첨부. `debugweb` Chrome(9222)이 떠 있으면 그걸 쓰고, 없으면 같은 프로필로 headless Chrome 을 직접 띄운다. 앱 안 세션만 이 페이지를 실측 대상으로 안내받는다 |
+| **터미널** | xterm.js + node-pty 로그인 셸, `claude` / `codex` TUI 원클릭, 선택 영역 · 최근 출력 채팅으로 보내기, Terminal.app · Finder · VS Code · Cursor 로 열기 |
+| **Git** | 브랜치 전환 · 생성, fetch / pull / push, 상태 · diff · 스테이지 · 커밋 · Commit & Push, 커밋 그래프(커밋을 누르면 바뀐 파일 · diff) |
 | **즐겨찾기** | 폴더 즐겨찾기, 그룹(폴더)으로 묶기 · 접기, 드래그로 이동, 최근 폴더, 프로젝트 아이콘 자동 감지(public/favicon, Next app/icon, Godot project.godot, Tauri, Xcode AppIcon, .icns 등) |
-| **헤더** | Claude 5시간 · 주간 · 모델별, Codex 5시간 · 주간 남은 % 바, 업데이트 배지 |
+| **헤더** | Claude 5시간 · 주간 · 모델별, Codex 5시간 · 주간 남은 % 바(마우스를 올리면 초기화까지 남은 시간), 업데이트 배지 |
 | **운영** | CLI 감지 + 설치/업데이트 버튼(공식 스크립트 · Homebrew · npm), 로그인 시 자동 실행, macOS 알림(다른 앱이나 다른 세션을 보고 있을 때 세션 이름과 함께 완료/실패/승인/질문 알림, 클릭하면 해당 세션으로 이동) |
 | **레이아웃** | 사이드바 · 우측 패널 접기(애니메이션), 구분선 드래그로 폭 조절, 전부 기억됨 |
 
@@ -92,7 +93,8 @@ cd mac-vibe-coder
 | ⌘K | 입력창 포커스 |
 | ⌘P | 퀵오픈(프로젝트 파일 검색) |
 | ⌘B / ⌘J | 사이드바 / 우측 패널 접기 |
-| ⌘1 ~ ⌘4 | Files · Preview · Terminal · Git 탭 |
+| ⌘1 ~ ⌘5 | Files · Preview · Browser · Terminal · Git 탭 |
+| ⌘F | 대화 검색 (파일 탭 안에서는 파일 검색) |
 | ⌘/ | 설정 · 단축키 안내 |
 | Enter / Shift+Enter | 전송 / 줄바꿈 |
 | 파일 목록 | ⌘C ⌘X ⌘V, ⌘D 복제, ⏎ 이름 변경, ⌘⌫ 휴지통, ⇧⌘N 새 폴더, ⌫ 상위 폴더, Space 미리보기 |
@@ -120,8 +122,9 @@ cd mac-vibe-coder
 
 | 경로 | 내용 |
 |------|------|
-| `~/.mac-vibe-coder/config.json` | 즐겨찾기 · 그룹 · 최근 폴더 |
-| `~/.mac-vibe-coder/attachments/` | 브라우저 모드 · 붙여넣기 첨부 사본 |
+| `~/.mac-vibe-coder/config.json` | 즐겨찾기 · 그룹 · 최근 폴더 · 저장한 프롬프트 |
+| `~/.mac-vibe-coder/attachments/` | 브라우저 모드 · 붙여넣기 첨부 사본, 브라우저 캡처 |
+| `/tmp/chrome-lumi-debug` | 브라우저 탭 Chrome 프로필(`debugweb` 과 공유, `DEBUGWEB_PROFILE` · `DEBUGWEB_CDP_PORT` 로 변경) |
 | `~/.claude/projects/` | Claude 세션(CLI 와 공유, 이름 변경·삭제도 반영) |
 | `~/.codex/` | Codex 세션 · 로그인(앱이 읽기만 함) |
 | `~/Library/LaunchAgents/com.hdomi.mac-vibe-coder.plist` | `--login` 으로 등록한 자동 실행 |

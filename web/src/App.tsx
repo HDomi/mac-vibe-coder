@@ -11,6 +11,7 @@ import UsageBar, { type ViewMode } from './components/UsageBar';
 import ChatPanel, { type StartOptions } from './components/ChatPanel';
 import type { BackgroundSession } from './components/Composer';
 import TerminalPanel from './components/TerminalPanel';
+import BrowserPanel from './components/BrowserPanel';
 import GitPanel from './components/GitPanel';
 import Splitter, { usePaneWidth } from './components/Splitter';
 import { ContextMenuProvider, useContextMenu, type MenuItem } from './components/ContextMenu';
@@ -48,7 +49,7 @@ function AppInner() {
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [selected, setSelected] = useState<Entry | null>(null);
   const [showTools, setShowTools] = useState(false);
-  const [rightTab, setRightTab] = useState<'files' | 'preview' | 'terminal' | 'git'>('files');
+  const [rightTab, setRightTab] = useState<'files' | 'preview' | 'browser' | 'terminal' | 'git'>('files');
   // Remembered so an update/relaunch comes back to the tab that was on screen, not the new-session view.
   const [activeSession, setActiveSession] = useState<string | 'new' | null>(() => { try { return localStorage.getItem(LS_ACTIVE_SESSION); } catch { return null; } });
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(LS_SIDEBAR) === '1'; } catch { return false; } });
@@ -155,7 +156,7 @@ function AppInner() {
     if (!session && project) setActiveSession(null);
   };
 
-  const rightTabs = [['files', t('app.tab.files')], ['preview', t('app.tab.preview')], ['terminal', t('app.tab.terminal')], ['git', t('app.tab.git')]] as const;
+  const rightTabs = [['files', t('app.tab.files')], ['preview', t('app.tab.preview')], ['browser', t('app.tab.browser')], ['terminal', t('app.tab.terminal')], ['git', t('app.tab.git')]] as const;
 
   // Global keyboard shortcuts.
   useEffect(() => {
@@ -181,7 +182,7 @@ function AppInner() {
         }
       }
       else if (k === '/') { e.preventDefault(); setShowTools(true); }
-      else if (['1', '2', '3', '4'].includes(e.key) && !inText) { e.preventDefault(); setRightTab(rightTabs[Number(e.key) - 1][0]); setRightCollapsed(false); }
+      else if (['1', '2', '3', '4', '5'].includes(e.key) && !inText) { e.preventDefault(); setRightTab(rightTabs[Number(e.key) - 1][0]); setRightCollapsed(false); }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -273,6 +274,7 @@ function AppInner() {
                     onRefresh={() => setRefreshTick((t) => t + 1)} onAttach={project ? attach : undefined} />
                 </div>
                 <div className={`absolute inset-0 ${rightTab === 'preview' ? '' : 'invisible'}`}><Preview entry={selected} /></div>
+                <div className={`absolute inset-0 ${rightTab === 'browser' ? '' : 'invisible'}`}><BrowserPanel visible={rightTab === 'browser' && !rightCollapsed} onCapture={(a) => setPendingAttachments((prev) => [...prev, a])} /></div>
                 <div className={`absolute inset-0 ${rightTab === 'terminal' ? '' : 'invisible'}`}><TerminalPanel cwd={project} visible={rightTab === 'terminal'} /></div>
                 <div className={`absolute inset-0 ${rightTab === 'git' ? '' : 'invisible'}`}><GitPanel cwd={project} visible={rightTab === 'git'} /></div>
               </div>

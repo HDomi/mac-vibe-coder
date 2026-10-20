@@ -7,9 +7,13 @@ import { attachWebSocket, SessionRegistry } from './sessions.js';
 import { attachPty, killAllPtys } from './pty.js';
 import { rejectReason } from './guard.js';
 import { setShutdownHandler } from './lifecycle.js';
+import { attachBrowser, browser } from './browser.js';
+import { RESTART_EXIT_CODE } from './updater.js';
 
 export async function startServer(port = PORT): Promise<ServerType> {
   await syncLoginShellPath();
+  // Agent sessions read this to tell the model where the Browser panel's page info lives.
+  process.env.MVC_PORT = String(port);
   return new Promise((resolve, reject) => {
     const registry = new SessionRegistry();
     const app = createApp(registry, port);
@@ -20,6 +24,8 @@ export async function startServer(port = PORT): Promise<ServerType> {
     const http = server as import('node:http').Server;
     const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
     const ptyWss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
+    const browserWss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
+    attachBrowser(browserWss);
     attachWebSocket(wss, registry);
     attachPty(ptyWss);
     let shuttingDown = false;
@@ -32,6 +38,8 @@ export async function startServer(port = PORT): Promise<ServerType> {
       http.close();
       const timer = setTimeout(() => process.exit(code), 4000);
       killAllPtys();
+      // Quitting closes the headless Chrome we started; an update restart keeps it (and its logins) for the new server.
+      void browser.shutdown(code !== RESTART_EXIT_CODE);
       registry.closeAll().finally(() => { clearTimeout(timer); process.exit(code); });
     };
     setShutdownHandler(shutdown);
@@ -40,7 +48,7 @@ export async function startServer(port = PORT): Promise<ServerType> {
     http.on('upgrade', (req, socket, head) => {
       let pathname: string;
       try { pathname = new URL(req.url ?? '/', 'http://localhost').pathname; } catch { socket.destroy(); return; }
-      const target = pathname === '/ws' ? wss : pathname === '/pty' ? ptyWss : null;
+      const target = pathname === '/ws' ? wss : pathname === '/pty' ? ptyWss : pathname === '/browser' ? browserWss : null;
       if (!target) { socket.destroy(); return; }
       // WebSockets are not covered by CORS: without this any web page could open a shell on /pty.
       const reason = rejectReason({ host: req.headers.host, origin: req.headers.origin, secFetchSite: req.headers['sec-fetch-site'] as string | undefined }, port);

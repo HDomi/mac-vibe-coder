@@ -52,3 +52,13 @@
 - 업데이트 적용은 한 번에 하나만 실행된다.
 - Electron 은 서버 자식이 죽으면 1.5초→30초 지수 백오프로 재시작한다. 다른 인스턴스가 포트를 쓰고 있으면 재시작 대신 그 서버에 붙는다.
 - 부모가 강제 종료(SIGKILL)돼도 Claude CLI 는 stdin 종료로, Codex app-server(stdio) 는 연결 종료로, PTY 셸은 SIGHUP 으로 스스로 끝난다.
+
+## 브라우저 탭과 CDP (v0.3.40)
+
+- Chrome 은 `debugweb` 과 같은 CDP 포트(`DEBUGWEB_CDP_PORT`, 기본 9222)와 프로필(`DEBUGWEB_PROFILE`, 기본 `/tmp/chrome-lumi-debug`)을 쓴다. 로그인이 공유된다.
+- 포트에 Chrome 이 떠 있으면 그 Chrome 의 페이지를 쓴다. 없으면 서버가 같은 설정으로 headless Chrome 을 띄운다(detached). 업데이트 재시작에서는 살려 두고, 앱 종료(SIGTERM)에서만 headless 인스턴스를 닫는다. 사용자의 `debugweb` Chrome 은 닫지 않는다.
+- 화면은 `Page.startScreencast` 프레임을 `/browser` WebSocket 으로 받아 그린다. 패널이 보일 때만 screencast 하고, 프레임마다 ack 해서 밀리지 않게 한다. headless 페이지는 `Emulation.setDeviceMetricsOverride` 로 패널 크기에 맞춘다. 외부 Chrome 은 창 크기 그대로 축소해 보여 준다.
+- 입력은 `Input.dispatchMouseEvent` · `Input.dispatchKeyEvent` 로 보낸다. 한글 IME 는 숨은 textarea 에서 조합하고 조합이 끝나면 `Input.insertText` 로 넣는다. ⌘C 는 페이지 선택 텍스트를 읽어 클립보드에 쓰고, ⌘V 는 `insertText` 로 붙인다.
+- 캡처는 `Page.captureScreenshot` PNG 를 첨부 폴더에 저장하고 채팅 입력창 첨부로 넘긴다.
+- 앱 안 에이전트 세션만 패널 페이지를 안다. Claude 는 system prompt append 와 `MVC_BROWSER_INFO_URL` 환경 변수, Codex 는 `developerInstructions` 로 `GET /api/browser/target` 을 안내받는다. 응답의 `webSocketDebuggerUrl` 로 그 페이지에 붙는다. 앱 밖 터미널 세션에는 이 안내가 없다.
+- 제약: system prompt 는 세션 시작 때 기록되므로 안내는 새 세션부터 적용된다. Codex 기본 샌드박스(workspace-write)는 localhost 접속을 막아서, Codex 실측은 "모두 허용" 모드에서만 된다. 앱이 띄운 headless Chrome 이 프로필을 쓰는 동안 터미널에서 `debugweb` 을 같은 프로필로 실행하면 프로필 잠금 때문에 새 창이 안 열릴 수 있다.

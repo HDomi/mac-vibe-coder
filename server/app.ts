@@ -9,6 +9,7 @@ import { detectTools, INSTALL_COMMANDS, UPDATE_COMMANDS, type InstallMethod, typ
 import { streamShell } from './shell.js';
 import { getUsage } from './usage.js';
 import { saveAttachment } from './attachments.js';
+import { browser } from './browser.js';
 import { listSessions, getSessionMessages, renameSession, deleteSession } from '@anthropic-ai/claude-agent-sdk';
 import type { SessionRegistry } from './sessions.js';
 import { previewKind } from './mime.js';
@@ -92,6 +93,11 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
     return new Response(res.body, { status: res.status, headers: { ...res.headers, 'Cache-Control': 'private, max-age=300' } });
   });
 
+  // The page shown in the Browser panel, for agent sessions started by this app (see browserAgentHint).
+  app.get('/api/browser/target', (c) => {
+    const info = browser.info();
+    return info ? c.json(info) : c.json({ error: 'The Browser tab is not open in Mac Vibe Coder. Ask the user to open it.' }, 404);
+  });
   app.get('/api/prompts', async (c) => c.json((await loadConfig()).prompts));
   app.put('/api/prompts', async (c) => {
     const body = await c.req.json<unknown>();
