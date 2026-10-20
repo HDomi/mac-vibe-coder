@@ -16,6 +16,7 @@ interface Props {
 }
 
 interface Clipboard { paths: string[]; cut: boolean }
+interface SearchHit { path: string; rel: string; isDir: boolean }
 let clipboard: Clipboard | null = null; // module-level so it survives re-renders and folder changes
 
 export default function FileList({ listing, error, isFavorite, onNavigate, onPreview, onToggleFavorite, onRefresh, onAttach }: Props) {
@@ -29,12 +30,44 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
   const [creating, setCreating] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
+  // Name search under the folder on screen (recursive, same matcher as "@" mentions).
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<SearchHit[] | null>(null);
+  const [hitIdx, setHitIdx] = useState(0);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const searching = query.trim().length > 0;
 
   const entries = (listing?.entries ?? []).filter((e) => showHidden || !e.hidden);
   const selectedEntries = entries.filter((e) => selected.has(e.path));
   const crumbs = listing ? listing.path.split('/').filter(Boolean) : [];
 
-  useEffect(() => { setSelected(new Set()); setAnchor(null); setRenaming(null); }, [listing?.path]);
+  useEffect(() => { setSelected(new Set()); setAnchor(null); setRenaming(null); setQuery(''); }, [listing?.path]);
+  useEffect(() => {
+    if (!listing || !searching) { setHits(null); return; }
+    let alive = true;
+    const timer = setTimeout(() => {
+      api.search(listing.path, query.trim()).then((h) => { if (alive) { setHits(h); setHitIdx(0); } }).catch((e) => { if (alive) { setHits([]); fail(e); } });
+    }, 150);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [query, listing?.path]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ⌘F inside the file panel searches files instead of the chat.
+  const onFind = (ev: React.KeyboardEvent) => {
+    if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'f') { ev.preventDefault(); searchInput.current?.focus(); searchInput.current?.select(); return true; }
+    return false;
+  };
+  const openHit = (h: SearchHit) => {
+    if (h.isDir) onNavigate(h.path);
+    // Search hits carry only the path; Preview needs the full entry (kind, size, ext).
+    else api.stat(h.path).then(onPreview).catch(fail);
+  };
+  const hitMenu = (h: SearchHit): MenuItem[] => [
+    { label: h.isDir ? t('common.open') : t('files.preview'), onClick: () => openHit(h) },
+    ...(onAttach && !h.isDir ? [{ label: t('files.attachToChat'), onClick: () => { api.stat(h.path).then((e) => onAttach([e])).catch(fail); } }] : []),
+    { label: t('files.openContainingFolder'), onClick: () => onNavigate(h.path.slice(0, h.path.lastIndexOf('/')) || '/') },
+    { separator: true },
+    { label: t('common.revealInFinder'), onClick: () => api.open(h.path, 'finder').catch(fail) },
+    { label: t('common.copyPath'), onClick: () => navigator.clipboard.writeText(h.path) },
+  ];
   useEffect(() => { if (!note) return; const timer = setTimeout(() => setNote(null), 3000); return () => clearTimeout(timer); }, [note]);
 
   const fail = (e: unknown) => setNote((e as Error).message ?? String(e));
@@ -88,7 +121,8 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
   const newFolder = () => { setDraft(t('files.untitledFolder')); setCreating(true); };
 
   const onKey = useCallback((ev: React.KeyboardEvent) => {
-    if (renaming || creating) return;
+    if (onFind(ev)) return;
+    if (renaming || creating || searching) return;
     const mod = ev.metaKey || ev.ctrlKey;
     const idx = anchor ? entries.findIndex((e) => e.path === anchor) : -1;
     const moveTo = (i: number) => { const e = entries[Math.max(0, Math.min(entries.length - 1, i))]; if (e) { setSelected(new Set([e.path])); setAnchor(e.path); } };
@@ -108,7 +142,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
     else if (mod && ev.shiftKey && ev.key.toLowerCase() === 'n') { ev.preventDefault(); newFolder(); }
     else if (ev.key === 'Escape') setSelected(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, anchor, selectedEntries, listing, renaming, creating]);
+  }, [entries, anchor, selectedEntries, listing, renaming, creating, searching]);
 
   const itemMenu = (e: Entry): MenuItem[] => {
     const sel = selected.has(e.path) ? selectedEntries : [e];
@@ -149,7 +183,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
   ];
 
   return (
-    <div ref={root} tabIndex={0} onKeyDown={onKey} className="flex flex-col h-full min-w-0 outline-none">
+    <div ref={root} tabIndex={0} onKeyDown={onKey} data-own-find className="flex flex-col h-full min-w-0 outline-none">
       <div className="h-10 flex items-center gap-2 px-3 border-b border-white/10 text-sm">
         <button className="px-2 py-1 rounded hover:bg-white/10 disabled:opacity-30" disabled={!listing?.parent} onClick={() => listing?.parent && onNavigate(listing.parent)} title={t('files.parentFolder')}>↑</button>
         <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap text-zinc-400">
@@ -164,7 +198,41 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
         <button className="px-2 py-1 rounded hover:bg-white/10 text-zinc-400" onClick={newFolder} title={t('files.newFolder')}>＋</button>
         <button className="px-2 py-1 rounded hover:bg-white/10" onClick={onToggleFavorite} title={isFavorite ? t('sidebar.removeFavorite') : t('sidebar.addFavorite')}>{isFavorite ? '★' : '☆'}</button>
       </div>
+      <div className="h-9 shrink-0 flex items-center gap-2 px-3 border-b border-white/5">
+        <span className="text-zinc-500 text-xs">⌕</span>
+        <input ref={searchInput} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('files.searchPlaceholder')} aria-label={t('files.searchPlaceholder')}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.nativeEvent.isComposing) return;
+            if (onFind(e)) return;
+            const n = hits?.length ?? 0;
+            if (e.key === 'Escape') { e.preventDefault(); setQuery(''); root.current?.focus(); }
+            else if (e.key === 'ArrowDown' && n) { e.preventDefault(); setHitIdx((i) => (i + 1) % n); }
+            else if (e.key === 'ArrowUp' && n) { e.preventDefault(); setHitIdx((i) => (i - 1 + n) % n); }
+            else if (e.key === 'Enter' && hits?.[hitIdx]) { e.preventDefault(); openHit(hits[hitIdx]); }
+          }}
+          className="flex-1 min-w-0 bg-transparent text-[13px] outline-none placeholder:text-zinc-600" />
+        {searching && <span className="text-[10px] text-zinc-500 tabular-nums">{hits === null ? '…' : t('files.searchCount', { n: hits.length })}</span>}
+        {searching && <button className="text-zinc-500 hover:text-white text-xs" onClick={() => setQuery('')} title="Esc">✕</button>}
+      </div>
 
+      {searching ? (
+        <div className="flex-1 overflow-y-auto py-1">
+          {hits?.length === 0 && <div className="p-6 text-center text-sm text-zinc-600">{t('files.searchNone')}</div>}
+          {hits?.map((h, i) => {
+            const slash = h.rel.lastIndexOf('/');
+            return (
+              <div key={h.path} onMouseEnter={() => setHitIdx(i)} onClick={() => openHit(h)} onContextMenu={(ev) => menu.open(ev, hitMenu(h))} title={h.path}
+                draggable onDragStart={(ev) => { ev.dataTransfer.setData('text/plain', h.path); ev.dataTransfer.setData('application/x-vibe-path', h.path); }}
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer ${i === hitIdx ? 'bg-blue-500/20' : 'hover:bg-white/5'}`}>
+                <FileIcon name={h.rel.slice(slash + 1)} isDir={h.isDir} />
+                <span className="truncate">{h.rel.slice(slash + 1)}</span>
+                {slash > 0 && <span className="truncate text-[11px] text-zinc-500 font-mono">{h.rel.slice(0, slash)}</span>}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto" onContextMenu={(e) => menu.open(e, bgMenu())} onClick={(e) => { if (e.target === e.currentTarget) setSelected(new Set()); }}>
         {error && (
           <div className="m-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm">
@@ -204,6 +272,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
           </table>
         )}
       </div>
+      )}
       <div className="h-6 shrink-0 flex items-center px-3 text-[10px] text-zinc-600 border-t border-white/5">
         {selected.size > 0 ? t('files.selected', { n: selected.size }) : t('files.items', { n: entries.length })} · {t('files.footerHint')}
       </div>
