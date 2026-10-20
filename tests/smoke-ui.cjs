@@ -207,10 +207,10 @@ async function main() {
   await until(`Math.abs(new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m42 - ${580 - FOOT}) < 1`);
   const claudeX = await js(`new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m41 + ${HALF}`);
   await dragCompanion('codex', claudeX + 30, 570);
-  await until(`[...document.querySelectorAll('.session-companion')].every(e => e.dataset.pose === 'fight')`);
-  const punch = await js(`document.querySelector('[data-agent="claude"] .companion-body').lastElementChild.getAttribute('d')`);
-  await wait(200);
-  assert.notEqual(await js(`document.querySelector('[data-agent="claude"] .companion-body').lastElementChild.getAttribute('d')`), punch);
+  await until(`[...document.querySelectorAll('.session-companion')].every(e => ['fight', 'punch', 'kick', 'block', 'hit', 'down'].includes(e.dataset.pose))`);
+  // Blows are hit-box tested: with Math.random fixed both throw punches, so both take hits.
+  await until(`[...document.querySelectorAll('.session-companion')].every(e => Number(e.dataset.hits) > 0)`, 200);
+  await until(`[...document.querySelectorAll('.session-companion')].every(e => e.dataset.travel === 'rest' && !['fight', 'punch', 'kick', 'block', 'hit', 'down'].includes(e.dataset.pose))`, 300);
   await dragCompanion('codex', 90, 170);
   assert.equal(await js(`document.querySelector('[data-agent="codex"]').dataset.floor`), 'favorites-divider');
   const beforeScroll = await js(`new DOMMatrixReadOnly(document.querySelector('[data-agent="codex"]').style.transform).m42`);
@@ -226,8 +226,8 @@ async function main() {
   await until(`document.querySelector('[data-agent="codex"]').dataset.pose === 'flee'`);
   await until(`document.querySelector('[data-agent="codex"]').dataset.travel === 'rest'`);
   assert.equal(await js(`document.querySelector('[data-agent="codex"]').dataset.floor`), 'favorites-divider');
-  // Walking: Math.random .7 picks a stroll; the stride animates.
-  await js(`Math.random = () => .7`);
+  // Walking: Math.random .5 picks a stroll; the stride animates.
+  await js(`Math.random = () => .5`);
   await until(`document.querySelector('[data-agent="codex"]').dataset.pose === 'walk'`, 400);
   const step = await js(`document.querySelector('[data-agent="codex"] .companion-body').children[1].getAttribute('d')`);
   await wait(200);
@@ -251,7 +251,7 @@ async function main() {
   await js(`Math.random = originalRandom; renderUsage()`);
   await until(`!document.querySelector('.session-companions')`);
   assert.deepEqual(errors, []);
-  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage, companion idle timing, 77% size, drag/drop, tab fall, ladder rungs, sparring, click flee, wall knock and crossing, click-through, layout changes, reduced motion and cleanup. Screenshots: ${screenshot}, ${companionScreenshot}`);
+  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage, companion idle timing, 77% size, drag/drop, tab fall, ladder rungs, hit-box sparring, click flee, wall knock and crossing, click-through, layout changes, reduced motion and cleanup. Screenshots: ${screenshot}, ${companionScreenshot}`);
 }
 
 async function finish(code) {

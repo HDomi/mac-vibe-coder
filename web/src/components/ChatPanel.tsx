@@ -301,7 +301,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
 
   return (
     <div className="h-full flex flex-col min-w-0">
-      <div className="h-10 shrink-0 flex items-center gap-3 px-4 border-b border-white/10 text-xs">
+      <div data-companion-floor="chat-header" data-companion-edge="bottom" className="h-10 shrink-0 flex items-center gap-3 px-4 border-b border-white/10 text-xs">
         <span className={`w-2 h-2 rounded-full ${running ? 'bg-amber-400 animate-pulse' : session.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
         <AgentIcon agent={session.agent} size={16} />
         <span className="font-medium text-zinc-200">{session.agent === 'codex' ? 'Codex' : 'Claude'}</span>
@@ -327,14 +327,14 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         )}
       </div>
       {activity && (
-        <div className="h-7 shrink-0 flex items-center gap-2 px-4 text-[11px] text-zinc-400 border-t border-white/5 bg-[#0e1117]">
+        <div data-companion-floor="chat-activity" className="h-7 shrink-0 flex items-center gap-2 px-4 text-[11px] text-zinc-400 border-t border-white/5 bg-[#0e1117]">
           <span className="inline-block w-3 h-3 rounded-full border-2 border-amber-400/70 border-t-transparent animate-spin" />
           <span className="shrink-0 whitespace-nowrap text-zinc-600 tabular-nums">{elapsedLabel}</span>
           <span className="truncate">{activity}</span>
         </div>
       )}
       <TodoPanel todos={currentTodos(session)} running={running} />
-      <Composer key={session.id} cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
+      <Composer key={session.id} draftKey={session.id} cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
         onSend={(text, atts) => { stick.current = true; setAtBottom(true); onSend(text, atts); requestAnimationFrame(scrollToBottom); }}
         onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments}
         background={background} onFocusSession={onFocusSession} />

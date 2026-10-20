@@ -193,7 +193,7 @@ export default function GitPanel({ cwd, visible }: Props) {
     const tone = f.untracked || code === 'A' ? 'text-emerald-300 bg-emerald-500/10' : code === 'D' ? 'text-red-300 bg-red-500/10' : 'text-amber-300 bg-amber-500/10';
     const active = sel?.path === f.path && sel.staged === isStaged;
     return (
-      <div className={`group flex items-center gap-2 px-3 py-1 text-xs cursor-pointer border-l-2 ${active ? 'bg-blue-500/15 border-blue-400' : 'border-transparent hover:bg-white/5'}`} onClick={() => setSel({ path: f.path, staged: isStaged })}>
+      <div data-companion-rung="" className={`group flex items-center gap-2 px-3 py-1 text-xs cursor-pointer border-l-2 ${active ? 'bg-blue-500/15 border-blue-400' : 'border-transparent hover:bg-white/5'}`} onClick={() => setSel({ path: f.path, staged: isStaged })}>
         <span className={`w-9 text-center text-[9px] font-mono rounded px-1 py-px ${tone}`}>{CODE[code] ?? ''}</span>
         <span className="truncate flex-1 font-mono text-zinc-300" title={f.path}>{f.path}</span>
         <button className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-white w-5 h-5 rounded hover:bg-white/10" title={isStaged ? t('git.unstage') : t('git.stage')} onClick={(e) => { e.stopPropagation(); stage([f], isStaged ? 'reset' : 'add'); }}>{isStaged ? '−' : '＋'}</button>
@@ -323,7 +323,7 @@ function CommitDetail({ view, root, file, diff, onFile, onClose }: {
           const tone = f.status === 'A' ? 'text-emerald-300 bg-emerald-500/10' : f.status === 'D' ? 'text-red-300 bg-red-500/10' : 'text-amber-300 bg-amber-500/10';
           const active = file === f.path;
           return (
-            <div key={f.path} onClick={() => onFile(f.path)}
+            <div key={f.path} data-companion-rung="" onClick={() => onFile(f.path)}
               className={`group flex items-center gap-2 px-3 py-1 text-xs cursor-pointer border-l-2 ${active ? 'bg-blue-500/15 border-blue-400' : 'border-transparent hover:bg-white/5'}`}>
               <span className={`w-9 text-center text-[9px] font-mono rounded px-1 py-px ${tone}`}>{CODE[f.status] ?? f.status}</span>
               <span className="truncate flex-1 font-mono text-zinc-300" title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}>

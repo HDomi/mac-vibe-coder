@@ -210,7 +210,7 @@ function AppInner() {
           <main className="flex-1 min-w-0 flex">
             <div data-companion-zone="prompt" className="flex-1 min-w-0 flex flex-col">
               {project && projectSessions.length > 0 && (
-                <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs overflow-x-auto">
+                <div data-companion-floor="session-tabs" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs overflow-x-auto">
                   {projectSessions.map((s) => (
                     <div key={s.id} onClick={() => setActiveSession(s.id)} onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeSession(s.id); } }}
                       onContextMenu={(e) => menu.open(e, sessionMenu(s, S.setPinned, () => closeSession(s.id)))}

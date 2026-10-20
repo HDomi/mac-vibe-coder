@@ -223,7 +223,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
           {hits?.map((h, i) => {
             const slash = h.rel.lastIndexOf('/');
             return (
-              <div key={h.path} onMouseEnter={() => setHitIdx(i)} onClick={() => openHit(h)} onContextMenu={(ev) => menu.open(ev, hitMenu(h))} title={h.path}
+              <div key={h.path} data-companion-rung="" onMouseEnter={() => setHitIdx(i)} onClick={() => openHit(h)} onContextMenu={(ev) => menu.open(ev, hitMenu(h))} title={h.path}
                 draggable onDragStart={(ev) => { ev.dataTransfer.setData('text/plain', h.path); ev.dataTransfer.setData('application/x-vibe-path', h.path); }}
                 className={`flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer ${i === hitIdx ? 'bg-blue-500/20' : 'hover:bg-white/5'}`}>
                 <FileIcon name={h.rel.slice(slash + 1)} isDir={h.isDir} />

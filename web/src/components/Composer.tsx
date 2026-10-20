@@ -5,6 +5,7 @@ import { t, useLang } from '../lib/i18n';
 import { openLightbox } from './Lightbox';
 import FileIcon from './FileIcon';
 import PromptMenu from './PromptMenu';
+import { draftKey as draftStorageKey, readDraft, writeDraft } from '../lib/draft';
 
 interface Props {
   /** Session working directory; root for "@" file mentions. */
@@ -24,6 +25,8 @@ interface Props {
   /** Other sessions still working or waiting for the user; shown next to "Attach" so they are not forgotten. */
   background?: BackgroundSession[];
   onFocusSession?: (id: string) => void;
+  /** Stable id (session id) under which unsent text and attachments survive view switches and restarts. */
+  draftKey?: string;
 }
 
 export interface BackgroundSession { id: string; name: string; state: 'running' | 'waiting' }
@@ -43,10 +46,14 @@ function toAttachment(path: string, name?: string): Attachment {
   return { path, name: n, kind: IMAGE_RE.test(n) ? 'image' : 'file' };
 }
 
-export default function Composer({ cwd, agent, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments, background = [], onFocusSession }: Props) {
+export default function Composer({ cwd, agent, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments, background = [], onFocusSession, draftKey }: Props) {
   useLang();
-  const [text, setText] = useState('');
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const storageKey = draftKey ? draftStorageKey(draftKey) : null;
+  const [draft] = useState(() => readDraft(storageKey));
+  const [text, setText] = useState(draft.text);
+  const [attachments, setAttachments] = useState<Attachment[]>(draft.attachments);
+  // The draft is kept until the user actually sends it; an empty composer clears it.
+  useEffect(() => writeDraft(storageKey, { text, attachments }), [storageKey, text, attachments]);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);

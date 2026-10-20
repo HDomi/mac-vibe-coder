@@ -29,7 +29,7 @@ function Item({ label, path, active, onClick, onContextMenu, hint, indent, dragg
   draggable?: boolean; onDragStart?: (e: React.DragEvent) => void; icon?: boolean; lead?: React.ReactNode;
 }) {
   return (
-    <div
+    <div data-companion-rung=""
       className={`group flex items-center gap-2 rounded-md py-1.5 text-sm cursor-pointer select-none ${indent ? 'pl-6 pr-2' : 'px-2'} ${active ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}
       onClick={onClick} onContextMenu={onContextMenu} title={path} draggable={draggable} onDragStart={onDragStart}
     >

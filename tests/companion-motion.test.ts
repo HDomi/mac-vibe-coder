@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { atWall, chooseAction, cycleLength, dropFloor, fallDuration, groundOf, hops, neighborZone, restDuration, SCALE, skeleton, type Floor, type Pose } from '../web/src/lib/companionMotion';
+import { atWall, chooseAction, chooseAttack, cycleLength, dropFloor, fallDuration, groundOf, hops, landsHit, leapTargets, neighborZone, restDuration, SCALE, skeleton, type Floor, type Pose } from '../web/src/lib/companionMotion';
 const floors: Floor[] = [
   { id: 'ground:left', left: 20, right: 180, y: 700, zone: 'left', ground: true },
   { id: 'left', left: 20, right: 180, y: 200, zone: 'left' },
@@ -32,7 +32,10 @@ test('ladder hops reach rungs within a jump in the same panel only', () => {
 test('decisions keep the figure lively and favour climbing on a ladder', () => {
   const counts = { idle: 0, walk: 0, run: 0, hop: 0, gesture: 0 };
   for (let i = 0; i < 1000; i++) counts[chooseAction(() => i / 1000)]++;
-  assert.deepEqual(counts, { idle: 250, walk: 470, run: 100, hop: 110, gesture: 70 });
+  assert.deepEqual(counts, { idle: 250, walk: 430, run: 140, hop: 110, gesture: 70 });
+  assert.equal(chooseAction(() => .01, false, true), 'leap');
+  assert.equal(chooseAction(() => .01, false, false), 'idle');
+  assert.deepEqual(leapTargets(floors[2], floors).map((f) => f.id), ['ground:left', 'files-footer']);
   const ladder = { idle: 0, walk: 0, run: 0, hop: 0, gesture: 0 };
   for (let i = 0; i < 1000; i++) ladder[chooseAction(() => i / 1000, true)]++;
   assert.deepEqual(ladder, { idle: 150, walk: 200, run: 0, hop: 500, gesture: 150 });
@@ -54,7 +57,7 @@ test('drop finds a platform below the pointer, within a panel when asked, and fa
   assert.equal(dropFloor({ x: 0, y: 0 }, floors, 'nowhere'), undefined);
 });
 test('every pose draws two-bone limbs without NaN and plants a foot while moving', () => {
-  const poses: Pose[] = ['idle', 'wave', 'walk', 'run', 'flee', 'jump', 'fall', 'land', 'knock', 'climb', 'hurt', 'drag', 'fight', 'sit', 'stretch', 'look', 'scratch'];
+  const poses: Pose[] = ['idle', 'wave', 'walk', 'run', 'flee', 'jump', 'fall', 'land', 'knock', 'climb', 'hurt', 'drag', 'sit', 'stretch', 'look', 'scratch', 'fight', 'punch', 'kick', 'block', 'hit', 'down'];
   for (const pose of poses) {
     for (const phase of [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]) {
       const s = skeleton(pose, phase, 300);
@@ -63,9 +66,31 @@ test('every pose draws two-bone limbs without NaN and plants a foot while moving
       if (pose === 'walk' || pose === 'run' || pose === 'flee') assert.ok(s.legs.some((d) => d.endsWith('54.00')), pose);
     }
   }
-  assert.notEqual(skeleton('fight', 0, 300, 0).arms[1], skeleton('fight', 0, 300, 1).arms[1]);
   assert.notEqual(skeleton('knock', 0, 200).arms[1], skeleton('knock', 0, 1000).arms[1]);
+  assert.notEqual(skeleton('punch', 0, 210).arms[1], skeleton('fight', 0, 210).arms[1]);
+  assert.notEqual(skeleton('kick', 0, 300).legs[1], skeleton('fight', 0, 300).legs[1]);
+  assert.ok(skeleton('down', 0, 100).headY > skeleton('idle', 0, 100).headY + 30);
   assert.notEqual(skeleton('sit', 0, 2000).body, skeleton('idle', 0, 2000).body);
+});
+test('standing legs are nearly straight and only the swinging knee bends', () => {
+  const knee = (d: string) => d.split('L')[1].split(' ').map(Number);
+  const idle = skeleton('idle', 0, 300);
+  for (const d of idle.legs) { const [kx] = knee(d); assert.ok(Math.abs(kx - 23) < 5, d); }
+  const stance = skeleton('walk', 3 * Math.PI / 2, 300), swing = skeleton('walk', Math.PI / 2, 300);
+  assert.ok(Math.abs(knee(stance.legs[0])[0] - 23) < 2.5, 'stance leg straight');
+  assert.ok(knee(swing.legs[0])[0] - 23 > 4, 'swing knee bends forward');
+});
+test('blows connect only in front of the attacker within reach', () => {
+  const me = { x: 100, y: 500 };
+  assert.equal(landsHit(me, 1, { x: 118, y: 500 }, 'punch'), true);
+  assert.equal(landsHit(me, 1, { x: 125, y: 500 }, 'punch'), false);
+  assert.equal(landsHit(me, 1, { x: 125, y: 500 }, 'kick'), true);
+  assert.equal(landsHit(me, -1, { x: 118, y: 500 }, 'punch'), false);
+  assert.equal(landsHit(me, 1, { x: 118, y: 520 }, 'punch'), false);
+  assert.equal(landsHit(me, 1, { x: 118, y: 500 }, 'block'), false);
+  assert.equal(chooseAttack(() => .1), 'punch');
+  assert.equal(chooseAttack(() => .7), 'kick');
+  assert.equal(chooseAttack(() => .9), 'block');
 });
 test('the planted foot moves back exactly as fast as the body advances', () => {
   const footX = (pose: Pose, phase: number) => Number(skeleton(pose, phase, 300).legs[0].split('L').pop()!.split(' ')[0]);
