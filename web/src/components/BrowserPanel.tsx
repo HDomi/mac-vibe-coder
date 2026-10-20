@@ -3,6 +3,7 @@ import type { Attachment } from '../lib/agent';
 import { t, useLang } from '../lib/i18n';
 import { keyEventFor, mouseButton, mouseModifiers, normalizeAddress } from '../lib/browserInput';
 import type { NativeBrowser, NativeBrowserState } from '../lib/vibe';
+import Icon from './Icon';
 
 interface Props {
   visible: boolean;
@@ -174,19 +175,19 @@ function ScreencastBrowserPanel({ visible, onCapture }: Props) {
 
   const ready = state?.status === 'ready';
   const tabs = state?.targets ?? [];
-  const btn = 'w-7 h-7 rounded hover:bg-white/10 text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent';
+  const btn = 'w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent';
 
   return (
     <div className="h-full flex flex-col" data-own-find>
-      <div className="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
-        <button className={btn} disabled={!state?.canBack} onClick={() => send({ type: 'back' })} title={t('browser.back')}>←</button>
-        <button className={btn} disabled={!state?.canForward} onClick={() => send({ type: 'forward' })} title={t('browser.forward')}>→</button>
-        <button className={btn} disabled={!ready} onClick={() => send({ type: state?.loading ? 'stop' : 'reload' })} title={state?.loading ? t('browser.stop') : t('browser.reload')}>{state?.loading ? '✕' : '⟳'}</button>
+      <div className="h-11 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
+        <button className={btn} disabled={!state?.canBack} onClick={() => send({ type: 'back' })} title={t('browser.back')}><Icon name="back" /></button>
+        <button className={btn} disabled={!state?.canForward} onClick={() => send({ type: 'forward' })} title={t('browser.forward')}><Icon name="forward" /></button>
+        <button className={btn} disabled={!ready} onClick={() => send({ type: state?.loading ? 'stop' : 'reload' })} title={state?.loading ? t('browser.stop') : t('browser.reload')}><Icon name={state?.loading ? 'close' : 'reload'} /></button>
         <form className="flex-1 min-w-0" onSubmit={(e) => { e.preventDefault(); send({ type: 'navigate', url: address }); setEditing(false); keys.current?.focus(); }}>
           <input id="browser-address" value={address} onChange={(e) => { setAddress(e.target.value); setEditing(true); }} onFocus={(e) => { setEditing(true); e.target.select(); }} onBlur={() => setEditing(false)}
             onKeyDown={(e) => { if (e.key === 'Escape') { setEditing(false); (e.target as HTMLInputElement).blur(); } }}
             placeholder={t('browser.addressPlaceholder')} aria-label={t('browser.addressPlaceholder')} spellCheck={false}
-            className="w-full rounded-md bg-white/5 border border-white/10 focus:border-sky-400/40 px-2.5 py-1 text-[12px] font-mono outline-none" />
+            className="w-full rounded-md bg-white/5 border border-white/10 focus:border-sky-400/40 px-2.5 py-1.5 text-[12px] font-mono outline-none" />
         </form>
         {tabs.length > 1 && (
           <select value={state?.current ?? ''} onChange={(e) => send({ type: 'select', targetId: e.target.value })} title={t('browser.tabs')}
@@ -194,8 +195,8 @@ function ScreencastBrowserPanel({ visible, onCapture }: Props) {
             {tabs.map((p) => <option key={p.targetId} value={p.targetId}>{p.title || p.url || 'about:blank'}</option>)}
           </select>
         )}
-        <button className={btn} disabled={!ready} onClick={() => send({ type: 'newTab' })} title={t('browser.newTab')}>＋</button>
-        <button className="h-7 px-2 rounded bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 disabled:opacity-40 whitespace-nowrap" disabled={!ready} onClick={() => void capture()} title={t('browser.captureHint')}>📷 {t('browser.capture')}</button>
+        <button className={btn} disabled={!ready} onClick={() => send({ type: 'newTab' })} title={t('browser.newTab')}><Icon name="plus" /></button>
+        <button className="h-8 px-2.5 flex items-center gap-1.5 rounded-md bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 disabled:opacity-40 whitespace-nowrap" disabled={!ready} onClick={() => void capture()} title={t('browser.captureHint')}><Icon name="camera" size={16} />{t('browser.capture')}</button>
       </div>
       <div ref={area} className="relative flex-1 min-h-0 bg-white overflow-hidden"
         onMouseDown={(e) => { e.preventDefault(); keys.current?.focus(); mouse('mousePressed', e); }}
@@ -292,27 +293,27 @@ function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: Na
     try { const r = await native.capture(); onCapture({ path: r.path, name: r.name, kind: 'image' }); setNote(t('browser.captured')); }
     catch (e) { setNote((e as Error).message || t('browser.captureFailed')); }
   };
-  const btn = 'w-7 h-7 rounded hover:bg-white/10 text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent';
+  const btn = 'w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent';
 
   return (
     <div className="h-full flex flex-col" data-own-find>
-      <div className="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
-        <button className={btn} disabled={!state?.canBack} onClick={() => void native.back()} title={t('browser.back')}>←</button>
-        <button className={btn} disabled={!state?.canForward} onClick={() => void native.forward()} title={t('browser.forward')}>→</button>
-        <button className={btn} onClick={() => void (state?.loading ? native.stop() : native.reload())} title={state?.loading ? t('browser.stop') : t('browser.reload')}>{state?.loading ? '✕' : '⟳'}</button>
+      <div className="h-11 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
+        <button className={btn} disabled={!state?.canBack} onClick={() => void native.back()} title={t('browser.back')}><Icon name="back" /></button>
+        <button className={btn} disabled={!state?.canForward} onClick={() => void native.forward()} title={t('browser.forward')}><Icon name="forward" /></button>
+        <button className={btn} onClick={() => void (state?.loading ? native.stop() : native.reload())} title={state?.loading ? t('browser.stop') : t('browser.reload')}><Icon name={state?.loading ? 'close' : 'reload'} /></button>
         <form className="flex-1 min-w-0" onSubmit={(e) => { e.preventDefault(); void native.navigate(normalizeAddress(address)); setEditing(false); addressInput.current?.blur(); void native.focus(); }}>
           <input ref={addressInput} id="browser-address" value={address} onChange={(e) => { setAddress(e.target.value); setEditing(true); }} onFocus={(e) => { setEditing(true); e.target.select(); }} onBlur={() => setEditing(false)}
             onKeyDown={(e) => { if (e.key === 'Escape') { setEditing(false); (e.target as HTMLInputElement).blur(); } }}
             placeholder={t('browser.addressPlaceholder')} aria-label={t('browser.addressPlaceholder')} spellCheck={false}
-            className="w-full rounded-md bg-white/5 border border-white/10 focus:border-sky-400/40 px-2.5 py-1 text-[12px] font-mono outline-none" />
+            className="w-full rounded-md bg-white/5 border border-white/10 focus:border-sky-400/40 px-2.5 py-1.5 text-[12px] font-mono outline-none" />
         </form>
         <select value={String(nearestZoom(state?.zoom ?? 1))} onChange={(e) => void native.zoom(Number(e.target.value))}
           title={t('browser.zoomHint', { width: Math.round((place.current?.clientWidth ?? 0) / (state?.zoom ?? 1)) })}
           className="bg-white/5 rounded-md px-1 py-1 outline-none text-[11px] tabular-nums">
           {ZOOMS.map((z) => <option key={z} value={String(z)}>{Math.round(z * 100)}%</option>)}
         </select>
-        <button className={btn} onClick={() => void native.devtools()} title={t('browser.devtools')}>⚙</button>
-        <button className="h-7 px-2 rounded bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 whitespace-nowrap" onClick={() => void capture()} title={t('browser.captureHint')}>📷 {t('browser.capture')}</button>
+        <button className={btn} onClick={() => void native.devtools()} title={t('browser.devtools')}><Icon name="devtools" /></button>
+        <button className="h-8 px-2.5 flex items-center gap-1.5 rounded-md bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 whitespace-nowrap" onClick={() => void capture()} title={t('browser.captureHint')}><Icon name="camera" size={16} />{t('browser.capture')}</button>
       </div>
       {/* The native view is laid over this box; the box itself only shows while the view is hidden. */}
       <div ref={place} className="relative flex-1 min-h-0 bg-white" />

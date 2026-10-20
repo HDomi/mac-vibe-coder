@@ -4,6 +4,7 @@ import { t, useLang } from '../lib/i18n';
 import { activateTerminal, closeTerminal, ensureStarted, fitTerminal, openTerminal, terminalSelection, terminalTail, useTerminals, type TerminalTab } from '../lib/terminals';
 import { fencedTerminalText } from '../lib/textSearch';
 import { useContextMenu } from './ContextMenu';
+import Icon from './Icon';
 
 /** Ask the composer on screen to insert text; false when no chat session is open to take it. */
 function sendToChat(text: string): boolean {
@@ -79,10 +80,10 @@ export default function TerminalPanel({ cwd, visible }: Props) {
         {tabs.map((tab) => (
           <div key={tab.id} className={`flex items-center gap-1 rounded-md px-2 py-1 cursor-pointer ${active === tab.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`} onClick={() => activateTerminal(tab.id)}>
             <span className="truncate max-w-[120px]">{tab.title}</span>
-            <button className="text-zinc-500 hover:text-red-300" onClick={(e) => { e.stopPropagation(); closeTerminal(tab.id); }}>✕</button>
+            <button className="w-5 h-5 flex items-center justify-center rounded text-zinc-500 hover:text-red-300 hover:bg-white/10" onClick={(e) => { e.stopPropagation(); closeTerminal(tab.id); }}><Icon name="close" size={13} /></button>
           </div>
         ))}
-        <button className="px-2 py-1 text-zinc-400 hover:text-white" onClick={() => open()} title={t('terminal.newShell')}>＋</button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => open()} title={t('terminal.newShell')}><Icon name="plus" /></button>
         <div className="flex-1" />
         {note && <span className="text-[11px] text-amber-300 truncate max-w-48" title={note}>{note}</span>}
         <button className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 whitespace-nowrap disabled:opacity-40" disabled={!tab} onMouseDown={(e) => e.preventDefault()} onClick={() => send('auto')} title={t('terminal.sendHint')}>→ {t('terminal.toChat')}</button>

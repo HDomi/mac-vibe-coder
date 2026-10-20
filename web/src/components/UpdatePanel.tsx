@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type UpdateStatus } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
+import Icon from './Icon';
 
 /** Small badge for the sidebar header; opens the modal with commit list and apply log. */
 export function UpdateBadge() {
@@ -80,7 +81,7 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
           <button className="text-xs text-zinc-400 hover:text-white mr-3 flex items-center gap-1 disabled:opacity-60" onClick={onRefresh} disabled={checking || locked}>
             <span className={`inline-block ${checking ? 'animate-spin' : ''}`}>↻</span>{checking ? t('update.checking') : t('update.checkAgain')}
           </button>
-          <button className="text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed" onClick={close} disabled={locked} title={locked ? t('update.locked') : undefined}>✕</button>
+          <button className="w-8 h-8 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed" onClick={close} disabled={locked} title={locked ? t('update.locked') : undefined}><Icon name="close" /></button>
         </div>
         <div className="p-5 space-y-3 overflow-y-auto text-sm">
           {!status && !checking && <div className="text-zinc-500">{t('update.checking')}</div>}

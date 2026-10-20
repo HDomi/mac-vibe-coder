@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, type GitBranch, type GitCommit, type GitCommitFile, type GitFile, type GitStatus } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
 import CommitGraph from './CommitGraph';
+import Icon from './Icon';
 
 interface Props { cwd: string | null; visible: boolean }
 
@@ -216,7 +217,7 @@ export default function GitPanel({ cwd, visible }: Props) {
           <button key={op} disabled={!!remoteBusy || busy} onClick={() => remote(op)}
             className={`px-2 py-1 rounded hover:bg-white/10 disabled:opacity-40 ${remoteBusy === op ? 'text-amber-300 animate-pulse' : 'text-zinc-300'}`}>{op}</button>
         ))}
-        <button className="text-zinc-400 hover:text-white px-1" onClick={refresh} disabled={busy} title={t('common.refresh')}>↻</button>
+        <button className="w-8 h-8 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={refresh} disabled={busy} title={t('common.refresh')}><Icon name="reload" /></button>
       </div>
       {newBranch !== null && <form className="flex gap-2 px-2 py-2 border-b border-white/10" onSubmit={(e) => { e.preventDefault(); createBranch(); }}>
         <input autoFocus aria-label={t('git.newBranch')} placeholder={t('git.newBranchPrompt')} value={newBranch} onChange={(e) => setNewBranch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setNewBranch(null); }} className="min-w-0 flex-1 rounded bg-white/5 px-2 text-xs outline-none" />
