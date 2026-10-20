@@ -106,6 +106,28 @@ test('WebSocket malformed frames are harmless and failed starts carry request ID
   assert.deepEqual(sent, [{ type: 'session.startFailed', requestId: 'request-1', requestCwd: '/test', message: 'CLI not found' }]);
 });
 
+test('attach acknowledges a known session before replay and reports unknown ones missing', async () => {
+  const wss = new EventEmitter();
+  const sent: any[] = [];
+  const ws = Object.assign(new EventEmitter(), { readyState: 1, OPEN: 1, send: (data: string) => sent.push(JSON.parse(data)) });
+  const registry = new SessionRegistry();
+  const entry = { session: { id: 'live', agent: 'claude', cwd: '/tmp' }, buffer: [{ sessionId: 'live', seq: 1, ts: 0, event: { kind: 'status', status: 'idle' } }], seq: 1, subscribers: new Set(), closed: false, bufferBytes: 0 };
+  (registry as any).entries.set('live', entry);
+  attachWebSocket(wss as any, registry as any);
+  wss.emit('connection', ws);
+  ws.emit('message', JSON.stringify({ type: 'session.attach', sessionId: 'live', after: 0 }));
+  ws.emit('message', JSON.stringify({ type: 'session.attach', sessionId: 'gone', after: 0 }));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(sent.map((m) => m.type ?? m.event.kind), ['session.attached', 'status', 'session.missing']);
+  (registry as any).entries.clear();
+  await registry.closeAll();
+});
+
+test('a remembered session stops restoring on its first live event', () => {
+  const s: ChatSession = { id: 's', cwd: '/tmp', agent: 'claude', permissionMode: 'default', status: 'idle', totalCostUsd: 0, lastSeq: 0, items: [], restoring: true };
+  assert.equal(reduceEvent(s, { kind: 'session.init', sessionId: 's', agent: 'claude', cwd: '/tmp' }, 1).restoring, undefined);
+});
+
 test('dead registry sessions no longer block updates', async () => {
   const registry = new SessionRegistry();
   const entry = { session: { id: 'closed', agent: 'claude', cwd: '/tmp' }, buffer: [], seq: 0, subscribers: new Set(), closed: false, bufferBytes: 0 };

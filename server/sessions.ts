@@ -157,6 +157,9 @@ async function handle(cmd: ClientCommand, ws: WebSocket, registry: SessionRegist
       return;
     }
     case 'session.attach':
+      if (!registry.get(cmd.sessionId)) { safeSend(ws, { type: 'session.missing', sessionId: cmd.sessionId }); return; }
+      // Acknowledge before the replay: a quiet session (nothing after `after`) would otherwise send nothing at all.
+      safeSend(ws, { type: 'session.attached', sessionId: cmd.sessionId });
       if (!registry.attach(cmd.sessionId, ws, cmd.after)) safeSend(ws, { type: 'session.missing', sessionId: cmd.sessionId });
       return;
     case 'session.send':

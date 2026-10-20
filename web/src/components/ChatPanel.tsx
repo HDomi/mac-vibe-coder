@@ -284,7 +284,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
       <div className="flex-1 min-h-0 relative">
         <div ref={scroller} className="absolute inset-0 overflow-y-auto" onScroll={onScroll} onWheel={onWheel}>
           <div ref={content} className="px-5 py-4 space-y-3">
-            {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}
+            {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.restoring ? t('chat.restoring') : session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}
             {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd }))}
           </div>
         </div>

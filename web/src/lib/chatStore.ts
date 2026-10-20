@@ -57,6 +57,8 @@ export interface ChatSession {
   commands?: string[];
   /** When the current turn started (ms); undefined while idle. */
   turnStartedAt?: number;
+  /** Remembered from a previous page load and not yet confirmed by the server (attach ack, replay or revive). */
+  restoring?: boolean;
   status: 'starting' | 'running' | 'idle' | 'compacting' | 'closed';
   items: ChatItem[];
   totalCostUsd: number;
@@ -84,7 +86,8 @@ export function splitAttachments(text: string): { text: string; attachments: Att
 /** Apply one event to a session, returning a new session object (immutable update). */
 export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSession {
   const items = s.items.slice();
-  const next: ChatSession = { ...s, items, lastSeq: Math.max(s.lastSeq, seq) };
+  // Any live event proves the server knows this session, so it is no longer "restoring".
+  const next: ChatSession = { ...s, items, lastSeq: Math.max(s.lastSeq, seq), restoring: undefined };
 
   const lastAssistant = (parent: string | null) => {
     for (let i = items.length - 1; i >= 0; i--) {

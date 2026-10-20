@@ -62,6 +62,10 @@ export function useSessions() {
           return;
         }
         if (m.type === 'pong') return;
+        if (m.type === 'session.attached') {
+          setSessions((prev) => prev[m.sessionId]?.restoring ? { ...prev, [m.sessionId]: { ...prev[m.sessionId], restoring: undefined } } : prev);
+          return;
+        }
         if (m.type === 'session.startFailed') {
           const p = m.requestId ? pendingStart.current.get(m.requestId) : undefined;
           if (m.requestId) pendingStart.current.delete(m.requestId);
@@ -134,7 +138,7 @@ export function useSessions() {
     if (!saved.length) return;
     setSessions((prev) => {
       const next = { ...prev };
-      for (const p of saved) if (!next[p.id]) next[p.id] = { id: p.id, agent: p.agent, cwd: p.cwd, agentSessionId: p.agentSessionId, historyLen: p.historyLen, title: p.title, permissionMode: p.permissionMode ?? 'default', model: p.model, status: 'idle', items: [], totalCostUsd: 0, lastSeq: 0 };
+      for (const p of saved) if (!next[p.id]) next[p.id] = { id: p.id, agent: p.agent, cwd: p.cwd, agentSessionId: p.agentSessionId, historyLen: p.historyLen, title: p.title, permissionMode: p.permissionMode ?? 'default', model: p.model, status: 'idle', items: [], totalCostUsd: 0, lastSeq: 0, restoring: true };
       return next;
     });
     for (const p of saved) void reattach(p);
@@ -153,7 +157,10 @@ export function useSessions() {
         const items = itemsFromHistory(p.historyLen === undefined ? all : all.slice(0, p.historyLen));
         if (p.historyLen === undefined) { after = Number.MAX_SAFE_INTEGER; skipReplay.current.add(p.id); }
         setSessions((prev) => prev[p.id] ? { ...prev, [p.id]: { ...prev[p.id], items: [...items, ...prev[p.id].items], historyLen: p.historyLen ?? all.length } } : prev);
-      } catch { /* history is optional */ }
+      } catch (err) {
+        // History is optional; the attach below still revives the session. Logged so a blank tab can be traced.
+        console.warn(`[vibe] history for remembered session ${p.id} failed:`, (err as Error).message);
+      }
     }
     await agentClient.ready;
     agentClient.send({ type: 'session.attach', sessionId: p.id, after });

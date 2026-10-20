@@ -33,6 +33,8 @@ export type ServerMessage =
   | { type: 'session.started'; sessionId: string; requestCwd: string; requestId?: string; agent: AgentId }
   | { type: 'session.startFailed'; requestId?: string; requestCwd: string; message: string }
   | { type: 'session.missing'; sessionId: string }
+  /** The server still has this session; buffered events (if any) follow. */
+  | { type: 'session.attached'; sessionId: string }
   | { type: 'pong' }
   /** Synthetic, client-side: the socket reconnected after a drop; subscriptions must be re-established. */
   | { type: 'reconnected' };
