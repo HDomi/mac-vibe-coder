@@ -186,7 +186,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
   return (
     <div ref={root} tabIndex={0} onKeyDown={onKey} data-own-find className="flex flex-col h-full min-w-0 outline-none">
       <div className="h-10 flex items-center gap-2 px-3 border-b border-white/10 text-sm">
-        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-300 disabled:opacity-30" disabled={!listing?.parent} onClick={() => listing?.parent && onNavigate(listing.parent)} title={t('files.parentFolder')}><Icon name="up" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-300 disabled:opacity-30" disabled={!listing?.parent} onClick={() => listing?.parent && onNavigate(listing.parent)} title={t('files.parentFolder')}><Icon name="left" /></button>
         <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap text-zinc-400">
           <span className="cursor-pointer hover:text-white" onClick={() => onNavigate('/')}>/</span>
           {crumbs.map((c, i) => {

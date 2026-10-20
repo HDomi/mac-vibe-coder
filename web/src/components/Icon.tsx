@@ -6,6 +6,7 @@ const PATHS: Record<string, string> = {
   back: 'M15 18l-6-6 6-6',
   forward: 'M9 18l6-6-6-6',
   up: 'M12 19V5M5 12l7-7 7 7',
+  left: 'M19 12H5M12 5l-7 7 7 7',
   close: 'M18 6L6 18M6 6l12 12',
   plus: 'M12 5v14M5 12h14',
   reload: 'M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5',

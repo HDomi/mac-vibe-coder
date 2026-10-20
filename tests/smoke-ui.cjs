@@ -19,8 +19,8 @@ const js = async (source) => {
   try { return await win.webContents.executeJavaScript(`(() => { const result = eval(${JSON.stringify(source)}); return typeof result === 'function' ? undefined : result; })()`, true); }
   catch (error) { console.error('Renderer check failed:', source, errors); throw error; }
 };
-async function until(source) {
-  for (let i = 0; i < 100; i++) { if (await js(source)) return; await wait(50); }
+async function until(source, attempts = 100) {
+  for (let i = 0; i < attempts; i++) { if (await js(source)) return; await wait(50); }
   throw new Error(`UI condition timed out: ${source}`);
 }
 
@@ -165,23 +165,45 @@ async function main() {
   await js(`window.originalRandom = Math.random; Math.random = () => .5; renderCompanions()`);
   await until(`document.querySelectorAll('.session-companion').length === 2 && [...document.querySelectorAll('.session-companion')].every(e => e.style.visibility === 'visible')`);
   const firstPosition = await js(`document.querySelector('.session-companion').style.transform`);
-  await until(`document.querySelector('.session-companion').style.transform !== ${JSON.stringify(firstPosition)}`);
-  await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'vault'`);
+  await wait(1200);
+  assert.equal(await js(`document.querySelector('.session-companion').style.transform`), firstPosition);
+  assert.equal(await js(`Math.round(document.querySelector('.session-companion').getBoundingClientRect().width * 10)`), 336);
   assert.equal(await js(`getComputedStyle(document.querySelector('.session-companions')).pointerEvents`), 'none');
   assert.equal(await js(`const r = document.querySelector('[data-companion-floor="prompt"]').getBoundingClientRect(); document.elementFromPoint(r.x + 20, r.y + 20).click(); window.companionClicks`), 1);
-  await until(`document.querySelector('[data-agent="claude"]').dataset.zone === 'right' && document.querySelector('[data-agent="claude"]').dataset.travel === 'rest'`);
+  async function dragCompanion(agent, x, feetY) {
+    const start = await js(`const r = document.querySelector('[data-agent="${agent}"]').getBoundingClientRect(); ({x:Math.round(r.x+r.width/2), y:Math.round(r.y+14)})`);
+    win.webContents.sendInputEvent({type:'mouseMove', ...start});
+    win.webContents.sendInputEvent({type:'mouseDown', ...start, button:'left', clickCount:1});
+    await until(`document.querySelector('[data-agent="${agent}"]').dataset.pose === 'drag'`);
+    win.webContents.sendInputEvent({type:'mouseMove', x:Math.round(x), y:Math.round(feetY-23.8)});
+    win.webContents.sendInputEvent({type:'mouseUp', x:Math.round(x), y:Math.round(feetY-23.8), button:'left', clickCount:1});
+    await until(`document.querySelector('[data-agent="${agent}"]').dataset.travel === 'rest'`);
+  }
+  await dragCompanion('claude', 820, 280);
+  assert.equal(await js(`document.querySelector('[data-agent="claude"]').dataset.zone`), 'right');
   await js(`renderCompanions('idle', 'git')`);
   await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'eject' && document.querySelector('[data-agent="claude"]').dataset.floor === 'prompt'`);
   await js(`renderCompanions('running', 'git')`);
-  await until(`document.querySelector('[data-agent="claude"]').dataset.pose === 'wave'`);
+  await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'rest'`);
   assert.equal(await js(`document.querySelector('[data-agent="claude"]').dataset.floor`), 'prompt');
   await js(`document.querySelector('[data-companion-floor="prompt"]').style.top = '580px'`);
-  await until(`Math.abs(new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m42 - 526) < 1`);
-  await js(`Math.random = () => .01`);
-  await until(`document.querySelector('[data-agent="codex"]').dataset.floor === 'favorites-divider' && document.querySelector('[data-agent="codex"]').dataset.travel === 'rest'`);
+  await until(`Math.abs(new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m42 - 542.2) < 1`);
+  const claudeX = await js(`new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m41 + 16.8`);
+  await dragCompanion('codex', claudeX + 30, 570);
+  await until(`[...document.querySelectorAll('.session-companion')].every(e => e.dataset.pose === 'fight')`);
+  const punch = await js(`document.querySelector('[data-agent="claude"] .companion-body').lastElementChild.getAttribute('d')`);
+  await wait(200);
+  assert.notEqual(await js(`document.querySelector('[data-agent="claude"] .companion-body').lastElementChild.getAttribute('d')`), punch);
+  await dragCompanion('codex', 90, 170);
+  assert.equal(await js(`document.querySelector('[data-agent="codex"]').dataset.floor`), 'favorites-divider');
   const beforeScroll = await js(`new DOMMatrixReadOnly(document.querySelector('[data-agent="codex"]').style.transform).m42`);
   await js(`document.querySelector('[data-companion-zone="left"]').scrollTop = 20`);
   await until(`Math.abs(new DOMMatrixReadOnly(document.querySelector('[data-agent="codex"]').style.transform).m42 - ${beforeScroll - 20}) < 1`);
+  await js(`Math.random = () => .7`);
+  await until(`document.querySelector('[data-agent="codex"]').dataset.pose === 'walk'`, 400);
+  const step = await js(`document.querySelector('[data-agent="codex"] .companion-body').children[1].getAttribute('d')`);
+  await wait(200);
+  assert.notEqual(await js(`document.querySelector('[data-agent="codex"] .companion-body').children[1].getAttribute('d')`), step);
   const companionScreenshot = path.join(os.tmpdir(), 'mac-vibe-companions.png');
   await fs.writeFile(companionScreenshot, (await win.webContents.capturePage()).toPNG());
   win.webContents.debugger.attach('1.3');
@@ -195,7 +217,7 @@ async function main() {
   await js(`Math.random = originalRandom; renderUsage()`);
   await until(`!document.querySelector('.session-companions')`);
   assert.deepEqual(errors, []);
-  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage, companion wall vaults, tab ejection, click-through, waiting, layout changes, reduced motion and cleanup. Screenshots: ${screenshot}, ${companionScreenshot}`);
+  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage, companion idle timing, 70% size, drag/drop, sparring, tab ejection, click-through, layout changes, reduced motion and cleanup. Screenshots: ${screenshot}, ${companionScreenshot}`);
 }
 
 async function finish(code) {
