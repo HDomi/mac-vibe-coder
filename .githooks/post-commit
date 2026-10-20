@@ -1,0 +1,6 @@
+#!/bin/zsh
+# Tag each release commit as v<package.json version>, message = commit subject (annotated, like earlier tags).
+v="v$(node -p 'require("./package.json").version' 2>/dev/null)" || exit 0
+git rev-parse -q --verify "refs/tags/$v" >/dev/null && exit 0
+git log -1 --format=%s | grep -qF "($v)" || exit 0
+git tag -a "$v" -m "$(git log -1 --format=%s)" && echo "tagged $v"
