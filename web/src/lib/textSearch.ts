@@ -10,3 +10,14 @@ export function matchOffsets(text: string, query: string): number[] {
   for (let i = source.indexOf(needle); i >= 0; i = source.indexOf(needle, i + needle.length)) out.push(i);
   return out;
 }
+
+/**
+ * Terminal text as a fenced block for the chat. The fence grows past any backtick run inside
+ * the text so pasted markdown cannot close it early.
+ */
+export function fencedTerminalText(text: string, label?: string): string {
+  const body = text.replace(/[ \t]+$/gm, '').replace(/^\n+|\n+$/g, '');
+  let fence = '```';
+  while (body.includes(fence)) fence += '`';
+  return `${label ? `${label}\n` : ''}${fence}\n${body}\n${fence}`;
+}

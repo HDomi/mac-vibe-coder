@@ -153,6 +153,18 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
     requestAnimationFrame(() => { const t2 = ta.current; if (t2) { t2.focus(); t2.setSelectionRange(pos, pos); setCaret(pos); } });
   }, [text]);
 
+  // Text pushed from elsewhere (terminal "→ Chat"): insert it and tell the sender someone took it.
+  useEffect(() => {
+    const h = (ev: Event) => {
+      const d = (ev as CustomEvent<{ text: string; handled: boolean }>).detail;
+      if (!d?.text || d.handled || disabled) return;
+      d.handled = true;
+      insertText(d.text);
+    };
+    window.addEventListener('vibe:insert-composer', h);
+    return () => window.removeEventListener('vibe:insert-composer', h);
+  }, [insertText, disabled]);
+
   const submit = () => {
     const body = text.trim();
     if (disabled || uploading || (!body && attachments.length === 0)) return;

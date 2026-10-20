@@ -90,3 +90,26 @@ export function fitTerminal(id: number) {
   tab.fit.fit();
   if (tab.ws?.readyState === WebSocket.OPEN) tab.ws.send(JSON.stringify({ type: 'resize', cols: tab.term.cols, rows: tab.term.rows }));
 }
+
+/** Text the user selected in this terminal, or '' when nothing is selected. */
+export function terminalSelection(id: number): string {
+  return state.tabs.find((t) => t.id === id)?.term?.getSelection() ?? '';
+}
+
+/** The last `count` non-empty lines on screen and in scrollback, oldest first. */
+export function terminalTail(id: number, count = 40): string {
+  const term = state.tabs.find((t) => t.id === id)?.term;
+  if (!term) return '';
+  const buf = term.buffer.active;
+  const lines: string[] = [];
+  // Rows soft-wrapped by the terminal width belong to the line above; join them back.
+  let row = '';
+  for (let i = buf.length - 1; i >= 0 && lines.length < count; i--) {
+    const line = buf.getLine(i);
+    row = (line?.translateToString(true) ?? '') + row;
+    if (line?.isWrapped) continue;
+    if (row.trim() || lines.length) lines.push(row);
+    row = '';
+  }
+  return lines.reverse().join('\n').trimEnd();
+}

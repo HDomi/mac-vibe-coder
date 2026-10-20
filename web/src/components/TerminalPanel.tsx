@@ -1,7 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import { t, useLang } from '../lib/i18n';
-import { activateTerminal, closeTerminal, ensureStarted, fitTerminal, openTerminal, useTerminals, type TerminalTab } from '../lib/terminals';
+import { activateTerminal, closeTerminal, ensureStarted, fitTerminal, openTerminal, terminalSelection, terminalTail, useTerminals, type TerminalTab } from '../lib/terminals';
+import { fencedTerminalText } from '../lib/textSearch';
+import { useContextMenu } from './ContextMenu';
+
+/** Ask the composer on screen to insert text; false when no chat session is open to take it. */
+function sendToChat(text: string): boolean {
+  const detail = { text, handled: false };
+  window.dispatchEvent(new CustomEvent('vibe:insert-composer', { detail }));
+  return detail.handled;
+}
 
 interface Props {
   cwd: string | null;
@@ -37,6 +46,29 @@ function TermView({ tab, visible }: { tab: TerminalTab; visible: boolean }) {
 export default function TerminalPanel({ cwd, visible }: Props) {
   useLang();
   const { tabs, active } = useTerminals();
+  const menu = useContextMenu();
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => { if (!note) return; const timer = setTimeout(() => setNote(null), 3000); return () => clearTimeout(timer); }, [note]);
+  const tab = tabs.find((x) => x.id === active);
+  /** Selection when there is one, else the recent output: that is usually the error the agent should see. */
+  const send = (mode: 'auto' | 'selection' | 'tail') => {
+    if (!tab) return;
+    const sel = mode === 'tail' ? '' : terminalSelection(tab.id);
+    const text = sel || (mode === 'selection' ? '' : terminalTail(tab.id));
+    if (!text.trim()) { setNote(t('terminal.nothingToSend')); return; }
+    const label = t(sel ? 'terminal.sentSelectionLabel' : 'terminal.sentTailLabel', { cwd: tab.cwd });
+    setNote(sendToChat(fencedTerminalText(text, label)) ? t('terminal.sent') : t('terminal.noChat'));
+  };
+  const onMenu = (e: React.MouseEvent) => {
+    if (!tab) return;
+    const hasSel = !!terminalSelection(tab.id);
+    menu.open(e, [
+      { label: t('terminal.sendSelection'), disabled: !hasSel, onClick: () => send('selection') },
+      { label: t('terminal.sendTail'), onClick: () => send('tail') },
+      { separator: true },
+      { label: t('common.copy'), disabled: !hasSel, onClick: () => navigator.clipboard.writeText(terminalSelection(tab.id)) },
+    ]);
+  };
 
   const open = (cmd?: string, title?: string) => openTerminal(cwd ?? '~', cmd, title);
   useEffect(() => { if (visible && tabs.length === 0) open(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [visible]);
@@ -52,10 +84,12 @@ export default function TerminalPanel({ cwd, visible }: Props) {
         ))}
         <button className="px-2 py-1 text-zinc-400 hover:text-white" onClick={() => open()} title={t('terminal.newShell')}>＋</button>
         <div className="flex-1" />
+        {note && <span className="text-[11px] text-amber-300 truncate max-w-48" title={note}>{note}</span>}
+        <button className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 whitespace-nowrap disabled:opacity-40" disabled={!tab} onMouseDown={(e) => e.preventDefault()} onClick={() => send('auto')} title={t('terminal.sendHint')}>→ {t('terminal.toChat')}</button>
         <button className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-zinc-300" onClick={() => open('claude', 'claude')} title={t('terminal.claudeTui')}>claude</button>
         <button className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-zinc-300" onClick={() => open('codex', 'codex')} title={t('terminal.codexTui')}>codex</button>
       </div>
-      <div className="flex-1 relative bg-[#0b0d12]">
+      <div className="flex-1 relative bg-[#0b0d12]" onContextMenu={onMenu}>
         {tabs.map((tab) => <TermView key={tab.id} tab={tab} visible={visible && active === tab.id} />)}
         {tabs.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm">{t('terminal.pressPlus')}</div>}
       </div>
