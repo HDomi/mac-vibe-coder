@@ -94,6 +94,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   });
 
   // The page shown in the Browser panel, for agent sessions started by this app (see browserAgentHint).
+  app.post('/api/browser/report', async (c) => { browser.reportNative(await c.req.json<unknown>().catch(() => null)); return c.json({ ok: true }); });
   app.get('/api/browser/target', (c) => {
     const info = browser.info();
     return info ? c.json(info) : c.json({ error: 'The Browser tab is not open in Mac Vibe Coder. Ask the user to open it.' }, 404);

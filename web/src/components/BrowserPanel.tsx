@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Attachment } from '../lib/agent';
 import { t, useLang } from '../lib/i18n';
-import { keyEventFor, mouseButton, mouseModifiers } from '../lib/browserInput';
+import { keyEventFor, mouseButton, mouseModifiers, normalizeAddress } from '../lib/browserInput';
+import type { NativeBrowser, NativeBrowserState } from '../lib/vibe';
 
 interface Props {
   visible: boolean;
@@ -21,7 +22,12 @@ interface FrameMeta { deviceWidth: number; deviceHeight: number }
  * keyboard input back. Keys go through a hidden textarea so IME (Korean) composition works: composed
  * text is inserted with Input.insertText when the composition ends.
  */
-export default function BrowserPanel({ visible, onCapture }: Props) {
+/** Electron: native Chromium view over the panel. Plain browser tab: CDP screencast of a headless Chrome. */
+export default function BrowserPanel(props: Props) {
+  return window.vibe?.browser ? <NativeBrowserPanel {...props} native={window.vibe.browser} /> : <ScreencastBrowserPanel {...props} />;
+}
+
+function ScreencastBrowserPanel({ visible, onCapture }: Props) {
   useLang();
   const [state, setState] = useState<State | null>(null);
   const [address, setAddress] = useState('');
@@ -214,6 +220,105 @@ export default function BrowserPanel({ visible, onCapture }: Props) {
       <div className="h-6 shrink-0 flex items-center gap-2 px-3 text-[10px] text-zinc-600 border-t border-white/5">
         <span className={`w-1.5 h-1.5 rounded-full ${ready ? 'bg-emerald-400' : state?.status === 'error' ? 'bg-red-400' : 'bg-zinc-600'}`} />
         <span>CDP :{state?.port ?? 9323} · {state?.headless ? t('browser.headless') : t('browser.external')}</span>
+        {note && <span className="ml-auto text-amber-300 truncate" title={note}>{note}</span>}
+      </div>
+    </div>
+  );
+}
+
+const ZOOMS = [0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5];
+const nearestZoom = (z: number) => ZOOMS.reduce((a, b) => (Math.abs(b - z) < Math.abs(a - z) ? b : a), 1);
+
+/**
+ * The native view is a separate layer painted above the page, so this component only keeps it
+ * glued to the placeholder: it follows the placeholder's rect, and hides the view whenever the
+ * panel is hidden or something of the app (menu, dialog, lightbox) covers the panel.
+ */
+function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: NativeBrowser }) {
+  useLang();
+  const [state, setState] = useState<NativeBrowserState | null>(null);
+  const [address, setAddress] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const place = useRef<HTMLDivElement>(null);
+  const addressInput = useRef<HTMLInputElement>(null);
+  const shownRef = useRef(false);
+  const lastRect = useRef('');
+
+  useEffect(() => native.onState(setState), [native]);
+  useEffect(() => native.onShortcut((k) => {
+    if (k.key === 'l') { addressInput.current?.focus(); addressInput.current?.select(); return; }
+    // App shortcuts typed while the page has focus: replay them on the app window.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: k.key, metaKey: true, shiftKey: k.shift, altKey: k.alt, bubbles: true }));
+  }), [native]);
+  // Tell the server which CDP target the panel shows, so in-app agents act on this page.
+  useEffect(() => {
+    const body = state?.targetId ? { targetId: state.targetId, url: state.url, title: state.title, cdpPort: state.cdpPort } : null;
+    void fetch('/api/browser/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
+  }, [state?.targetId, state?.url, state?.title, state?.cdpPort]);
+  useEffect(() => { if (!editing) setAddress(state?.url === 'about:blank' ? '' : state?.url ?? ''); }, [state?.url, editing]);
+  useEffect(() => { if (!note) return; const timer = setTimeout(() => setNote(null), 3500); return () => clearTimeout(timer); }, [note]);
+
+  useEffect(() => {
+    const el = place.current;
+    if (!el) return;
+    const sync = () => {
+      const r = el.getBoundingClientRect();
+      const covered = (() => {
+        if (r.width < 2 || r.height < 2) return true;
+        for (const fx of [0.1, 0.5, 0.9]) for (const fy of [0.05, 0.5, 0.95]) {
+          const hit = document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy);
+          if (!hit || !el.contains(hit)) return true;
+        }
+        return false;
+      })();
+      const want = visible && !covered;
+      const bounds = { x: r.left, y: r.top, width: r.width, height: r.height };
+      const key = `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`;
+      if (want && !shownRef.current) { shownRef.current = true; lastRect.current = key; void native.show(bounds).then(setState); }
+      else if (!want && shownRef.current) { shownRef.current = false; void native.hide(); }
+      else if (want && key !== lastRect.current) { lastRect.current = key; void native.setBounds(bounds); }
+    };
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    window.addEventListener('resize', sync);
+    // Position changes (panel animations, overlays opening) do not always resize the placeholder.
+    const timer = setInterval(sync, 150);
+    return () => { ro.disconnect(); window.removeEventListener('resize', sync); clearInterval(timer); shownRef.current = false; void native.hide(); };
+  }, [visible, native]);
+
+  const capture = async () => {
+    try { const r = await native.capture(); onCapture({ path: r.path, name: r.name, kind: 'image' }); setNote(t('browser.captured')); }
+    catch (e) { setNote((e as Error).message || t('browser.captureFailed')); }
+  };
+  const btn = 'w-7 h-7 rounded hover:bg-white/10 text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent';
+
+  return (
+    <div className="h-full flex flex-col" data-own-find>
+      <div className="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
+        <button className={btn} disabled={!state?.canBack} onClick={() => void native.back()} title={t('browser.back')}>←</button>
+        <button className={btn} disabled={!state?.canForward} onClick={() => void native.forward()} title={t('browser.forward')}>→</button>
+        <button className={btn} onClick={() => void (state?.loading ? native.stop() : native.reload())} title={state?.loading ? t('browser.stop') : t('browser.reload')}>{state?.loading ? '✕' : '⟳'}</button>
+        <form className="flex-1 min-w-0" onSubmit={(e) => { e.preventDefault(); void native.navigate(normalizeAddress(address)); setEditing(false); addressInput.current?.blur(); void native.focus(); }}>
+          <input ref={addressInput} id="browser-address" value={address} onChange={(e) => { setAddress(e.target.value); setEditing(true); }} onFocus={(e) => { setEditing(true); e.target.select(); }} onBlur={() => setEditing(false)}
+            onKeyDown={(e) => { if (e.key === 'Escape') { setEditing(false); (e.target as HTMLInputElement).blur(); } }}
+            placeholder={t('browser.addressPlaceholder')} aria-label={t('browser.addressPlaceholder')} spellCheck={false}
+            className="w-full rounded-md bg-white/5 border border-white/10 focus:border-sky-400/40 px-2.5 py-1 text-[12px] font-mono outline-none" />
+        </form>
+        <select value={String(nearestZoom(state?.zoom ?? 1))} onChange={(e) => void native.zoom(Number(e.target.value))}
+          title={t('browser.zoomHint', { width: Math.round((place.current?.clientWidth ?? 0) / (state?.zoom ?? 1)) })}
+          className="bg-white/5 rounded-md px-1 py-1 outline-none text-[11px] tabular-nums">
+          {ZOOMS.map((z) => <option key={z} value={String(z)}>{Math.round(z * 100)}%</option>)}
+        </select>
+        <button className={btn} onClick={() => void native.devtools()} title={t('browser.devtools')}>⚙</button>
+        <button className="h-7 px-2 rounded bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 whitespace-nowrap" onClick={() => void capture()} title={t('browser.captureHint')}>📷 {t('browser.capture')}</button>
+      </div>
+      {/* The native view is laid over this box; the box itself only shows while the view is hidden. */}
+      <div ref={place} className="relative flex-1 min-h-0 bg-white" />
+      <div className="h-6 shrink-0 flex items-center gap-2 px-3 text-[10px] text-zinc-600 border-t border-white/5">
+        <span className={`w-1.5 h-1.5 rounded-full ${state?.targetId ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+        <span>CDP :{state?.cdpPort ?? 9323} · {t('browser.native')}</span>
         {note && <span className="ml-auto text-amber-300 truncate" title={note}>{note}</span>}
       </div>
     </div>

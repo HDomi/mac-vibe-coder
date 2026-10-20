@@ -39,3 +39,14 @@ export function keyEventFor(e: Mods & { key: string; code: string; location?: nu
     ...(phase === 'keyDown' && text ? { text, unmodifiedText: text } : {}),
   };
 }
+
+/** Address bar text -> URL (same rules as the server's normalizeUrl, kept here for the native view). */
+export function normalizeAddress(input: string): string {
+  const s = input.trim();
+  if (!s) return 'about:blank';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s) && !/^(localhost|[\w.-]+):\d+/i.test(s)) return s;
+  if (/^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(s) || /^\d+\.\d+\.\d+\.\d+(:\d+)?(\/|$)/.test(s)) return `http://${s}`;
+  if (/^:\d+(\/|$)/.test(s)) return `http://localhost${s}`;
+  if (/^[\w-]+(\.[\w-]+)+(:\d+)?(\/\S*)?$/.test(s)) return `https://${s}`;
+  return `https://www.google.com/search?q=${encodeURIComponent(s)}`;
+}

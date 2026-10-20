@@ -33,7 +33,7 @@ Mac Vibe Coder 는 그걸 한 창에 모은다. 폴더를 고르면 그 폴더�
 | **입력** | `/` 슬래시 커맨드 · 스킬 자동완성, `@` 파일 멘션(프로젝트 루트 기준 퍼지 검색 + 자동 첨부), Finder 드롭 · 파일 트리 드롭 · 클립보드 이미지 붙여넣기, 저장한 프롬프트 넣기 |
 | **파일** | 탐색기(싱글클릭 선택 · 더블클릭 열기, 확장자·파일명·폴더명별 [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) 아이콘), ⌘C/⌘X/⌘V 복사·이동, 복제, 이름 변경, 새 폴더, 휴지통(Finder 경유 · 복원 가능), 우클릭 메뉴, 현재 폴더 안 파일 이름 검색, 퀵오픈 ⌘P |
 | **미리보기** | Markdown(상대 경로 이미지 · 로컬 링크 해석 · 코드 하이라이트), 이미지, 영상(탐색 가능), 오디오, PDF, 텍스트 |
-| **브라우저** | CDP 로 붙은 Chrome 페이지(주소창 · 뒤로/앞으로 · 새로고침 · 탭 전환), 캡처 → 채팅 첨부. 앱 전용 headless Chrome 을 CDP 포트 9323 에 띄워 `debugweb`(9222)과 겹치지 않는다. 앱 안 세션만 이 페이지를 실측 대상으로 안내받는다 |
+| **브라우저** | 패널 안의 진짜 Chromium 뷰(주소창 · 뒤로/앞으로 · 새로고침 · 배율 · 개발자 도구), 캡처 → 채팅 첨부. 앱 자체 CDP 포트 9323 으로 열려 `debugweb`(9222)과 겹치지 않는다. 앱 안 세션만 이 페이지를 실측 대상으로 안내받는다 |
 | **터미널** | xterm.js + node-pty 로그인 셸, `claude` / `codex` TUI 원클릭, 선택 영역 · 최근 출력 채팅으로 보내기, Terminal.app · Finder · VS Code · Cursor 로 열기 |
 | **Git** | 브랜치 전환 · 생성, fetch / pull / push, 상태 · diff · 스테이지 · 커밋 · Commit & Push, 커밋 그래프(커밋을 누르면 바뀐 파일 · diff) |
 | **즐겨찾기** | 폴더 즐겨찾기, 그룹(폴더)으로 묶기 · 접기, 드래그로 이동, 최근 폴더, 프로젝트 아이콘 자동 감지(public/favicon, Next app/icon, Godot project.godot, Tauri, Xcode AppIcon, .icns 등) |
@@ -124,7 +124,7 @@ cd mac-vibe-coder
 |------|------|
 | `~/.mac-vibe-coder/config.json` | 즐겨찾기 · 그룹 · 최근 폴더 · 저장한 프롬프트 |
 | `~/.mac-vibe-coder/attachments/` | 브라우저 모드 · 붙여넣기 첨부 사본, 브라우저 캡처 |
-| `~/.mac-vibe-coder/chrome-profile/` | 브라우저 탭 Chrome 프로필(로그인 유지, `debugweb` 프로필과 별개). 포트 · 경로는 `MVC_BROWSER_CDP_PORT` · `MVC_BROWSER_PROFILE` 로 바꾼다 |
+| `~/Library/Application Support/Mac Vibe Coder/Partitions/mvc-browser/` | 브라우저 탭 쿠키 · 로그인(`debugweb` 프로필과 별개). CDP 포트는 `MVC_BROWSER_CDP_PORT` 로 바꾼다 |
 | `~/.claude/projects/` | Claude 세션(CLI 와 공유, 이름 변경·삭제도 반영) |
 | `~/.codex/` | Codex 세션 · 로그인(앱이 읽기만 함) |
 | `~/Library/LaunchAgents/com.hdomi.mac-vibe-coder.plist` | `--login` 으로 등록한 자동 실행 |

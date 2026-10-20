@@ -53,13 +53,12 @@
 - Electron 은 서버 자식이 죽으면 1.5초→30초 지수 백오프로 재시작한다. 다른 인스턴스가 포트를 쓰고 있으면 재시작 대신 그 서버에 붙는다.
 - 부모가 강제 종료(SIGKILL)돼도 Claude CLI 는 stdin 종료로, Codex app-server(stdio) 는 연결 종료로, PTY 셸은 SIGHUP 으로 스스로 끝난다.
 
-## 브라우저 탭과 CDP (v0.3.40, v0.3.41 에서 포트 분리)
+## 브라우저 탭과 CDP (v0.3.42 에서 네이티브 뷰로 교체)
 
-- 앱 전용 Chrome 을 CDP 포트 9323(`MVC_BROWSER_CDP_PORT`), 프로필 `~/.mac-vibe-coder/chrome-profile`(`MVC_BROWSER_PROFILE`)로 띄운다. `debugweb`(9222, `/tmp/chrome-lumi-debug`)과 포트도 프로필도 겹치지 않는다. Chrome 두 개가 한 프로필을 동시에 열 수 없어서 로그인은 따로 한 번 해야 한다.
-- v0.3.40 은 9222 를 공유했다. 앱 Chrome 과 `debugweb` 이 프로필 잠금으로 부딪히고, 앱이 사용자의 `debugweb` 창 탭을 앞으로 끌어오는 문제가 있어서 나눴다.
-- 포트에 Chrome 이 없으면 서버가 headless 로 띄운다(detached). 업데이트 재시작에서는 살려 두고, 앱 종료(SIGTERM)에서만 닫는다.
-- 화면은 `Page.startScreencast` 프레임을 `/browser` WebSocket 으로 받아 그린다. 패널이 보일 때만 screencast 하고, 프레임마다 ack 해서 밀리지 않게 한다. headless 페이지는 `Emulation.setDeviceMetricsOverride` 로 패널 크기에 맞춘다.
-- 입력은 `Input.dispatchMouseEvent` · `Input.dispatchKeyEvent` 로 보낸다. 한글 IME 는 숨은 textarea 에서 조합하고 조합이 끝나면 `Input.insertText` 로 넣는다. ⌘C 는 페이지 선택 텍스트를 읽어 클립보드에 쓰고, ⌘V 는 `insertText` 로 붙인다.
-- 캡처는 `Page.captureScreenshot` PNG 를 첨부 폴더에 저장하고 채팅 입력창 첨부로 넘긴다.
-- 앱 안 에이전트 세션만 패널 페이지를 안다. Claude 는 system prompt append 와 `MVC_BROWSER_INFO_URL` 환경 변수, Codex 는 `developerInstructions` 로 `GET /api/browser/target` 을 안내받고, 9222 · `debugweb` 을 쓰지 말라는 지시도 받는다. 앱 밖 터미널 세션에는 이 안내가 없어서 지금처럼 `debugweb` 을 쓴다.
-- 제약: system prompt 는 세션 시작 때 기록되므로 안내는 새 세션부터 적용된다. Codex 기본 샌드박스(workspace-write)는 localhost 접속을 막아서, Codex 실측은 "모두 허용" 모드에서만 된다.
+- 데스크톱 앱의 브라우저 탭은 Electron `WebContentsView` 다(`electron/browserView.cts`). 패널 자리의 빈 상자 위에 진짜 Chromium 뷰를 겹쳐 띄운다. 렌더링 · 커서 · 한글 IME · `<select>` · `alert` 이 일반 브라우저처럼 동작한다.
+- 뷰는 DOM 위에 따로 그려지는 층이라, 렌더러가 150ms 마다 상자의 위치를 따라가게 하고 상자 위를 앱 요소(메뉴 · 대화상자 · 라이트박스)가 덮거나 다른 탭으로 바뀌면 뷰를 숨긴다.
+- 쿠키 · 로그인은 `persist:mvc-browser` 파티션에 남는다. User-Agent 에서 Electron · 앱 토큰을 빼서 사이트가 보통 Chrome 으로 본다. `window.open` 팝업(OAuth 등)은 opener 가 살아 있는 별도 창으로, 새 탭 링크는 같은 뷰로 연다. http · https · about:blank 만 연다.
+- 배율(⌘- ⌘= ⌘0, 목록)로 패널보다 넓은 CSS 폭을 줄 수 있다. 패널이 좁아 사이트가 모바일 레이아웃으로 보일 때 75% 이하로 낮춘다.
+- 에이전트용 CDP 는 Electron 자체 `remote-debugging-port`(기본 9323, `MVC_BROWSER_CDP_PORT`)다. `debugweb`(9222)과 겹치지 않는다. 이 포트에는 앱 창 자체도 타깃으로 보이므로, 렌더러가 뷰의 타깃 id 를 `POST /api/browser/report` 로 서버에 알리고, 앱 안 세션은 `GET /api/browser/target` 의 `targetId` 에만 붙으라는 안내를 받는다. 앱 밖 세션에는 안내가 없다.
+- v0.3.40-41 은 headless Chrome 을 CDP screencast 로 보여 줬다. JPEG 프레임이라 흐리고, 커서 · `<select>` · 대화상자 · 팝업이 안 보였고, User-Agent 가 HeadlessChrome 이라 Google 로그인이 막혔다. 이 방식은 앱을 일반 브라우저 탭으로 열 때만 남기고 포트를 9324(`MVC_BROWSER_FALLBACK_PORT`)로 옮겼다. 시작할 때 9323 에 남은 예전 headless Chrome 은 종료한다.
+- 제약: system prompt 는 세션 시작 때 기록되므로 안내는 새 세션부터 적용된다. Codex 기본 샌드박스(workspace-write)는 localhost 접속을 막아서, Codex 실측은 "모두 허용" 모드에서만 된다. Google 이 임베디드 브라우저 로그인을 거부하면 그 사이트만 일반 Chrome 에서 로그인해야 한다.
