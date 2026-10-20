@@ -71,7 +71,8 @@ export default function BrowserPanel({ visible, onCapture }: Props) {
         if (m.requestId && pending.current.has(String(m.requestId))) { pending.current.get(String(m.requestId))!(m); pending.current.delete(String(m.requestId)); return; }
         if (m.type === 'state') setState(m as unknown as State);
         else if (m.type === 'frame') {
-          meta.current = m.metadata as FrameMeta;
+          const css = m.css as { width: number; height: number } | null;
+          meta.current = css ? { deviceWidth: css.width, deviceHeight: css.height } : m.metadata as FrameMeta;
           const el = img.current;
           if (el) { el.onload = () => send({ type: 'ack' }); el.src = `data:image/jpeg;base64,${m.data}`; setHasFrame(true); } else send({ type: 'ack' });
         } else if (m.type === 'error') setNote(String(m.message));
@@ -206,13 +207,13 @@ export default function BrowserPanel({ visible, onCapture }: Props) {
             {state?.status === 'error' ? <>
               <div className="text-red-300">{state.error}</div>
               <button className="rounded bg-white/10 hover:bg-white/15 px-3 py-1.5 text-xs text-zinc-200" onMouseDown={(e) => e.stopPropagation()} onClick={() => send({ type: 'retry' })}>{t('browser.retry')}</button>
-            </> : <div className="animate-pulse">{state?.status === 'ready' ? t('browser.waitingFrame') : t('browser.connecting', { port: state?.port ?? 9222 })}</div>}
+            </> : <div className="animate-pulse">{state?.status === 'ready' ? t('browser.waitingFrame') : t('browser.connecting', { port: state?.port ?? 9323 })}</div>}
           </div>
         )}
       </div>
       <div className="h-6 shrink-0 flex items-center gap-2 px-3 text-[10px] text-zinc-600 border-t border-white/5">
         <span className={`w-1.5 h-1.5 rounded-full ${ready ? 'bg-emerald-400' : state?.status === 'error' ? 'bg-red-400' : 'bg-zinc-600'}`} />
-        <span>CDP :{state?.port ?? 9222} · {state?.headless ? t('browser.headless') : t('browser.external')}</span>
+        <span>CDP :{state?.port ?? 9323} · {state?.headless ? t('browser.headless') : t('browser.external')}</span>
         {note && <span className="ml-auto text-amber-300 truncate" title={note}>{note}</span>}
       </div>
     </div>

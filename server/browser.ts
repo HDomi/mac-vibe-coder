@@ -1,10 +1,11 @@
 /**
  * Built-in Browser panel: a Chrome page driven over the Chrome DevTools Protocol (CDP).
  *
- * The panel uses the same Chrome as the `debugweb` helper: CDP port DEBUGWEB_CDP_PORT (9222) and
- * profile DEBUGWEB_PROFILE (/tmp/chrome-lumi-debug), so logins are shared. When nothing listens on
- * that port the server starts Chrome itself, headless, and the panel shows it through
- * Page.startScreencast; mouse and keyboard input are sent back with Input.dispatch*.
+ * The panel has its own Chrome, separate from the `debugweb` helper (9222): CDP port
+ * MVC_BROWSER_CDP_PORT (9323) and profile MVC_BROWSER_PROFILE (~/.mac-vibe-coder/chrome-profile).
+ * Two Chrome processes cannot share a profile, and the user's debugweb windows stay untouched.
+ * When nothing listens on that port the server starts Chrome itself, headless, and the panel shows
+ * it through Page.startScreencast; mouse and keyboard input are sent back with Input.dispatch*.
  *
  * Agent sessions started by this app learn which page the panel shows from GET /api/browser/target
  * (see `browserAgentHint`), so "check it in the browser" acts on the page the user is looking at.
@@ -17,11 +18,17 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import WebSocket, { type WebSocketServer } from 'ws';
 import { ATTACH_DIR } from './attachments.js';
+import { CONFIG_DIR } from './config.js';
 
-export const CDP_PORT = Number(process.env.DEBUGWEB_CDP_PORT) || 9222;
-export const CHROME_PROFILE = process.env.DEBUGWEB_PROFILE || '/tmp/chrome-lumi-debug';
+/** Not debugweb's 9222: the app's browser and the user's own CDP Chrome never collide. */
+export const CDP_PORT = Number(process.env.MVC_BROWSER_CDP_PORT) || 9323;
+/** Outside /tmp so logins survive a reboot. */
+export const CHROME_PROFILE = process.env.MVC_BROWSER_PROFILE || path.join(CONFIG_DIR, 'chrome-profile');
 const CHROME = process.env.MVC_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const CALL_TIMEOUT_MS = 15000;
+/** MVC_BROWSER_DEBUG=1 logs screencast decisions and frame flow (troubleshooting a blank panel). */
+const DEBUG = process.env.MVC_BROWSER_DEBUG === '1';
+const debug = (...a: unknown[]) => { if (DEBUG) console.log('[browser]', ...a); };
 
 type Json = Record<string, unknown>;
 interface PageTarget { targetId: string; url: string; title: string }
@@ -32,7 +39,7 @@ export interface BrowserState {
   status: 'idle' | 'connecting' | 'ready' | 'error';
   error?: string;
   port: number;
-  /** Chrome was started headless by this app (no window of its own); otherwise it is the user's debugweb Chrome. */
+  /** Chrome was started headless by this app (no window of its own); otherwise something else already used the port. */
   headless: boolean;
   targets: PageTarget[];
   current: string | null;
@@ -68,7 +75,7 @@ async function cdpVersion(): Promise<{ Browser: string; 'User-Agent'?: string; w
   } catch { return null; }
 }
 
-/** Start Chrome headless on the CDP port with the debugweb profile; detached so it survives server restarts (updates). */
+/** Start Chrome headless on the app's CDP port and profile; detached so it survives server restarts (updates). */
 async function launchChrome() {
   if (!existsSync(CHROME)) throw new Error(`Google Chrome not found: ${CHROME}`);
   const child = spawn(CHROME, [
@@ -229,14 +236,28 @@ export class BrowserBridge {
       case 'Page.screencastFrame':
         if (!onPage) return;
         this.unacked = Number(p.sessionId);
+        debug('frame', p.sessionId, JSON.stringify(p.metadata), 'clients', this.clients.size, 'visible', [...this.clients].filter((c) => c.visible).length);
         if (![...this.clients].some((c) => c.visible)) { this.ack(); return; }
-        this.broadcast({ type: 'frame', data: p.data, metadata: p.metadata });
+        // Frame metadata is in CSS pixels on some frames and device pixels on others (after a renderer
+        // swap). For a headless page we set the CSS viewport ourselves, so give the client that size.
+        this.broadcast({ type: 'frame', data: p.data, metadata: p.metadata, css: this.headless && this.applied ? { width: this.applied.width, height: this.applied.height } : null });
         return;
       case 'Page.frameStartedLoading': if (onPage) { this.nav.loading = true; this.publish(); } return;
-      case 'Page.loadEventFired': case 'Page.frameStoppedLoading': if (onPage) { this.nav.loading = false; void this.refreshNav(); } return;
-      case 'Page.frameNavigated': if (onPage && !(p.frame as Json)?.parentId) void this.refreshNav(); return;
+      case 'Page.loadEventFired': case 'Page.frameStoppedLoading': if (onPage) { this.nav.loading = false; void this.refreshNav(); this.resize(); } return;
+      case 'Page.frameNavigated': if (onPage && !(p.frame as Json)?.parentId) { void this.refreshNav(); this.resize(); } return;
       case 'Page.navigatedWithinDocument': if (onPage) void this.refreshNav(); return;
     }
+  }
+
+  /**
+   * A cross-site navigation swaps the renderer, and the first frames come at the window size
+   * instead of the panel size; a static page then never repaints. Re-apply the size and restart
+   * the screencast so the panel gets a correct frame (and clicks map to the right spot).
+   */
+  private resize() {
+    if (!this.headless) return;
+    this.applied = null;
+    void this.syncScreencast();
   }
 
   private ack() {
@@ -273,11 +294,23 @@ export class BrowserBridge {
     this.publish();
   }
 
-  /** Screencast only while a panel is visible; headless pages are sized to the panel. */
-  private async syncScreencast() {
+  private syncing: Promise<void> = Promise.resolve();
+  /**
+   * Screencast only while a panel is visible; headless pages are sized to the panel.
+   * Serialized: hello, resize and attach all call this, and an interleaved stop after a start
+   * would leave the panel without frames.
+   */
+  private syncScreencast(): Promise<void> {
+    const run = this.syncing.then(() => this.doSyncScreencast());
+    this.syncing = run.catch(() => {});
+    return run;
+  }
+
+  private async doSyncScreencast() {
     if (!this.current) return;
     const visible = [...this.clients].filter((c) => c.visible);
     const vp = visible.find((c) => c.viewport)?.viewport ?? null;
+    debug('sync', { visible: visible.length, vp, applied: this.applied, screencast: this.screencast, headless: this.headless });
     try {
       if (!visible.length) {
         if (this.screencast) { this.screencast = false; await this.page('Page.stopScreencast'); }
@@ -293,7 +326,7 @@ export class BrowserBridge {
         const scale = vp?.dpr ?? 2;
         await this.page('Page.startScreencast', { format: 'jpeg', quality: 75, maxWidth: Math.round((vp?.width ?? 1280) * scale), maxHeight: Math.round((vp?.height ?? 800) * scale), everyNthFrame: 1 });
       }
-    } catch { this.screencast = false; }
+    } catch (err) { debug('sync failed', (err as Error).message); this.screencast = false; }
   }
 
   /* ── Panel commands ───────────────────────────────────────────────── */
@@ -350,7 +383,7 @@ export class BrowserBridge {
     return { path: file, name };
   }
 
-  /** On app quit: close the Chrome we started (headless); a user's debugweb Chrome is left alone. */
+  /** On app quit: close the Chrome we started (headless); a visible Chrome someone else put on the port is left alone. */
   async shutdown(quit: boolean) {
     try { if (quit && this.headless && this.ws?.readyState === WebSocket.OPEN) await this.call('Browser.close'); } catch { /* already gone */ }
     this.ws?.close();
@@ -387,7 +420,8 @@ export function browserAgentHint(appPort: number) {
   return [
     '# Mac Vibe Coder browser panel',
     'This session runs inside Mac Vibe Coder, which has a built-in Browser panel (Chrome over the Chrome DevTools Protocol). The user watches that page live in the app.',
-    `When the user asks you to check, measure or verify something in the browser (for example "실측", "CDP 검토", "브라우저에서 확인"), work on the panel's page instead of starting a browser or opening a new window with debugweb: run \`curl -s ${info}\` to get {targetId, url, webSocketDebuggerUrl, browserUrl, cdpPort}, then connect to webSocketDebuggerUrl (or attach to targetId through the browser endpoint at browserUrl/json/version) and act on that page. Navigating that page changes what the user sees, which is intended.`,
+    `The panel's Chrome listens on CDP port ${CDP_PORT}. That is not the usual 9222 debugweb Chrome: do not use port 9222 or run debugweb for checks the user asks for in this app.`,
+    `When the user asks you to check, measure or verify something in the browser (for example "실측", "CDP 검토", "브라우저에서 확인"), work on the panel's page instead of starting a browser or opening a new window: run \`curl -s ${info}\` to get {targetId, url, webSocketDebuggerUrl, browserUrl, cdpPort}, then connect to webSocketDebuggerUrl (or attach to targetId through the browser endpoint at browserUrl/json/version) and act on that page. Navigating that page changes what the user sees, which is intended. The panel has its own Chrome profile, so the user may need to log in there once.`,
     'Do not close that tab and do not kill the browser. If the endpoint answers 404, ask the user to open the Browser tab in the right panel. Only drive the browser when the user asks for a browser check.',
   ].join('\n');
 }

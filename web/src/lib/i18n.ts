@@ -306,7 +306,7 @@ const en: Record<string, string> = {
   'browser.waitingFrame': 'Waiting for the page to paint…',
   'browser.connecting': 'Connecting to Chrome (CDP port {port})…',
   'browser.headless': 'Chrome started by this app (headless)',
-  'browser.external': 'your debugweb Chrome',
+  'browser.external': 'a Chrome already on this port',
   'browser.timeout': 'Chrome did not answer in time',
   // preview
   'preview.truncated': 'Showing first 2 MB',
@@ -660,7 +660,7 @@ const ko: Record<string, string> = {
   'browser.waitingFrame': '페이지를 그리는 중…',
   'browser.connecting': 'Chrome 에 연결하는 중 (CDP 포트 {port})…',
   'browser.headless': '앱이 띄운 Chrome (headless)',
-  'browser.external': 'debugweb Chrome',
+  'browser.external': '이 포트에 이미 떠 있던 Chrome',
   'browser.timeout': 'Chrome 이 제때 응답하지 않았습니다',
   'preview.truncated': '처음 2 MB까지만 표시합니다',
   'preview.hint': '파일을 더블클릭하면 미리보기가 표시됩니다',

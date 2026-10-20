@@ -37,4 +37,7 @@ test('in-app agents are pointed at the panel page, not a new browser', () => {
   const hint = browserAgentHint(11398);
   assert.match(hint, /http:\/\/127\.0\.0\.1:11398\/api\/browser\/target/);
   assert.match(hint, /debugweb/);
+  // Its own port: the user's debugweb Chrome on 9222 is never the in-app target.
+  assert.match(hint, /CDP port 9323/);
+  assert.match(hint, /do not use port 9222/);
 });
