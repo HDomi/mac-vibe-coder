@@ -47,7 +47,8 @@ html, body, #root {
 .companion-shadow { position: absolute; left: 9px; top: 41px; width: 19px; height: 2px; border-radius: 50%; background: #0005; pointer-events: none; }
 .session-companion:is([data-pose="jump"], [data-pose="fall"], [data-pose="climb"], [data-pose="drag"], [data-pose="limp"]) .companion-shadow { opacity: 0; }
 .companion-tracer { position: absolute; left: 0; top: 0; height: 2px; transform-origin: 0 50%; background: linear-gradient(90deg, #fff7cc, #ffd166 55%, #ff9f1c00); box-shadow: 0 0 4px #ffd166aa; pointer-events: none; animation: companion-tracer .22s ease-out forwards; }
-.companion-spark { position: absolute; left: 0; top: 0; width: 10px; height: 10px; border-radius: 50%; background: radial-gradient(#fff, #ffb703 45%, #ff9f1c00 70%); pointer-events: none; animation: companion-spark .28s ease-out forwards; }
+/* Positioned with left/top: an individual `scale` would multiply a transform translate and fling the dot across the screen. */
+.companion-spark { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: radial-gradient(#fff, #ffb703 45%, #ff9f1c00 70%); pointer-events: none; animation: companion-spark .28s ease-out forwards; }
 @keyframes companion-tracer { from { opacity: 1; } to { opacity: 0; } }
-@keyframes companion-spark { from { opacity: 1; scale: .6; } to { opacity: 0; scale: 2.2; } }
+@keyframes companion-spark { from { opacity: 1; transform: scale(.6); } to { opacity: 0; transform: scale(2.2); } }
 @media (prefers-reduced-motion: reduce) { .session-companions { display: none; } }

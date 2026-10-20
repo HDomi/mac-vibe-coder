@@ -218,6 +218,8 @@ async function main() {
   await until(`document.querySelector('[data-pose="aim"]')`, 300);
   assert.match(await js(`(document.querySelector('.session-companion:is([data-pose="aim"], [data-pose="shoot"]) .companion-rifle') || {getAttribute: () => ''}).getAttribute('transform') || ''`), /rotate\(-?\d/);
   await until(`document.querySelector('.companion-tracer') && document.querySelector('.companion-spark')`, 100);
+  // The impact spark stays at the target instead of being flung by its scale animation.
+  assert.equal(await js(`(() => { const s = document.querySelector('.companion-spark').getBoundingClientRect(), t = document.querySelector('.companion-tracer').getBoundingClientRect(); return Math.hypot(s.x + s.width / 2 - (t.right), s.y + s.height / 2 - (t.bottom)) < 60 || Math.hypot(s.x + s.width / 2 - t.left, s.y + s.height / 2 - t.top) < 60 || Math.hypot(s.x + s.width / 2 - t.right, s.y + s.height / 2 - t.top) < 60 || Math.hypot(s.x + s.width / 2 - t.left, s.y + s.height / 2 - t.bottom) < 60; })()`), true);
   await until(`document.querySelector('[data-pose="shoot"] .companion-flash').getAttribute('d')`, 100);
   await until(`document.querySelector('[data-pose="down"]')`, 100);
   await js(`Math.random = () => .22`);

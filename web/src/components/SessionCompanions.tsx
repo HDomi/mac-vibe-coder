@@ -214,7 +214,7 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
       line.className = 'companion-tracer'; spark.className = 'companion-spark';
       line.style.width = `${Math.hypot(to.x - from.x, to.y - from.y)}px`;
       line.style.transform = `translate(${from.x}px, ${from.y}px) rotate(${Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI}deg)`;
-      spark.style.transform = `translate(${to.x - 5}px, ${to.y - 5}px)`;
+      spark.style.left = `${to.x - 5}px`; spark.style.top = `${to.y - 5}px`;
       overlay.append(line, spark);
       setTimeout(() => { line.remove(); spark.remove(); }, 300);
     };
