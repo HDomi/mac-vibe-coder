@@ -9,7 +9,7 @@ import { t, useLang } from '../lib/i18n';
 import ProjectIcon from './ProjectIcon';
 import AgentIcon from './AgentIcon';
 
-export interface StartOptions { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null }
+export interface StartOptions { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null; title?: string }
 
 interface Props {
   cwd: string | null;
@@ -152,9 +152,9 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
       <div className="space-y-1">
         {shown.map((h) => (
           <div key={h.agent + h.sessionId} className="w-full text-left rounded-lg border border-white/10 hover:bg-white/5 px-3 py-2 cursor-pointer flex items-center gap-3"
-            onClick={() => onStart(h.cwd ?? cwd, opts({ resume: h.sessionId, agent: h.agent }))}
+            onClick={() => onStart(h.cwd ?? cwd, opts({ resume: h.sessionId, agent: h.agent, title: h.customTitle || h.summary || undefined }))}
             onContextMenu={(e) => menu.open(e, [
-              { label: t('common.resume'), onClick: () => onStart(h.cwd ?? cwd, opts({ resume: h.sessionId, agent: h.agent })) },
+              { label: t('common.resume'), onClick: () => onStart(h.cwd ?? cwd, opts({ resume: h.sessionId, agent: h.agent, title: h.customTitle || h.summary || undefined })) },
               { label: h.pinned ? t('common.unpin') : t('common.pin'), onClick: () => togglePin(h) },
               { label: t('common.rename'), onClick: () => { setRenaming(h.sessionId); setDraft(h.customTitle || h.summary || ''); } },
               { label: t('common.copySessionId'), onClick: () => navigator.clipboard.writeText(h.sessionId) },

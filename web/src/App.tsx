@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { sessionTitle } from './lib/chatStore';
+import { displayTitle } from './lib/chatStore';
 import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing, type RecentSession } from './lib/api';
 import type { Attachment } from './lib/agent';
 import { requestNotificationPermission, useSessions, setOnScreenSession } from './lib/useSessions';
@@ -147,7 +147,7 @@ function AppInner() {
   const resumeSession = (s: RecentSession) => {
     const dir = s.cwd ?? project ?? cwd;
     if (s.cwd && s.cwd !== project) openProject(s.cwd);
-    void start(dir, { agent: s.agent, resume: s.sessionId });
+    void start(dir, { agent: s.agent, resume: s.sessionId, title: s.title || undefined });
   };
   const attach = (entries: Entry[]) => {
     setPendingAttachments((prev) => [...prev, ...entries.filter((e) => !e.isDir).map((e) => ({ path: e.path, name: e.name, kind: IMAGE_RE.test(e.name) ? 'image' as const : 'file' as const }))]);
@@ -208,7 +208,7 @@ function AppInner() {
                       className={`group flex items-center gap-1.5 rounded-md pl-2.5 pr-1 py-1 whitespace-nowrap cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
                       <AgentIcon agent={s.agent} size={14} />
-                      <span className="text-zinc-500">{sessionTitle(s.items, 18) ?? t('common.new')}</span>
+                      <span className="text-zinc-500">{displayTitle(s, 18) ?? t('common.new')}</span>
                       <button className="ml-1 w-4 h-4 rounded text-[10px] leading-none text-zinc-500 hover:text-white hover:bg-white/15 opacity-0 group-hover:opacity-100" title={t('app.closeSession')}
                         onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}>✕</button>
                     </div>
@@ -305,7 +305,7 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
               className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}>
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
               <AgentIcon agent={s.agent} size={16} />
-              <span className="truncate flex-1">{sessionTitle(s.items, 40) ?? t('common.new')}</span>
+              <span className="truncate flex-1">{displayTitle(s, 40) ?? t('common.new')}</span>
               <span className="text-[10px] text-zinc-600 truncate max-w-[70px]" title={s.cwd}>{s.cwd.split('/').pop()}</span>
             </div>
           ))}

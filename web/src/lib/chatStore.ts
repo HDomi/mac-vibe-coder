@@ -22,10 +22,18 @@ export function sessionTitle(items: ChatItem[], max = 40): string | null {
   return null;
 }
 
+/** What a tab or notification calls the session: the CLI title when known, else the first prompt. */
+export function displayTitle(s: ChatSession, max = 40): string | null {
+  const title = s.title?.trim();
+  return title ? title.slice(0, max) : sessionTitle(s.items, max);
+}
+
 export interface ChatSession {
   id: string;
   agent: AgentId;
   cwd: string;
+  /** Session title as the CLI keeps it (custom rename or generated summary); tabs show this over the first prompt. */
+  title?: string;
   model?: string;
   permissionMode: PermissionModeId;
   agentSessionId?: string;
