@@ -145,7 +145,7 @@ async function createWindow() {
     minHeight: 600,
     title: APP_NAME,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 14 },
+    trafficLightPosition: { x: 14, y: 16 }, // centered in the 45px title bar (UsageBar)
     backgroundColor: '#0b0d12',
     icon: APP_ICON,
     webPreferences: {

@@ -41,21 +41,21 @@ export function Battery({ label, win, error, loading }: { label: string; win: Us
     ? t(win ? 'usage.cached' : 'usage.unavailable', { label, reason: error })
     : win ? t('usage.used', { label, pct: win.usedPct, reset: resetLabel(win.resetsAt) }) : t(loading ? 'usage.loading' : 'usage.unavailable', { label, reason: '' });
   return (
-    <div className="titlebar-nodrag relative flex items-center gap-1 cursor-default" aria-label={title} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+    <div className="titlebar-nodrag relative flex items-center gap-[5px] cursor-default" aria-label={title} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       {hover && (
         <div role="tooltip" className="absolute top-full right-0 mt-2 z-50 whitespace-nowrap rounded-md border border-white/10 bg-[#171a22] px-2.5 py-1.5 text-[11px] text-zinc-200 shadow-xl pointer-events-none">
           {win ? <div className="tabular-nums">{resetLabel(win.resetsAt)}</div> : !error && <div className="text-zinc-400">{t(loading ? 'usage.loading' : 'usage.unavailable', { label, reason: '' })}</div>}
           {error && <div className="text-amber-300">{error}</div>}
         </div>
       )}
-      <span className="text-[10px] text-zinc-500">{label}</span>
+      <span className="text-[12.5px] text-zinc-500">{label}</span>
       <span className="relative inline-flex items-center">
-        <span className="w-[18px] h-[9px] rounded-[2px] border border-zinc-500/80 p-px flex">
+        <span className="w-[23px] h-[11px] rounded-[3px] border border-zinc-500/80 p-px flex">
           <span className={`h-full rounded-[1px] ${remain === null ? 'bg-zinc-600' : color(remain)}`} style={{ width: `${remain ?? 0}%` }} />
         </span>
-        <span className="w-[2px] h-[4px] bg-zinc-500/80 rounded-r-[1px] ml-px" />
+        <span className="w-[3px] h-[5px] bg-zinc-500/80 rounded-r-[1px] ml-px" />
       </span>
-      <span className={`text-[10px] tabular-nums w-7 ${error ? 'text-amber-400' : 'text-zinc-400'}`}>{remain === null ? '—' : `${remain}%`}</span>
+      <span className={`text-[12.5px] tabular-nums w-[35px] ${error ? 'text-amber-400' : 'text-zinc-400'}`}>{remain === null ? '—' : `${remain}%`}</span>
     </div>
   );
 }
@@ -79,7 +79,7 @@ export default function UsageBar({ mode, onMode }: Props) {
   }, []);
 
   return (
-    <div className="titlebar-drag h-9 shrink-0 flex items-center border-b border-white/10 bg-[#0e1117] text-xs select-none relative">
+    <div className="titlebar-drag h-[45px] shrink-0 flex items-center border-b border-white/10 bg-[#0e1117] text-xs select-none relative">
       {/* Mode switch, centered */}
       <div className="absolute left-1/2 -translate-x-1/2 titlebar-nodrag flex items-center rounded-md bg-white/5 p-0.5">
         {(['ide', 'agent'] as ViewMode[]).map((m) => (
@@ -90,20 +90,20 @@ export default function UsageBar({ mode, onMode }: Props) {
         ))}
       </div>
       {/* Usage batteries, right-aligned */}
-      <div className="ml-auto flex items-center gap-3 pr-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-zinc-400 font-medium">Claude</span>
+      <div className="ml-auto flex items-center gap-[15px] pr-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-[12.5px] text-zinc-400 font-medium">Claude</span>
             <Battery label="5h" win={u?.claude?.fiveHour ?? null} error={loadError ?? u?.errors.find((e) => e.startsWith('claude:'))} loading={loading} />
             <Battery label={t('usage.week')} win={u?.claude?.weekly ?? null} error={loadError ?? u?.errors.find((e) => e.startsWith('claude:'))} loading={loading} />
             {u?.claude?.model && <Battery label={u.claude.model.name.slice(0, 5)} win={u.claude.model} loading={loading} />}
           </div>
         <span className="text-zinc-700">|</span>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-zinc-400 font-medium">Codex</span>
+          <div className="flex items-center gap-2.5">
+            <span className="text-[12.5px] text-zinc-400 font-medium">Codex</span>
             <Battery label="5h" win={u?.codex?.fiveHour ?? null} error={loadError ?? u?.errors.find((e) => e.startsWith('codex:'))} loading={loading} />
             <Battery label={t('usage.week')} win={u?.codex?.weekly ?? null} error={loadError ?? u?.errors.find((e) => e.startsWith('codex:'))} loading={loading} />
           </div>
-        <button className={`titlebar-nodrag text-zinc-600 hover:text-zinc-300 ${loading ? 'animate-spin' : ''}`} onClick={() => load(true)} title={t('usage.refresh')}>↻</button>
+        <button className={`titlebar-nodrag text-[15px] text-zinc-600 hover:text-zinc-300 ${loading ? 'animate-spin' : ''}`} onClick={() => load(true)} title={t('usage.refresh')}>↻</button>
       </div>
     </div>
   );
