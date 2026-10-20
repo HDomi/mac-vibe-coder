@@ -70,6 +70,11 @@ test('every pose draws two-bone limbs without NaN and plants a foot while moving
   assert.notEqual(skeleton('punch', 0, 210).arms[1], skeleton('fight', 0, 210).arms[1]);
   assert.notEqual(skeleton('kick', 0, 300).legs[1], skeleton('fight', 0, 300).legs[1]);
   assert.ok(skeleton('down', 0, 100).headY > skeleton('idle', 0, 100).headY + 30);
+  // Getting up is keyed to the hold length and never overshoots the standing pose, whatever the hold length.
+  assert.equal(skeleton('down', 0, 1000, 1500).body, skeleton('down', 0, 100, 1500).body);
+  assert.equal(skeleton('down', 0, 1500, 1500).body, skeleton('down', 0, 2500, 1500).body);
+  assert.equal(skeleton('down', 0, 1100).body, skeleton('down', 0, 5000).body);
+  assert.notEqual(skeleton('down', 0, 1400, 1500).body, skeleton('down', 0, 100, 1500).body);
   assert.ok(skeleton('aim', 0, 100).rifle.startsWith('M') && skeleton('shoot', 0, 10).rifle.startsWith('M'));
   assert.equal(skeleton('idle', 0, 100).rifle, '');
   assert.ok(skeleton('shoot', 0, 10).flash.endsWith('Z'), 'muzzle flash right after the shot');

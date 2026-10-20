@@ -167,8 +167,8 @@ async function main() {
   await until(`!!document.querySelector('[aria-label^="5h: 0% used"]')`);
   assert.equal(await js(`document.querySelector('[aria-label^="5h: 0% used"]').textContent.includes('100%')`), true);
   win.setSize(1100, 820);
-  // Math.random fixed at .1 keeps both figures idle (short rests) so positions are deterministic.
-  await js(`window.originalRandom = Math.random; Math.random = () => .1; renderCompanions()`);
+  // Math.random fixed at .22 keeps both figures idle (short rests) and below the 20% rifle roll, so positions are deterministic.
+  await js(`window.originalRandom = Math.random; Math.random = () => .22; renderCompanions()`);
   await until(`document.querySelectorAll('.session-companion').length === 2 && [...document.querySelectorAll('.session-companion')].every(e => e.style.visibility === 'visible')`);
   const firstPosition = await js(`document.querySelector('.session-companion').style.transform`);
   await wait(1200);
@@ -208,19 +208,19 @@ async function main() {
   const claudeX = await js(`new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m41 + ${HALF}`);
   await dragCompanion('codex', claudeX + 30, 570);
   await until(`[...document.querySelectorAll('.session-companion')].every(e => ['fight', 'punch', 'kick', 'block', 'hit', 'down'].includes(e.dataset.pose))`);
-  // Blows are hit-box tested: with Math.random fixed both throw punches, so both take hits.
+  // Blows are hit-box tested: with Math.random .22 both throw punches, so both take hits.
   await until(`[...document.querySelectorAll('.session-companion')].every(e => Number(e.dataset.hits) > 0)`, 200);
   await until(`[...document.querySelectorAll('.session-companion')].every(e => e.dataset.travel === 'rest' && !['fight', 'punch', 'kick', 'block', 'hit', 'down'].includes(e.dataset.pose))`, 300);
-  // Rifle ambush: with Math.random .98 a figure draws a rifle at the peer on another platform, tilts the barrel, fires three tracer rounds and the target collapses.
+  // Rifle ambush: with Math.random .1 (under the 20% roll) a figure draws a rifle at the peer on another platform, tilts the barrel, fires three tracer rounds and the target collapses.
   await dragCompanion('codex', 760, 530);
   assert.equal(await js(`document.querySelector('[data-agent="codex"]').dataset.floor`), 'rung:0');
-  await js(`Math.random = () => .98`);
+  await js(`Math.random = () => .1`);
   await until(`document.querySelector('[data-pose="aim"]')`, 300);
   assert.match(await js(`(document.querySelector('.session-companion:is([data-pose="aim"], [data-pose="shoot"]) .companion-rifle') || {getAttribute: () => ''}).getAttribute('transform') || ''`), /rotate\(-?\d/);
   await until(`document.querySelector('.companion-tracer') && document.querySelector('.companion-spark')`, 100);
   await until(`document.querySelector('[data-pose="shoot"] .companion-flash').getAttribute('d')`, 100);
   await until(`document.querySelector('[data-pose="down"]')`, 100);
-  await js(`Math.random = () => .1`);
+  await js(`Math.random = () => .22`);
   await until(`[...document.querySelectorAll('.session-companion')].every(e => e.dataset.travel === 'rest')`, 400);
   assert.equal(await js(`document.querySelectorAll('.companion-tracer, .companion-spark').length`), 0);
   await dragCompanion('codex', 90, 170);

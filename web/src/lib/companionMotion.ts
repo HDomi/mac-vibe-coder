@@ -21,7 +21,7 @@ export const ATTACKS: Record<AttackKind, { duration: number; strikeAt: number; r
 };
 export const HIT_DURATION = 380, DOWN_DURATION = 1100, FIGHT_RANGE = 20, FIGHT_BREAK = 70;
 /** Rifle: draw, three rounds 300ms apart, lower; the muzzle sits ahead of the figure at chest height (figure units). */
-export const RIFLE = { draw: 350, interval: 300, shots: 3, total: 1350, flash: 120, stun: 330, knockback: 6, minGap: 24, maxTilt: 40, collapse: 1500 };
+export const RIFLE = { draw: 350, interval: 300, shots: 3, total: 1350, flash: 120, stun: 330, knockback: 6, minGap: 24, maxTilt: 40, collapse: 1500, cooldown: 10000, chance: .2 };
 export const MUZZLE = { x: 46, y: 25 }, STOCK = { x: 25, y: 28 };
 const toWorld = (position: Point, direction: number, p: Point): Point => ({ x: position.x + direction * (p.x - 24) * SCALE, y: position.y - (54 - p.y) * SCALE });
 /** Rifle tilt (degrees, figure space) that points the barrel at the target's chest, limited so the hands stay on it. */
@@ -93,7 +93,8 @@ function leg(hip: Point, foot: Point, length = LEG) {
  * The figure faces +x; the renderer mirrors it for the other direction.
  * Proportions: head 0–22, shoulders at 25, hips at 36, soles at 54, so an upright leg is nearly straight.
  */
-export function skeleton(pose: Pose, phase: number, time: number) {
+/** `lying` is how long a 'down' pose lasts, so getting up starts in its last 250ms rather than at a fixed time. */
+export function skeleton(pose: Pose, phase: number, time: number, lying = DOWN_DURATION) {
   const moving = pose === 'walk' || pose === 'run' || pose === 'flee';
   const fast = moving && pose !== 'walk';
   const ramp = Math.min(1, time / 400);
@@ -182,7 +183,7 @@ export function skeleton(pose: Pose, phase: number, time: number) {
   let headY = shoulder.y - 25 + (pose === 'hurt' || pose === 'hit' ? -2 : pose === 'shot' ? -3 : 0);
   if (pose === 'down') {
     // Flat on the back, knees up; the renderer eases in from the standing hit so it reads as toppling over.
-    const rise = time > DOWN_DURATION - 250 ? (time - (DOWN_DURATION - 250)) / 250 : 0;
+    const rise = Math.max(0, Math.min(1, (time - (lying - 250)) / 250));
     hip = { x: 30 - rise * 7, y: 52 - rise * 16 };
     shoulder = { x: 19 + rise * 5, y: 52 - rise * 27 };
     feet = [{ x: 42 - rise * 23, y: 54 }, { x: 44 - rise * 17, y: 53 + rise }];

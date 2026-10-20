@@ -11,7 +11,7 @@ type Actor = {
   fight: number; fightUntil: number; hits: number; hitUntil: number; downUntil: number; nextAttack: number;
   attack: { kind: AttackKind; start: number; landed: boolean } | null;
   /** Rifle: the shooter's sequence, and on the target the stun window and the pending collapse. */
-  gun: { start: number; shots: number; lastShot: number; target: Actor } | null; gunUsed: boolean; lastGun: number; shotUntil: number; collapse: number;
+  gun: { start: number; shots: number; lastShot: number; target: Actor } | null; lastGun: number; shotUntil: number; collapse: number;
   /** Mid-jump or mid-fall: not a valid rifle target because stopping it would leave it hanging in the air. */
   airborne: boolean;
   /** Lets the shooter stop whatever the target was doing. */
@@ -109,7 +109,7 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
     const drawn: number[][] = [];
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
     const actor: Actor = { position: { x: 0, y: 0 }, floor: '', busy: false, direction: 1, cooldown: 0, fight: 0, fightUntil: 0, hits: 0, hitUntil: 0, downUntil: 0, nextAttack: 0, attack: null,
-      gun: null, gunUsed: false, lastGun: -Infinity, shotUntil: 0, collapse: 0, airborne: false, halt: () => { queue = []; actor.busy = false; actor.attack = null; } };
+      gun: null, lastGun: -Infinity, shotUntil: 0, collapse: 0, airborne: false, halt: () => { queue = []; actor.busy = false; actor.attack = null; } };
     actors.current.set(agent, actor);
     let frame = 0, last = 0, measured = -Infinity, nextMove = 0, lastCross = -Infinity, lastLeap = -Infinity, phase = 0, poseSince = 0, shownPose: Pose = 'idle';
     let floors: Floor[] = [], initialized = false, zone = '', seenScene = scene;
@@ -176,7 +176,7 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
       const action = waiting ? 'idle' : chooseAction(Math.random, !!floor.rung, !!floor.ground && now - lastLeap > 90000);
       const nearPeer = peer && !peer.busy && peer.floor === floor.id;
       // Ambush: any platform, any distance, as long as the target is standing somewhere and not already mid-air or down.
-      if (peer && peer.floor && !peer.gun && !peer.airborne && !peer.collapse && now >= peer.downUntil && now - actor.lastGun > 150000 && Math.random() > .97
+      if (peer && peer.floor && !peer.gun && !peer.airborne && !peer.collapse && now >= peer.downUntil && now - actor.lastGun > RIFLE.cooldown && Math.random() < RIFLE.chance
         && Math.abs(peer.position.x - actor.position.x) > RIFLE.minGap) { startGun(peer, now); return; }
       if (action === 'leap') {
         const targets = leapTargets(floor, floors);
@@ -220,7 +220,7 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
     };
     const startGun = (target: Actor, now: number) => {
       queue = []; actor.attack = null; actor.busy = true;
-      actor.gun = { start: now, shots: 0, lastShot: -Infinity, target }; actor.gunUsed = true; actor.lastGun = now;
+      actor.gun = { start: now, shots: 0, lastShot: -Infinity, target }; actor.lastGun = now;
       actor.direction = target.position.x >= actor.position.x ? 1 : -1;
     };
     /** Draw, fire three rounds at the target (each one stuns and nudges it), then lower the rifle; the third round drops the target. */
@@ -248,7 +248,7 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
     };
     const startFight = (peer: Actor, now: number) => {
       const until = now + fightDuration();
-      for (const a of [actor, peer]) { a.fight = now; a.fightUntil = until; a.hits = 0; a.hitUntil = 0; a.downUntil = 0; a.attack = null; a.gunUsed = false; a.nextAttack = now + 300 + Math.random() * 400; a.cooldown = now + 45000; }
+      for (const a of [actor, peer]) { a.fight = now; a.fightUntil = until; a.hits = 0; a.hitUntil = 0; a.downUntil = 0; a.attack = null; a.nextAttack = now + 300 + Math.random() * 400; a.cooldown = now + 45000; }
       actor.direction = peer.position.x > actor.position.x ? 1 : -1; peer.direction = -actor.direction;
     };
     /** Loser limps off, winner flexes, a draw ends with both looking around. */
@@ -286,7 +286,7 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
       if (gap > FIGHT_RANGE) actor.position = clamp(floor, actor.position.x + dir * 45 * dt / 1000);
       else if (gap < 10) actor.position = clamp(floor, actor.position.x - dir * 30 * dt / 1000);
       else if (now >= actor.nextAttack && now >= peer.downUntil) {
-        if (!actor.gunUsed && !peer.gun && now - actor.lastGun > 60000 && Math.random() > .85) { startGun(peer, now); return 'aim'; }
+        if (!peer.gun && now - actor.lastGun > RIFLE.cooldown && Math.random() < RIFLE.chance) { startGun(peer, now); return 'aim'; }
         actor.attack = { kind: chooseAttack(), start: now, landed: false };
       }
       return actor.attack?.kind ?? 'fight';
@@ -297,7 +297,7 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
       el.style.transform = `translate3d(${actor.position.x - HALF_WIDTH}px, ${actor.position.y - FOOT}px, 0)`;
       figure.style.transform = `scale(${SCALE * actor.direction}, ${SCALE})`;
       if (pose !== shownPose) { shownPose = pose; poseSince = now; }
-      const bones = skeleton(pose, phase, now - poseSince);
+      const bones = skeleton(pose, phase, now - poseSince, queue[0]?.pose === 'down' ? queue[0].duration : undefined);
       [bones.body, ...bones.legs, ...bones.arms].forEach((d, i) => {
         const target = d.match(/-?\d+(?:\.\d+)?/g)!.map(Number);
         drawn[i] = target.map((n, j) => drawn[i] ? drawn[i][j] + (n - drawn[i][j]) * .45 : n);
