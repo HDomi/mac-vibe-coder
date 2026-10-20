@@ -232,7 +232,8 @@ function AppInner() {
                   onModel={(m) => session && S.setModel(session.id, m)}
                   onClose={() => { if (session) { S.close(session.id); setActiveSession(null); } }}
                   pendingAttachments={pendingAttachments} onConsumeAttachments={() => setPendingAttachments([])}
-                  background={backgroundSessions(S.sessions, session?.id)} onFocusSession={(id) => focusSession.current(id)} />
+                  background={backgroundSessions(S.sessions, session?.id)} onFocusSession={(id) => focusSession.current(id)}
+                  onRewind={(id, dry) => session ? S.rewind(session.id, id, dry) : Promise.resolve({ canRewind: false })} />
               </div>
             </div>
             {!rightCollapsed && <Splitter onStart={() => setDragging(true)} onEnd={() => setDragging(false)} onDrag={(dx) => right.setWidth(right.width - dx)} />}
@@ -334,7 +335,8 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
           onMode={(m) => session && S.setMode(session.id, m)}
           onModel={(m) => session && S.setModel(session.id, m)}
           onClose={() => { if (session) { S.close(session.id); setActive(null); } }}
-          background={backgroundSessions(S.sessions, session?.id)} onFocusSession={setActive} />
+          background={backgroundSessions(S.sessions, session?.id)} onFocusSession={setActive}
+          onRewind={(id, dry) => session ? S.rewind(session.id, id, dry) : Promise.resolve({ canRewind: false })} />
       </div>
     </div>
   );

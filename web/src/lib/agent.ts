@@ -11,7 +11,7 @@ export type AssistantBlock =
 
 export type AgentEvent =
   | { kind: 'session.init'; sessionId: string; agent: AgentId; cwd: string; model?: string; permissionMode?: string; agentSessionId?: string; tools?: string[]; commands?: string[] }
-  | { kind: 'user'; text: string; attachments: Attachment[] }
+  | { kind: 'user'; text: string; attachments: Attachment[]; /** Client-chosen id; Claude keys file checkpoints by it. */ messageId?: string }
   | { kind: 'text.delta'; text: string; parent: string | null }
   | { kind: 'thinking.delta'; text: string; parent: string | null }
   | { kind: 'assistant.message'; id: string; parent: string | null; blocks: AssistantBlock[] }
@@ -32,6 +32,8 @@ export type AgentEvent =
 
 export interface TodoItem { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }
 
+export interface RewindResult { canRewind: boolean; error?: string; filesChanged?: string[]; insertions?: number; deletions?: number }
+
 export type ServerMessage =
   | { sessionId: string; seq: number; ts: number; event: AgentEvent }
   | { type: 'session.started'; sessionId: string; requestCwd: string; requestId?: string; agent: AgentId }
@@ -39,6 +41,7 @@ export type ServerMessage =
   | { type: 'session.missing'; sessionId: string }
   /** The server still has this session; buffered events (if any) follow. */
   | { type: 'session.attached'; sessionId: string }
+  | { type: 'session.rewindResult'; sessionId: string; requestId: string; result: RewindResult }
   | { type: 'pong' }
   /** Synthetic, client-side: the socket reconnected after a drop; subscriptions must be re-established. */
   | { type: 'reconnected' };
@@ -47,7 +50,9 @@ export type ClientCommand =
   | { type: 'session.start'; requestId?: string; agent: AgentId; cwd: string; resume?: string; permissionMode?: PermissionModeId; model?: string }
   | { type: 'ping' }
   | { type: 'session.attach'; sessionId: string; after?: number }
-  | { type: 'session.send'; sessionId: string; text: string; attachments?: Attachment[] }
+  | { type: 'session.send'; sessionId: string; text: string; attachments?: Attachment[]; messageId?: string }
+  /** Restore files the agent changed to how they were before user message `messageId` (Claude only). */
+  | { type: 'session.rewind'; sessionId: string; requestId: string; messageId: string; dryRun?: boolean }
   | { type: 'session.approve'; sessionId: string; requestId: string; decision: 'allow' | 'allow_always' | 'deny'; message?: string }
   | { type: 'session.answer'; sessionId: string; requestId: string; answers: Record<string, string>; response?: string }
   | { type: 'session.interrupt'; sessionId: string }

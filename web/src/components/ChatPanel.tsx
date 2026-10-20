@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { currentTodos, type ChatItem, type ChatSession } from '../lib/chatStore';
-import type { AgentId, Attachment, PermissionModeId } from '../lib/agent';
+import type { AgentId, Attachment, PermissionModeId, RewindResult } from '../lib/agent';
 import { api, type HistorySession, type ModelInfo } from '../lib/api';
 import Composer, { type BackgroundSession } from './Composer';
 import ChatSearch from './ChatSearch';
@@ -28,10 +28,14 @@ interface Props {
   onClose: () => void;
   pendingAttachments?: Attachment[];
   onConsumeAttachments?: () => void;
+  /** Claude: preview or undo file changes since a user message. */
+  onRewind?: (messageId: string, dryRun: boolean) => Promise<RewindResult>;
   /** Other live sessions that are working or waiting; the composer lists them so they stay visible. */
   background?: BackgroundSession[];
   onFocusSession?: (id: string) => void;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const modelCache: Partial<Record<AgentId, ModelInfo[]>> = {};
 function useModels(agent: AgentId) {
@@ -59,9 +63,9 @@ export function ModelSelect({ agent, value, onChange, compact }: { agent: AgentI
   );
 }
 
-function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: { approve: Props['onApprove']; answer: Props['onAnswer']; cwd: string }): React.ReactNode {
+function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: { approve: Props['onApprove']; answer: Props['onAnswer']; cwd: string; rewind?: (messageId: string) => void }): React.ReactNode {
   switch (it.kind) {
-    case 'user': return <UserItem key={it.id} item={it} />;
+    case 'user': return <UserItem key={it.id} item={it} onRewind={actions.rewind && UUID_RE.test(it.id) && !it.compact ? () => actions.rewind!(it.id) : undefined} />;
     case 'assistant': return <AssistantItem key={it.id} item={it} baseDir={actions.cwd} />;
     case 'tool': {
       const kids = childrenOf.get(it.id);
@@ -183,7 +187,7 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
   );
 }
 
-export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onSend, onApprove, onAnswer, onInterrupt, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession }: Props) {
+export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onSend, onApprove, onAnswer, onInterrupt, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind }: Props) {
   useLang();
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -239,6 +243,23 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
   const close = () => {
     if (running && !window.confirm(t('chat.confirmCloseRunning'))) return;
     onClose();
+  };
+  // Undo file changes from a user message on: preview with a dry run, confirm with the file list, then restore.
+  const canRewind = !!onRewind && session.agent === 'claude' && !running && session.status !== 'closed';
+  const rewind = async (messageId: string) => {
+    if (!onRewind) return;
+    const dry = await onRewind(messageId, true);
+    if (!dry.canRewind) { window.alert(t('rewind.unavailable', { reason: dry.error ?? '' })); return; }
+    const files = dry.filesChanged ?? [];
+    if (!files.length) { window.alert(t('rewind.nothing')); return; }
+    // macOS reports /tmp and /var through /private; compare without it so paths show relative to the project.
+    const strip = (p: string) => p.replace(/^\/private(?=\/(?:tmp|var)\/)/, '');
+    const base = strip(session.cwd).replace(/\/$/, '') + '/';
+    const rel = (p: string) => (strip(p).startsWith(base) ? strip(p).slice(base.length) : p);
+    const list = files.slice(0, 12).map((f) => `• ${rel(f)}`).join('\n') + (files.length > 12 ? `\n… +${files.length - 12}` : '');
+    if (!window.confirm(t('rewind.confirm', { n: files.length, ins: dry.insertions ?? 0, del: dry.deletions ?? 0, files: list }))) return;
+    const done = await onRewind(messageId, false);
+    if (!done.canRewind) window.alert(t('rewind.failed', { reason: done.error ?? '' }));
   };
   const jump = () => { stick.current = true; setAtBottom(true); scrollToBottom(); };
   const onScroll = () => {
@@ -297,7 +318,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         <div ref={scroller} className="absolute inset-0 overflow-y-auto" onScroll={onScroll} onWheel={onWheel}>
           <div ref={content} className="px-5 py-4 space-y-3">
             {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.restoring ? t('chat.restoring') : session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}
-            {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd }))}
+            {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd, rewind: canRewind ? rewind : undefined }))}
           </div>
         </div>
         {!atBottom && (

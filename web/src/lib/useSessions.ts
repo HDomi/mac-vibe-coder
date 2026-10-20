@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { agentClient, type AgentId, type Attachment, type PermissionModeId, type ServerMessage } from './agent';
+import { agentClient, type AgentId, type Attachment, type PermissionModeId, type RewindResult, type ServerMessage } from './agent';
 import { ACTIVITY_EVENTS, displayTitle, itemsFromHistory, reduceEvent, type ChatItem, type ChatSession } from './chatStore';
 import { api } from './api';
 import { t } from './i18n';
@@ -52,6 +52,7 @@ export function useSessions() {
   const revivedAt = useRef(new Map<string, number>());
   /** Sessions whose buffered events are already covered by the full saved history (legacy entries). */
   const skipReplay = useRef(new Set<string>());
+  const pendingRewind = useRef(new Map<string, (r: RewindResult) => void>());
 
   useEffect(() => {
     const off = agentClient.on((m: ServerMessage) => {
@@ -62,6 +63,11 @@ export function useSessions() {
           return;
         }
         if (m.type === 'pong') return;
+        if (m.type === 'session.rewindResult') {
+          pendingRewind.current.get(m.requestId)?.(m.result);
+          pendingRewind.current.delete(m.requestId);
+          return;
+        }
         if (m.type === 'session.attached') {
           setSessions((prev) => prev[m.sessionId]?.restoring ? { ...prev, [m.sessionId]: { ...prev[m.sessionId], restoring: undefined } } : prev);
           return;
@@ -198,13 +204,14 @@ export function useSessions() {
   const startRef = useRef(start);
 
   const send = useCallback((sessionId: string, text: string, attachments: Attachment[]) => {
+    const messageId = crypto.randomUUID();
     // Show the message immediately; the server's echo confirms it (see reducer) instead of adding a duplicate.
     setSessions((prev) => {
       const s = prev[sessionId];
       if (!s) return prev;
-      return { ...prev, [sessionId]: { ...s, items: [...s.items, { kind: 'user', id: `local-${Date.now()}`, text, attachments, pending: true }], status: s.status === 'idle' ? 'running' : s.status, turnStartedAt: s.turnStartedAt ?? Date.now(), lastActivity: Date.now() } };
+      return { ...prev, [sessionId]: { ...s, items: [...s.items, { kind: 'user', id: messageId, text, attachments, pending: true }], status: s.status === 'idle' ? 'running' : s.status, turnStartedAt: s.turnStartedAt ?? Date.now(), lastActivity: Date.now() } };
     });
-    agentClient.send({ type: 'session.send', sessionId, text, attachments });
+    agentClient.send({ type: 'session.send', sessionId, text, attachments, messageId });
   }, []);
   const approve = useCallback((sessionId: string, requestId: string, decision: 'allow' | 'allow_always' | 'deny', message?: string) => {
     agentClient.send({ type: 'session.approve', sessionId, requestId, decision, message });
@@ -215,6 +222,22 @@ export function useSessions() {
   const interrupt = useCallback((sessionId: string) => agentClient.send({ type: 'session.interrupt', sessionId }), []);
   const setMode = useCallback((sessionId: string, mode: PermissionModeId) => agentClient.send({ type: 'session.mode', sessionId, mode }), []);
   const setModel = useCallback((sessionId: string, model: string | null) => agentClient.send({ type: 'session.model', sessionId, model }), []);
+  /** Preview (dryRun) or undo the file changes made since a user message. Claude sessions only. */
+  const rewind = useCallback((sessionId: string, messageId: string, dryRun: boolean) => new Promise<RewindResult>((resolve) => {
+    const requestId = crypto.randomUUID();
+    const timer = setTimeout(() => { pendingRewind.current.delete(requestId); resolve({ canRewind: false, error: t('rewind.timeout') }); }, 30000);
+    pendingRewind.current.set(requestId, (r) => {
+      clearTimeout(timer);
+      if (!dryRun && r.canRewind) {
+        setSessions((prev) => {
+          const s = prev[sessionId];
+          return s ? { ...prev, [sessionId]: { ...s, items: [...s.items, { kind: 'system', id: `rewind-${requestId}`, text: t('rewind.done') }] } } : prev;
+        });
+      }
+      resolve(r);
+    });
+    agentClient.send({ type: 'session.rewind', sessionId, requestId, messageId, dryRun });
+  }), []);
   const setPinned = useCallback((sessionId: string, pinned: boolean) => {
     setSessions((prev) => prev[sessionId] ? { ...prev, [sessionId]: { ...prev[sessionId], pinned: pinned || undefined } } : prev);
   }, []);
@@ -223,5 +246,5 @@ export function useSessions() {
     setSessions((prev) => { const n = { ...prev }; delete n[sessionId]; return n; });
   }, []);
 
-  return { sessions, replaced, start, send, approve, answer, interrupt, setMode, setModel, setPinned, close };
+  return { sessions, replaced, start, send, approve, answer, interrupt, setMode, setModel, setPinned, rewind, close };
 }

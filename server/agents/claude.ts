@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { query, type Options, type PermissionResult, type PermissionUpdate, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AgentEvent, AgentSession, AssistantBlock, Attachment, PermissionModeId, Question } from './types.js';
+import type { AgentEvent, AgentSession, AssistantBlock, Attachment, PermissionModeId, Question, RewindResult } from './types.js';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { mimeOf } from '../mime.js';
 
 const IMAGE_LIMIT = 5 * 1024 * 1024;
@@ -97,6 +99,8 @@ export class ClaudeSession implements AgentSession {
       // settingSources is left at its default, which loads user/project/local settings and CLAUDE.md.
       systemPrompt: { type: 'preset', preset: 'claude_code', snapshot: true },
       model: this.opts.model,
+      // Backups before each edit, keyed by the user message id we send, so a turn's file changes can be undone.
+      enableFileCheckpointing: true,
       includePartialMessages: true,
       // Stream subagent text/thinking too, so the UI can show what a subagent is doing.
       forwardSubagentText: true,
@@ -269,7 +273,7 @@ export class ClaudeSession implements AgentSession {
     this.emit({ kind: 'question.resolved', requestId });
   }
 
-  async send(text: string, attachments: Attachment[]) {
+  async send(text: string, attachments: Attachment[], messageId?: string) {
     await this.relaunching;
     if (this.closed) throw new Error('Session closed');
     const content: Array<Record<string, unknown>> = [];
@@ -289,12 +293,22 @@ export class ClaudeSession implements AgentSession {
     let body = text;
     if (mentions.length) body += `\n\nAttached file paths:\n${mentions.map((p) => `- ${p}`).join('\n')}`;
     content.push({ type: 'text', text: body });
-    this.emit({ kind: 'user', text, attachments });
+    const uuid = messageId && UUID_RE.test(messageId) ? messageId : randomUUID();
+    this.emit({ kind: 'user', text, attachments, messageId: uuid });
     await this.relaunching;
     if (this.closed) throw new Error('Session closed');
     this.running = true;
     this.emit({ kind: 'status', status: 'running' });
-    this.input.push({ type: 'user', message: { role: 'user', content: content as never }, parent_tool_use_id: null });
+    this.input.push({ type: 'user', uuid: uuid as `${string}-${string}-${string}-${string}-${string}`, message: { role: 'user', content: content as never }, parent_tool_use_id: null });
+  }
+
+  async rewindFiles(messageId: string, dryRun: boolean): Promise<RewindResult> {
+    if (!UUID_RE.test(messageId)) return { canRewind: false, error: 'Invalid message id' };
+    if (this.running && !dryRun) return { canRewind: false, error: 'The agent is still working; stop it first.' };
+    await this.relaunching;
+    if (!this.q || this.closed) return { canRewind: false, error: 'Session closed' };
+    const r = await this.q.rewindFiles(messageId, { dryRun });
+    return { canRewind: r.canRewind, error: r.error, filesChanged: r.filesChanged, insertions: r.insertions, deletions: r.deletions };
   }
 
   async interrupt() {

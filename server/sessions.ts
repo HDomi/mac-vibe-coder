@@ -163,8 +163,16 @@ async function handle(cmd: ClientCommand, ws: WebSocket, registry: SessionRegist
       if (!registry.attach(cmd.sessionId, ws, cmd.after)) safeSend(ws, { type: 'session.missing', sessionId: cmd.sessionId });
       return;
     case 'session.send':
-      await must(registry, cmd.sessionId).send(cmd.text, cmd.attachments ?? []);
+      await must(registry, cmd.sessionId).send(cmd.text, cmd.attachments ?? [], cmd.messageId);
       return;
+    case 'session.rewind': {
+      const s = must(registry, cmd.sessionId);
+      const result = s.rewindFiles
+        ? await s.rewindFiles(cmd.messageId, !!cmd.dryRun).catch((err) => ({ canRewind: false, error: (err as Error).message ?? String(err) }))
+        : { canRewind: false, error: 'This agent cannot undo file changes.' };
+      safeSend(ws, { type: 'session.rewindResult', sessionId: cmd.sessionId, requestId: cmd.requestId, result });
+      return;
+    }
     case 'session.approve':
       must(registry, cmd.sessionId).approve(cmd.requestId, cmd.decision, cmd.message);
       return;

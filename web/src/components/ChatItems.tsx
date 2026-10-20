@@ -20,7 +20,7 @@ function summarizeInput(name: string, input: unknown): string {
   }
 }
 
-export function UserItem({ item }: { item: Extract<ChatItem, { kind: 'user' }> }) {
+export function UserItem({ item, onRewind }: { item: Extract<ChatItem, { kind: 'user' }>; /** Undo file changes made from this message on; absent when not possible. */ onRewind?: () => void }) {
   useLang();
   const [open, setOpen] = useState(false);
   if (item.compact) {
@@ -36,7 +36,11 @@ export function UserItem({ item }: { item: Extract<ChatItem, { kind: 'user' }> }
     );
   }
   return (
-    <div className="flex justify-end">
+    <div className="group/user flex justify-end items-start gap-2">
+      {onRewind && !item.pending && (
+        <button onClick={onRewind} title={t('rewind.hint')}
+          className="mt-2 shrink-0 opacity-0 group-hover/user:opacity-100 rounded-md px-2 py-1 text-[11px] text-zinc-400 hover:text-amber-200 hover:bg-white/5">⟲ {t('rewind.button')}</button>
+      )}
       <div className={`max-w-[80%] rounded-2xl rounded-br-md bg-blue-500/20 px-4 py-2.5 text-[14px] whitespace-pre-wrap ${item.pending ? 'opacity-60' : ''}`}>
         {item.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">

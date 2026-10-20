@@ -154,9 +154,11 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       const split = splitAttachments(e.text);
       split.attachments = [...new Map([...split.attachments, ...e.attachments].map((a) => [a.path, a])).values()];
       // Confirm an optimistic local echo with the same text instead of appending a duplicate.
-      const pendingIdx = items.findIndex((it) => it.kind === 'user' && it.pending && it.text === split.text);
-      if (pendingIdx >= 0) items[pendingIdx] = { kind: 'user', id: uid(), text: split.text, attachments: split.attachments };
-      else items.push({ kind: 'user', id: uid(), text: split.text, attachments: split.attachments, compact: isCompactSummary(split.text) || undefined });
+      // The echo carries the id the client chose (Claude checkpoints use it); older servers only match by text.
+      const pendingIdx = items.findIndex((it) => it.kind === 'user' && it.pending && (e.messageId ? it.id === e.messageId : it.text === split.text));
+      const id = e.messageId ?? uid();
+      if (pendingIdx >= 0) items[pendingIdx] = { kind: 'user', id, text: split.text, attachments: split.attachments };
+      else if (!e.messageId || !items.some((it) => it.id === e.messageId)) items.push({ kind: 'user', id, text: split.text, attachments: split.attachments, compact: isCompactSummary(split.text) || undefined });
       next.turnStartedAt = next.turnStartedAt ?? Date.now();
       return next;
     }

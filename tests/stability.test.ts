@@ -218,3 +218,29 @@ test('saved prompts are validated, trimmed and persisted', async () => {
     assert.equal((await store.load()).prompts[0].text, '테스트 돌리고 고쳐');
   } finally { process.env.HOME = prev; await rm(dir, { recursive: true, force: true }); }
 });
+
+test('rewind is answered per request and refused for agents without checkpoints', async () => {
+  const wss = new EventEmitter();
+  const sent: any[] = [];
+  const ws = Object.assign(new EventEmitter(), { readyState: 1, OPEN: 1, send: (data: string) => sent.push(JSON.parse(data)) });
+  const calls: any[] = [];
+  const claude = { rewindFiles: async (id: string, dry: boolean) => { calls.push([id, dry]); return { canRewind: true, filesChanged: ['/p/a.txt'] }; } };
+  const codex = {};
+  const registry = { get: (id: string) => (id === 'c' ? claude : id === 'x' ? codex : undefined), detachAll: () => {} };
+  attachWebSocket(wss as any, registry as any);
+  wss.emit('connection', ws);
+  ws.emit('message', JSON.stringify({ type: 'session.rewind', sessionId: 'c', requestId: 'r1', messageId: 'm', dryRun: true }));
+  ws.emit('message', JSON.stringify({ type: 'session.rewind', sessionId: 'x', requestId: 'r2', messageId: 'm' }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(calls, [['m', true]]);
+  assert.deepEqual(sent.find((m) => m.requestId === 'r1').result.filesChanged, ['/p/a.txt']);
+  assert.equal(sent.find((m) => m.requestId === 'r2').result.canRewind, false);
+});
+
+test('the server echo of a sent message keeps the id the client chose', () => {
+  const s: ChatSession = { id: 's', cwd: '/tmp', agent: 'claude', permissionMode: 'default', status: 'running', totalCostUsd: 0, lastSeq: 0, items: [{ kind: 'user', id: 'aaaaaaaa-0000-4000-8000-000000000001', text: 'same', attachments: [], pending: true }, { kind: 'user', id: 'b', text: 'same', attachments: [] }] };
+  const next = reduceEvent(s, { kind: 'user', text: 'same', attachments: [], messageId: 'aaaaaaaa-0000-4000-8000-000000000001' }, 1);
+  assert.equal(next.items.length, 2);
+  assert.equal((next.items[0] as any).pending, undefined);
+  assert.equal(next.items[0].id, 'aaaaaaaa-0000-4000-8000-000000000001');
+});
