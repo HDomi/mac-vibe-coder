@@ -12,23 +12,42 @@ function color(remain: number) {
   return 'bg-red-400';
 }
 
-function resetLabel(ts: number | null) {
-  if (!ts) return '';
-  const diff = ts * 1000 - Date.now();
-  if (diff <= 0) return t('usage.reset');
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  return h > 0 ? t('usage.resetsIn', { h, m }) : t('usage.resetsInM', { m });
+/** "2d 3h 15m" until `ts` (unix seconds); leading zero units are dropped. Null once the window has reset. */
+export function untilReset(ts: number, now = Date.now()): string | null {
+  const mins = Math.ceil((ts * 1000 - now) / 60000);
+  if (mins <= 0) return null;
+  const d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60;
+  return d > 0 ? `${d}d ${h}h ${m}m` : h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-/** Tiny battery: remaining % fills the cell from the left. */
+function resetLabel(ts: number | null) {
+  if (!ts) return t('usage.noReset');
+  const left = untilReset(ts);
+  return left ? t('usage.resetsAfter', { time: left }) : t('usage.reset');
+}
+
+/** Tiny battery: remaining % fills the cell from the left. Hover shows when the window resets. */
 export function Battery({ label, win, error, loading }: { label: string; win: UsageWindow | null; error?: string; loading: boolean }) {
+  const [hover, setHover] = useState(false);
+  const [, tick] = useState(0);
+  // Keep the countdown live while the popover is open.
+  useEffect(() => {
+    if (!hover) return;
+    const timer = setInterval(() => tick((n) => n + 1), 30000);
+    return () => clearInterval(timer);
+  }, [hover]);
   const remain = win ? Math.min(100, Math.max(0, 100 - win.usedPct)) : null;
   const title = error
     ? t(win ? 'usage.cached' : 'usage.unavailable', { label, reason: error })
     : win ? t('usage.used', { label, pct: win.usedPct, reset: resetLabel(win.resetsAt) }) : t(loading ? 'usage.loading' : 'usage.unavailable', { label, reason: '' });
   return (
-    <div className="flex items-center gap-1" title={title} aria-label={title}>
+    <div className="titlebar-nodrag relative flex items-center gap-1 cursor-default" aria-label={title} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      {hover && (
+        <div role="tooltip" className="absolute top-full right-0 mt-2 z-50 whitespace-nowrap rounded-md border border-white/10 bg-[#171a22] px-2.5 py-1.5 text-[11px] text-zinc-200 shadow-xl pointer-events-none">
+          {win ? <div className="tabular-nums">{resetLabel(win.resetsAt)}</div> : !error && <div className="text-zinc-400">{t(loading ? 'usage.loading' : 'usage.unavailable', { label, reason: '' })}</div>}
+          {error && <div className="text-amber-300">{error}</div>}
+        </div>
+      )}
       <span className="text-[10px] text-zinc-500">{label}</span>
       <span className="relative inline-flex items-center">
         <span className="w-[18px] h-[9px] rounded-[2px] border border-zinc-500/80 p-px flex">

@@ -133,12 +133,12 @@ async function main() {
   await until(`document.body.textContent.includes('Server did not restart')`);
   assert.equal(await js(`document.querySelector('[data-update-locked]').dataset.updateLocked`), 'false');
   await js(`renderUsage()`);
-  await until(`!!document.querySelector('[title*="HTTP 429"]')`);
-  assert.equal(await js(`document.body.textContent.includes('Claude') && document.querySelector('[title*="HTTP 429"]').textContent.includes('—')`), true);
+  await until(`!!document.querySelector('[aria-label*="HTTP 429"]')`);
+  assert.equal(await js(`document.body.textContent.includes('Claude') && document.querySelector('[aria-label*="HTTP 429"]').textContent.includes('—')`), true);
   usageFailed = false;
   await js(`document.querySelector('button[title="Refresh usage"]').click()`);
-  await until(`!!document.querySelector('[title^="5h: 0% used"]')`);
-  assert.equal(await js(`document.querySelector('[title^="5h: 0% used"]').textContent.includes('100%')`), true);
+  await until(`!!document.querySelector('[aria-label^="5h: 0% used"]')`);
+  assert.equal(await js(`document.querySelector('[aria-label^="5h: 0% used"]').textContent.includes('100%')`), true);
   assert.deepEqual(errors, []);
   console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage. Screenshot: ${screenshot}`);
 }

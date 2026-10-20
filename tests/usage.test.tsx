@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import UsageBar, { Battery } from '../web/src/components/UsageBar';
+import UsageBar, { Battery, untilReset } from '../web/src/components/UsageBar';
 import { normalizeClaudeUsage, queryClaudeUsage, type UsageQuery } from '../server/claudeUsage';
 
 test('usage batteries distinguish zero usage, exhausted quota and unavailable data', () => {
@@ -78,3 +78,14 @@ for (const outcome of ['success', 'error', 'timeout', 'unsupported']) {
     if (outcome !== 'unsupported') assert.equal(finished, true);
   });
 }
+
+test('battery reset countdown shows days, hours and minutes, dropping leading zeros', () => {
+  const now = Date.UTC(2026, 9, 20, 0, 0, 0);
+  const at = (mins: number) => (now + mins * 60000) / 1000;
+  assert.equal(untilReset(at(2 * 1440 + 3 * 60 + 15), now), '2d 3h 15m');
+  assert.equal(untilReset(at(1440), now), '1d 0h 0m');
+  assert.equal(untilReset(at(185), now), '3h 5m');
+  assert.equal(untilReset(at(7), now), '7m');
+  assert.equal(untilReset((now + 20000) / 1000, now), '1m');
+  assert.equal(untilReset(at(0), now), null);
+});
