@@ -29,7 +29,20 @@ test('icon ids map to shipped svg file names', () => {
   assert.equal(fileIconSvg('nope-not-an-icon'), null);
 });
 
-import { displayTitle, type ChatSession } from '../web/src/lib/chatStore';
+import { backgroundState, displayTitle, type ChatSession } from '../web/src/lib/chatStore';
+
+test('background state tells a working session from one waiting on the user', () => {
+  const base: ChatSession = { id: 's', agent: 'claude', cwd: '/p', permissionMode: 'default', status: 'idle', totalCostUsd: 0, lastSeq: 0, items: [] };
+  assert.equal(backgroundState(base), null);
+  assert.equal(backgroundState({ ...base, status: 'closed' }), null);
+  assert.equal(backgroundState({ ...base, status: 'running' }), 'running');
+  assert.equal(backgroundState({ ...base, status: 'compacting' }), 'running');
+  const approval = { kind: 'approval', id: 'a1', toolName: 'Bash', input: {}, canAlwaysAllow: true, decision: null } as const;
+  assert.equal(backgroundState({ ...base, status: 'running', items: [approval] }), 'waiting');
+  assert.equal(backgroundState({ ...base, status: 'running', items: [{ ...approval, decision: 'allow' }] }), 'running');
+  // An unanswered request before the latest user message is stale; the turn moved on.
+  assert.equal(backgroundState({ ...base, status: 'running', items: [approval, { kind: 'user', id: 'u', text: 'go', attachments: [] } as never] }), 'running');
+});
 
 test('tab title prefers the CLI session title over the first prompt', () => {
   const base: ChatSession = { id: 's', agent: 'claude', cwd: '/p', permissionMode: 'default', status: 'idle', totalCostUsd: 0, lastSeq: 0,

@@ -20,7 +20,13 @@ interface Props {
   /** Attachments pushed from outside (file browser "Attach to Chat"). */
   pendingAttachments?: Attachment[];
   onConsumeAttachments?: () => void;
+  /** Other sessions still working or waiting for the user; shown next to "Attach" so they are not forgotten. */
+  background?: BackgroundSession[];
+  onFocusSession?: (id: string) => void;
 }
+
+export interface BackgroundSession { id: string; name: string; state: 'running' | 'waiting' }
+const MAX_BACKGROUND_CHIPS = 3;
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
 const MODE_IDS: { id: PermissionModeId; key: string }[] = [
@@ -36,7 +42,7 @@ function toAttachment(path: string, name?: string): Attachment {
   return { path, name: n, kind: IMAGE_RE.test(n) ? 'image' : 'file' };
 }
 
-export default function Composer({ cwd, agent, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments }: Props) {
+export default function Composer({ cwd, agent, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments, background = [], onFocusSession }: Props) {
   useLang();
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -214,6 +220,19 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
             <input type="file" multiple className="hidden" onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
           </label>
           {uploading && <span className="text-xs text-zinc-500">{t('composer.uploading')}</span>}
+          {background.length > 0 && (
+            <div className="flex items-center gap-1 min-w-0 overflow-hidden" title={t('composer.backgroundTitle', { n: background.length })}>
+              {background.slice(0, MAX_BACKGROUND_CHIPS).map((b) => (
+                <button key={b.id} type="button" onClick={() => onFocusSession?.(b.id)}
+                  title={`${b.name} · ${t(b.state === 'waiting' ? 'composer.bgWaiting' : 'composer.bgRunning')} · ${t('composer.bgOpen')}`}
+                  className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] max-w-40 hover:bg-white/10 ${b.state === 'waiting' ? 'text-amber-200 bg-amber-500/10' : 'text-zinc-400 bg-white/5'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${b.state === 'waiting' ? 'bg-amber-400' : 'bg-amber-400 animate-pulse'}`} />
+                  <span className="truncate">{b.name}</span>
+                </button>
+              ))}
+              {background.length > MAX_BACKGROUND_CHIPS && <span className="text-[11px] text-zinc-500 shrink-0">+{background.length - MAX_BACKGROUND_CHIPS}</span>}
+            </div>
+          )}
           <div className="flex-1" />
           {running && <button className="rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs px-3 py-1.5" onClick={onStop}>{t('composer.stop')}</button>}
           <button className="rounded-md bg-blue-500/30 hover:bg-blue-500/40 text-xs px-3 py-1.5 disabled:opacity-40" disabled={disabled || uploading || (!text.trim() && !attachments.length)} onClick={submit}>{running ? t('composer.queue') : t('composer.send')}</button>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { displayTitle } from './lib/chatStore';
+import { backgroundState, displayTitle, type ChatSession } from './lib/chatStore';
 import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing, type RecentSession } from './lib/api';
 import type { Attachment } from './lib/agent';
 import { requestNotificationPermission, useSessions, setOnScreenSession } from './lib/useSessions';
@@ -9,6 +9,7 @@ import Preview from './components/Preview';
 import ToolsPanel from './components/ToolsPanel';
 import UsageBar, { type ViewMode } from './components/UsageBar';
 import ChatPanel, { type StartOptions } from './components/ChatPanel';
+import type { BackgroundSession } from './components/Composer';
 import TerminalPanel from './components/TerminalPanel';
 import GitPanel from './components/GitPanel';
 import Splitter, { usePaneWidth } from './components/Splitter';
@@ -226,7 +227,8 @@ function AppInner() {
                   onMode={(m) => session && S.setMode(session.id, m)}
                   onModel={(m) => session && S.setModel(session.id, m)}
                   onClose={() => { if (session) { S.close(session.id); setActiveSession(null); } }}
-                  pendingAttachments={pendingAttachments} onConsumeAttachments={() => setPendingAttachments([])} />
+                  pendingAttachments={pendingAttachments} onConsumeAttachments={() => setPendingAttachments([])}
+                  background={backgroundSessions(S.sessions, session?.id)} onFocusSession={(id) => focusSession.current(id)} />
               </div>
             </div>
             {!rightCollapsed && <Splitter onStart={() => setDragging(true)} onEnd={() => setDragging(false)} onDrag={(dx) => right.setWidth(right.width - dx)} />}
@@ -320,8 +322,21 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
           onInterrupt={() => session && S.interrupt(session.id)}
           onMode={(m) => session && S.setMode(session.id, m)}
           onModel={(m) => session && S.setModel(session.id, m)}
-          onClose={() => { if (session) { S.close(session.id); setActive(null); } }} />
+          onClose={() => { if (session) { S.close(session.id); setActive(null); } }}
+          background={backgroundSessions(S.sessions, session?.id)} onFocusSession={setActive} />
       </div>
     </div>
   );
+}
+
+/** Every other live session that is working or waiting, for the chips beside the composer's "Attach". */
+function backgroundSessions(sessions: Record<string, ChatSession>, currentId?: string): BackgroundSession[] {
+  const out: BackgroundSession[] = [];
+  for (const s of Object.values(sessions)) {
+    if (s.id === currentId) continue;
+    const state = backgroundState(s);
+    if (state) out.push({ id: s.id, name: displayTitle(s, 18) ?? s.cwd.split('/').pop() ?? t('common.new'), state });
+  }
+  // Sessions that stopped to ask something come first: they block until the user answers.
+  return out.sort((a, b) => (a.state === b.state ? 0 : a.state === 'waiting' ? -1 : 1));
 }

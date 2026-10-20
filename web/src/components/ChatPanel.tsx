@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatItem, ChatSession } from '../lib/chatStore';
 import type { AgentId, Attachment, PermissionModeId } from '../lib/agent';
 import { api, type HistorySession, type ModelInfo } from '../lib/api';
-import Composer from './Composer';
+import Composer, { type BackgroundSession } from './Composer';
 import { ApprovalItem, AssistantItem, QuestionItem, ResultItem, ToolItem, UserItem } from './ChatItems';
 import { useContextMenu } from './ContextMenu';
 import { t, useLang } from '../lib/i18n';
@@ -26,6 +26,9 @@ interface Props {
   onClose: () => void;
   pendingAttachments?: Attachment[];
   onConsumeAttachments?: () => void;
+  /** Other live sessions that are working or waiting; the composer lists them so they stay visible. */
+  background?: BackgroundSession[];
+  onFocusSession?: (id: string) => void;
 }
 
 const modelCache: Partial<Record<AgentId, ModelInfo[]>> = {};
@@ -178,7 +181,7 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
   );
 }
 
-export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onSend, onApprove, onAnswer, onInterrupt, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments }: Props) {
+export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onSend, onApprove, onAnswer, onInterrupt, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession }: Props) {
   useLang();
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -298,7 +301,8 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
       )}
       <Composer key={session.id} cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
         onSend={(text, atts) => { stick.current = true; setAtBottom(true); onSend(text, atts); requestAnimationFrame(scrollToBottom); }}
-        onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments} />
+        onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments}
+        background={background} onFocusSession={onFocusSession} />
     </div>
   );
 }

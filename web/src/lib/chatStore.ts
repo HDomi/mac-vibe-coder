@@ -28,6 +28,21 @@ export function displayTitle(s: ChatSession, max = 40): string | null {
   return title ? title.slice(0, max) : sessionTitle(s.items, max);
 }
 
+/**
+ * Why a session needs attention while another one is on screen: it is still working, or it stopped
+ * to ask the user something (approval / question). Null when idle, starting, or closed.
+ */
+export function backgroundState(s: ChatSession): 'running' | 'waiting' | null {
+  if (s.status === 'compacting') return 'running';
+  if (s.status !== 'running') return null;
+  for (let i = s.items.length - 1; i >= 0; i--) {
+    const it = s.items[i];
+    if (it.kind === 'user') break;
+    if ((it.kind === 'approval' && !it.decision) || (it.kind === 'question' && !it.resolved)) return 'waiting';
+  }
+  return 'running';
+}
+
 export interface ChatSession {
   id: string;
   agent: AgentId;
