@@ -21,9 +21,20 @@ export const ATTACKS: Record<AttackKind, { duration: number; strikeAt: number; r
 };
 export const HIT_DURATION = 380, DOWN_DURATION = 1100, FIGHT_RANGE = 20, FIGHT_BREAK = 70;
 /** Rifle: draw, three rounds 300ms apart, lower; the muzzle sits ahead of the figure at chest height (figure units). */
-export const RIFLE = { draw: 350, interval: 300, shots: 3, total: 1350, flash: 120, stun: 330, knockback: 6, minGap: 60, maxGap: 260, collapse: 1500 };
-export const MUZZLE = { x: 46, y: 25 };
-export const muzzle = (position: Point, direction: number): Point => ({ x: position.x + direction * (MUZZLE.x - 24) * SCALE, y: position.y - (54 - MUZZLE.y) * SCALE });
+export const RIFLE = { draw: 350, interval: 300, shots: 3, total: 1350, flash: 120, stun: 330, knockback: 6, minGap: 24, maxTilt: 40, collapse: 1500 };
+export const MUZZLE = { x: 46, y: 25 }, STOCK = { x: 25, y: 28 };
+const toWorld = (position: Point, direction: number, p: Point): Point => ({ x: position.x + direction * (p.x - 24) * SCALE, y: position.y - (54 - p.y) * SCALE });
+/** Rifle tilt (degrees, figure space) that points the barrel at the target's chest, limited so the hands stay on it. */
+export function aimAngle(position: Point, direction: number, target: Point) {
+  const m = toWorld(position, direction, MUZZLE);
+  const deg = Math.atan2(target.y - 20 - m.y, (target.x - m.x) * direction) * 180 / Math.PI;
+  return Math.max(-RIFLE.maxTilt, Math.min(RIFLE.maxTilt, deg));
+}
+/** Muzzle in screen space after the barrel has been tilted about the stock. */
+export function muzzle(position: Point, direction: number, angle = 0): Point {
+  const rad = angle * Math.PI / 180, dx = MUZZLE.x - STOCK.x, dy = MUZZLE.y - STOCK.y;
+  return toWorld(position, direction, { x: STOCK.x + dx * Math.cos(rad) - dy * Math.sin(rad), y: STOCK.y + dx * Math.sin(rad) + dy * Math.cos(rad) });
+}
 const stride = (pose: Pose) => (pose === 'walk' ? 5 : 8);
 /** Screen pixels covered by one full gait cycle, so a planted foot stays put instead of skating. */
 export const cycleLength = (pose: Pose) => stride(pose) * SCALE * Math.PI * 2;
@@ -142,7 +153,7 @@ export function skeleton(pose: Pose, phase: number, time: number) {
     // Stock at the shoulder, cheek on it, trigger hand close and the other hand on the fore-end; recoil slides it back.
     const recoil = pose === 'shoot' ? 2 * (1 - Math.min(1, time / RIFLE.flash)) : 0;
     feet = [{ x: 18, y: 54 }, { x: 29, y: 54 }];
-    rifle = path({ x: 25 - recoil, y: 28 }, { x: MUZZLE.x - recoil, y: MUZZLE.y });
+    rifle = path({ x: STOCK.x - recoil, y: STOCK.y }, { x: MUZZLE.x - recoil, y: MUZZLE.y });
     arms = [path(shoulder, { x: 29, y: shoulder.y + 4 }, { x: 31 - recoil, y: 27 }), path(shoulder, { x: 33, y: shoulder.y + 4 }, { x: 39 - recoil, y: 26 })];
     if (pose === 'shoot' && time < RIFLE.flash * .7) {
       const m = { x: MUZZLE.x - recoil, y: MUZZLE.y };

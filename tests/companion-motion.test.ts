@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { atWall, chooseAction, chooseAttack, cycleLength, dropFloor, fallDuration, floorBelow, groundOf, hops, landsHit, leapTargets, muzzle, neighborZone, restDuration, RIFLE, SCALE, skeleton, type Floor, type Pose } from '../web/src/lib/companionMotion';
+import { atWall, chooseAction, chooseAttack, cycleLength, dropFloor, fallDuration, aimAngle, floorBelow, groundOf, hops, landsHit, leapTargets, muzzle, neighborZone, restDuration, RIFLE, SCALE, skeleton, type Floor, type Pose } from '../web/src/lib/companionMotion';
 const floors: Floor[] = [
   { id: 'ground:left', left: 20, right: 180, y: 700, zone: 'left', ground: true },
   { id: 'left', left: 20, right: 180, y: 200, zone: 'left' },
@@ -94,6 +94,13 @@ test('a shot figure tumbles onto the platform below or stays put when there is n
   const m = muzzle({ x: 100, y: 500 }, 1);
   assert.ok(m.x > 100 && m.y < 500);
   assert.ok(muzzle({ x: 100, y: 500 }, -1).x < 100);
+  // Barrel tilts toward a target above or below (screen y grows downward), capped so the hands stay on the rifle.
+  assert.ok(Math.abs(aimAngle({ x: 100, y: 500 }, 1, { x: 300, y: 500 })) < 2);
+  assert.ok(aimAngle({ x: 100, y: 500 }, 1, { x: 300, y: 400 }) < -10);
+  assert.ok(aimAngle({ x: 100, y: 500 }, 1, { x: 300, y: 600 }) > 10);
+  assert.equal(aimAngle({ x: 100, y: 500 }, 1, { x: 110, y: 900 }), RIFLE.maxTilt);
+  assert.equal(aimAngle({ x: 100, y: 500 }, -1, { x: -100, y: 900 }), RIFLE.maxTilt);
+  assert.ok(muzzle({ x: 100, y: 500 }, 1, 30).y > m.y);
 });
 test('blows connect only in front of the attacker within reach', () => {
   const me = { x: 100, y: 500 };

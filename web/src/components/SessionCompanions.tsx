@@ -3,7 +3,7 @@ import type { AgentId } from '../lib/agent';
 import { api } from '../lib/api';
 import { pendingRequests, type ChatSession } from '../lib/chatStore';
 import AgentIcon from './AgentIcon';
-import { ATTACKS, atWall, chooseAction, chooseAttack, cycleLength, DOWN_DURATION, dropFloor, fallDuration, FIGHT_BREAK, FIGHT_RANGE, fightDuration, floorBelow, FOOT, GESTURE_DURATION, GESTURES, groundOf, HALF_WIDTH, HIT_DURATION, hops, landsHit, leapTargets, muzzle, neighborZone, restDuration, RIFLE, SCALE, skeleton, SPEED, type AttackKind, type Floor, type Point, type Pose, type Side } from '../lib/companionMotion';
+import { aimAngle, ATTACKS, atWall, chooseAction, chooseAttack, cycleLength, DOWN_DURATION, dropFloor, fallDuration, FIGHT_BREAK, FIGHT_RANGE, fightDuration, floorBelow, FOOT, GESTURE_DURATION, GESTURES, groundOf, HALF_WIDTH, HIT_DURATION, hops, landsHit, leapTargets, muzzle, neighborZone, restDuration, RIFLE, SCALE, skeleton, SPEED, STOCK, type AttackKind, type Floor, type Point, type Pose, type Side } from '../lib/companionMotion';
 
 type Actor = {
   position: Point; floor: string; busy: boolean; direction: number; cooldown: number;
@@ -12,6 +12,8 @@ type Actor = {
   attack: { kind: AttackKind; start: number; landed: boolean } | null;
   /** Rifle: the shooter's sequence, and on the target the stun window and the pending collapse. */
   gun: { start: number; shots: number; lastShot: number; target: Actor } | null; gunUsed: boolean; lastGun: number; shotUntil: number; collapse: number;
+  /** Mid-jump or mid-fall: not a valid rifle target because stopping it would leave it hanging in the air. */
+  airborne: boolean;
   /** Lets the shooter stop whatever the target was doing. */
   halt: () => void;
 };
@@ -107,11 +109,11 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
     const drawn: number[][] = [];
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
     const actor: Actor = { position: { x: 0, y: 0 }, floor: '', busy: false, direction: 1, cooldown: 0, fight: 0, fightUntil: 0, hits: 0, hitUntil: 0, downUntil: 0, nextAttack: 0, attack: null,
-      gun: null, gunUsed: false, lastGun: -Infinity, shotUntil: 0, collapse: 0, halt: () => { queue = []; actor.busy = false; actor.attack = null; } };
+      gun: null, gunUsed: false, lastGun: -Infinity, shotUntil: 0, collapse: 0, airborne: false, halt: () => { queue = []; actor.busy = false; actor.attack = null; } };
     actors.current.set(agent, actor);
     let frame = 0, last = 0, measured = -Infinity, nextMove = 0, lastCross = -Infinity, lastLeap = -Infinity, phase = 0, poseSince = 0, shownPose: Pose = 'idle';
     let floors: Floor[] = [], initialized = false, zone = '', seenScene = scene;
-    let queue: Step[] = [];
+    let queue: Step[] = [], tilt = 0;
     let drag: { pointer: number; dx: number; dy: number; x: number; y: number; moved: boolean } | null = null;
     const clamp = (floor: Floor, x: number) => ({ x: Math.max(floor.left, Math.min(floor.right, x)), y: floor.y });
     const rest = (now: number) => { nextMove = now + restDuration(); };
@@ -173,10 +175,9 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
       const waiting = current.current.sessions.some((s) => s.agent === agent && pendingRequests(s) > 0);
       const action = waiting ? 'idle' : chooseAction(Math.random, !!floor.rung, !!floor.ground && now - lastLeap > 90000);
       const nearPeer = peer && !peer.busy && peer.floor === floor.id;
-      if (nearPeer && !peer.gun && now - actor.lastGun > 150000 && Math.random() > .97) {
-        const gap = Math.abs(peer.position.x - actor.position.x);
-        if (gap > RIFLE.minGap && gap < RIFLE.maxGap) { startGun(peer, now); return; }
-      }
+      // Ambush: any platform, any distance, as long as the target is standing somewhere and not already mid-air or down.
+      if (peer && peer.floor && !peer.gun && !peer.airborne && !peer.collapse && now >= peer.downUntil && now - actor.lastGun > 150000 && Math.random() > .97
+        && Math.abs(peer.position.x - actor.position.x) > RIFLE.minGap) { startGun(peer, now); return; }
       if (action === 'leap') {
         const targets = leapTargets(floor, floors);
         if (targets.length) { leap(pick(targets), now); return; }
@@ -226,15 +227,16 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
     const gunTick = (now: number): Pose => {
       const g = actor.gun!, t = now - g.start, target = g.target;
       actor.direction = target.position.x >= actor.position.x ? 1 : -1;
+      tilt = aimAngle(actor.position, actor.direction, target.position);
       if (g.shots < RIFLE.shots && t >= RIFLE.draw + g.shots * RIFLE.interval) {
         g.shots++; g.lastShot = now;
-        tracer(muzzle(actor.position, actor.direction), { x: target.position.x - actor.direction * 3, y: target.position.y - 20 });
+        tracer(muzzle(actor.position, actor.direction, tilt), { x: target.position.x - actor.direction * 3, y: target.position.y - 20 });
         target.halt(); target.shotUntil = now + RIFLE.stun; target.attack = null;
         const under = floors.find((f) => f.id === target.floor);
         if (under) target.position = clamp(under, target.position.x + actor.direction * RIFLE.knockback);
         if (g.shots === RIFLE.shots) { target.hits += 3; target.collapse = now; }
       }
-      if (t >= RIFLE.total) { actor.gun = null; actor.busy = false; actor.nextAttack = now + 400; if (!actor.fight) rest(now); return 'aim'; }
+      if (t >= RIFLE.total) { actor.gun = null; tilt = 0; actor.busy = false; actor.nextAttack = now + 400; if (!actor.fight) rest(now); return 'aim'; }
       return now - g.lastShot < RIFLE.flash ? 'shoot' : 'aim';
     };
     /** Shot three times: tumble onto the platform below if there is one, otherwise crumple on the spot, then limp off. */
@@ -303,6 +305,8 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
         paths[i].setAttribute('d', d.replace(/-?\d+(?:\.\d+)?/g, () => drawn[i][j++].toFixed(2)));
       });
       rifle.setAttribute('d', bones.rifle); flash.setAttribute('d', bones.flash);
+      const turn = bones.rifle && tilt ? `rotate(${tilt.toFixed(1)} ${STOCK.x} ${STOCK.y})` : '';
+      for (const node of [rifle, flash, paths[3], paths[4]]) { if (turn) node.setAttribute('transform', turn); else node.removeAttribute('transform'); }
       head.style.transform = `translate(${bones.headX}px, ${bones.headY}px)`;
       el.dataset.pose = pose; el.dataset.floor = actor.floor; el.dataset.zone = zone; el.dataset.hits = String(actor.hits);
       el.dataset.travel = drag ? 'drag' : queue.length ? queue[0].pose : 'rest';
@@ -347,7 +351,7 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
           actor.position = { x: step.from.x + (step.to.x - step.from.x) * eased, y: step.from.y + (step.to.y - step.from.y) * eased - Math.sin(Math.PI * p) * (step.height ?? 0) };
           if (step.pose in SPEED) phase += Math.abs(actor.position.x - oldX) / cycleLength(step.pose) * Math.PI * 2;
         }
-        pose = step.pose;
+        pose = step.pose; actor.airborne = !!step.to && !(step.pose in SPEED);
         if (p === 1) {
           queue.shift();
           if (step.floor) { actor.floor = step.floor.id; zone = step.floor.zone; }
@@ -355,7 +359,7 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
           if (!queue.length) { actor.busy = false; rest(now); pose = 'idle'; }
         }
       } else if (floor) {
-        actor.position = clamp(floor, actor.position.x); actor.busy = !!actor.gun;
+        actor.position = clamp(floor, actor.position.x); actor.busy = !!actor.gun; actor.airborne = false;
         if (now < actor.shotUntil && !actor.gun) pose = 'shot';
       }
       render(pose, now);
