@@ -4,6 +4,7 @@ import type { Attachment, PermissionModeId } from '../lib/agent';
 import { t, useLang } from '../lib/i18n';
 import { openLightbox } from './Lightbox';
 import FileIcon from './FileIcon';
+import PromptMenu from './PromptMenu';
 
 interface Props {
   /** Session working directory; root for "@" file mentions. */
@@ -139,6 +140,19 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
     if (files.length) { e.preventDefault(); void addFiles(files); }
   };
 
+  /** Put text at the caret (saved prompts, terminal selections), keeping what was already typed. */
+  const insertText = useCallback((value: string) => {
+    const el = ta.current;
+    const at = el ? el.selectionStart ?? text.length : text.length;
+    const end = el ? el.selectionEnd ?? at : at;
+    const before = text.slice(0, at), after = text.slice(end);
+    const pad = before && !before.endsWith('\n') && !before.endsWith(' ') ? (value.includes('\n') ? '\n' : ' ') : '';
+    const next = before + pad + value + after;
+    setText(next);
+    const pos = before.length + pad.length + value.length;
+    requestAnimationFrame(() => { const t2 = ta.current; if (t2) { t2.focus(); t2.setSelectionRange(pos, pos); setCaret(pos); } });
+  }, [text]);
+
   const submit = () => {
     const body = text.trim();
     if (disabled || uploading || (!body && attachments.length === 0)) return;
@@ -219,6 +233,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
             📎 {t('composer.attach')}
             <input type="file" multiple className="hidden" onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
           </label>
+          <PromptMenu draft={text} onInsert={insertText} disabled={disabled} />
           {uploading && <span className="text-xs text-zinc-500">{t('composer.uploading')}</span>}
           {background.length > 0 && (
             <div className="flex items-center gap-1 min-w-0 overflow-hidden" title={t('composer.backgroundTitle', { n: background.length })}>

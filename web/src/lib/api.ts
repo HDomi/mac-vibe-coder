@@ -43,6 +43,7 @@ export interface UpdateStatus { repo: string; branch: string | null; installed: 
 
 export interface GitFile { path: string; index: string; worktree: string; staged: boolean; untracked: boolean }
 export interface GitCommit { hash: string; parents: string[]; refs: string[]; subject: string; author: string; date: string }
+export interface SavedPrompt { id: string; name: string; text: string }
 export interface GitCommitFile { path: string; status: string; oldPath?: string }
 export interface GitBranch { name: string; current: boolean; remote: boolean; upstream: string | null }
 export interface GitStatus { repo: boolean; root: string | null; branch: string | null; ahead: number; behind: number; files: GitFile[] }
@@ -107,6 +108,8 @@ export const api = {
   historyRename: (agent: 'claude' | 'codex', id: string, title: string, cwd?: string) => post<{ ok: true }>('/api/history/rename', { agent, id, title, cwd }),
   historyPin: (agent: 'claude' | 'codex', id: string, pinned: boolean) => post<{ ok: true }>('/api/history/pin', { agent, id, pinned }),
   historyDelete: (agent: 'claude' | 'codex', id: string, cwd?: string) => req<{ ok: true }>(`/api/history/${q(id)}?agent=${agent}${cwd ? `&cwd=${q(cwd)}` : ''}`, { method: 'DELETE' }),
+  prompts: () => req<SavedPrompt[]>('/api/prompts'),
+  savePrompts: (list: SavedPrompt[]) => req<SavedPrompt[]>('/api/prompts', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(list) }),
   search: (cwd: string, query: string) => req<{ path: string; rel: string; isDir: boolean }[]>(`/api/fs/search?cwd=${q(cwd)}&q=${q(query)}`),
   health: () => req<{ ok: boolean; version: string; commit: string; builtAt: string | null }>('/api/health'),
   updateStatus: (force = false) => req<UpdateStatus>(`/api/update/status${force ? '?force=1' : ''}`),

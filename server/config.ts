@@ -21,15 +21,23 @@ export interface FavoriteGroup {
   collapsed?: boolean;
 }
 
+/** A reusable instruction the composer can insert ("run the tests and fix failures"). */
+export interface SavedPrompt {
+  id: string;
+  name: string;
+  text: string;
+}
+
 export interface Config {
   favorites: Favorite[];
   groups: FavoriteGroup[];
   recent: string[];
   /** "agent:sessionId" keys of pinned sessions; pinned sessions cannot be deleted. */
   pinnedSessions: string[];
+  prompts: SavedPrompt[];
 }
 
-const DEFAULT: Config = { favorites: [], groups: [], recent: [], pinnedSessions: [] };
+const DEFAULT: Config = { favorites: [], groups: [], recent: [], pinnedSessions: [], prompts: [] };
 
 export class ConfigStore {
   private pending: Promise<unknown> = Promise.resolve();
