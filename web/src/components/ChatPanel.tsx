@@ -311,7 +311,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         <div className="flex-1" />
         {session.agentSessionId && <button className="text-zinc-600 hover:text-zinc-300" title={t('chat.copySessionIdTitle', { id: session.agentSessionId })} onClick={() => navigator.clipboard.writeText(session.agentSessionId!)}>id</button>}
         {session.agent === 'claude' && <span className="text-zinc-500">${session.totalCostUsd.toFixed(3)}</span>}
-        <button className="w-8 h-8 -mr-2 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={close} title={t('chat.closeSession')}><Icon name="close" /></button>
+        <button className="w-7 h-7 -mr-2 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={close} title={t('chat.closeSession')}><Icon name="close" /></button>
       </div>
       <div className="flex-1 min-h-0 relative">
         {searching && <ChatSearch content={content} scroller={scroller} version={session.items} onClose={() => setSearching(false)}

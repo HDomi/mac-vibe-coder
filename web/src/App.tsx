@@ -217,7 +217,7 @@ function AppInner() {
                       <span className="text-zinc-500">{displayTitle(s, 18) ?? t('common.new')}</span>
                       <AttentionBadge s={s} />
                       <button className="ml-1 w-5 h-5 flex items-center justify-center rounded text-zinc-500 hover:text-white hover:bg-white/15 opacity-0 group-hover:opacity-100" title={t('app.closeSession')}
-                        onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}><Icon name="close" size={13} /></button>
+                        onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}><Icon name="close" size={11} /></button>
                     </div>
                   ))}
                   <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => setActiveSession('new')} title={t('app.newSession')}><Icon name="plus" /></button>
@@ -241,7 +241,7 @@ function AppInner() {
             {!rightCollapsed && <Splitter onStart={() => setDragging(true)} onEnd={() => setDragging(false)} onDrag={(dx) => right.setWidth(right.width - dx)} />}
             {rightCollapsed && (
               <div className="w-9 shrink-0 flex flex-col items-center border-l border-white/10 bg-[#0e1117] py-2 gap-1">
-                <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(false)} title={t('app.expandPanel')}><Icon name="chevronsLeft" /></button>
+                <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(false)} title={t('app.expandPanel')}><Icon name="chevronsLeft" /></button>
                 {rightTabs.map(([t, label]) => (
                   <button key={t} title={label} onClick={() => { setRightTab(t); setRightCollapsed(false); }}
                     className={`w-7 h-7 rounded text-[10px] ${rightTab === t ? 'bg-white/15 text-white' : 'text-zinc-500 hover:bg-white/10'}`}>{label.slice(0, 1)}</button>
@@ -266,7 +266,7 @@ function AppInner() {
                       { label: t('common.copyPath'), onClick: () => navigator.clipboard.writeText(project) },
                     ])}>{t('app.openMenu')}</button>
                 )}
-                <button className="shrink-0 self-center w-8 h-8 mr-1 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(true)} title={t('app.collapsePanel')}><Icon name="chevronsRight" /></button>
+                <button className="shrink-0 self-center w-7 h-7 mr-1 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(true)} title={t('app.collapsePanel')}><Icon name="chevronsRight" /></button>
               </div>
               <div className="flex-1 min-h-0 relative" style={{ minWidth: right.width }}>
                 <div className={`absolute inset-0 ${rightTab === 'files' ? '' : 'invisible'}`}>

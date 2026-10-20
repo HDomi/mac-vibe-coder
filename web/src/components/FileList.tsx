@@ -186,7 +186,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
   return (
     <div ref={root} tabIndex={0} onKeyDown={onKey} data-own-find className="flex flex-col h-full min-w-0 outline-none">
       <div className="h-10 flex items-center gap-2 px-3 border-b border-white/10 text-sm">
-        <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-300 disabled:opacity-30" disabled={!listing?.parent} onClick={() => listing?.parent && onNavigate(listing.parent)} title={t('files.parentFolder')}><Icon name="up" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-300 disabled:opacity-30" disabled={!listing?.parent} onClick={() => listing?.parent && onNavigate(listing.parent)} title={t('files.parentFolder')}><Icon name="up" /></button>
         <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap text-zinc-400">
           <span className="cursor-pointer hover:text-white" onClick={() => onNavigate('/')}>/</span>
           {crumbs.map((c, i) => {
@@ -196,11 +196,11 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
         </div>
         <div className="flex-1" />
         {note && <span className="text-[11px] text-amber-300 truncate max-w-40" title={note}>{note}</span>}
-        <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={newFolder} title={t('files.newFolder')}><Icon name="plus" /></button>
-        <button className={`w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 ${isFavorite ? 'text-amber-300' : 'text-zinc-400'}`} onClick={onToggleFavorite} title={isFavorite ? t('sidebar.removeFavorite') : t('sidebar.addFavorite')}><Icon name="star" filled={isFavorite} /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={newFolder} title={t('files.newFolder')}><Icon name="plus" /></button>
+        <button className={`w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 ${isFavorite ? 'text-amber-300' : 'text-zinc-400'}`} onClick={onToggleFavorite} title={isFavorite ? t('sidebar.removeFavorite') : t('sidebar.addFavorite')}><Icon name="star" filled={isFavorite} /></button>
       </div>
       <div className="h-9 shrink-0 flex items-center gap-2 px-3 border-b border-white/5">
-        <Icon name="search" size={16} className="text-zinc-500" />
+        <Icon name="search" size={14} className="text-zinc-500" />
         <input ref={searchInput} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('files.searchPlaceholder')} aria-label={t('files.searchPlaceholder')}
           onKeyDown={(e) => {
             e.stopPropagation();
@@ -214,7 +214,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
           }}
           className="flex-1 min-w-0 bg-transparent text-[13px] outline-none placeholder:text-zinc-600" />
         {searching && <span className="text-[10px] text-zinc-500 tabular-nums">{hits === null ? '…' : t('files.searchCount', { n: hits.length })}</span>}
-        {searching && <button className="w-6 h-6 flex items-center justify-center rounded text-zinc-500 hover:text-white hover:bg-white/10" onClick={() => setQuery('')} title="Esc"><Icon name="close" size={14} /></button>}
+        {searching && <button className="w-6 h-6 flex items-center justify-center rounded text-zinc-500 hover:text-white hover:bg-white/10" onClick={() => setQuery('')} title="Esc"><Icon name="close" size={12} /></button>}
       </div>
 
       {searching ? (

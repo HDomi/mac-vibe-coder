@@ -80,7 +80,7 @@ export default function TerminalPanel({ cwd, visible }: Props) {
         {tabs.map((tab) => (
           <div key={tab.id} className={`flex items-center gap-1 rounded-md px-2 py-1 cursor-pointer ${active === tab.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`} onClick={() => activateTerminal(tab.id)}>
             <span className="truncate max-w-[120px]">{tab.title}</span>
-            <button className="w-5 h-5 flex items-center justify-center rounded text-zinc-500 hover:text-red-300 hover:bg-white/10" onClick={(e) => { e.stopPropagation(); closeTerminal(tab.id); }}><Icon name="close" size={13} /></button>
+            <button className="w-5 h-5 flex items-center justify-center rounded text-zinc-500 hover:text-red-300 hover:bg-white/10" onClick={(e) => { e.stopPropagation(); closeTerminal(tab.id); }}><Icon name="close" size={11} /></button>
           </div>
         ))}
         <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => open()} title={t('terminal.newShell')}><Icon name="plus" /></button>

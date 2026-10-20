@@ -76,7 +76,7 @@ export default function ToolsPanel({ onClose }: Props) {
           <div className="font-medium">{t('settings.title')}</div>
           <div className="flex-1" />
           <button className="text-xs text-zinc-400 hover:text-white mr-3" onClick={refresh}>{t('settings.redetect')}</button>
-          <button className="w-8 h-8 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={onClose}><Icon name="close" /></button>
+          <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={onClose}><Icon name="close" /></button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto">
           <GeneralSettings />

@@ -108,7 +108,7 @@ export default function UsageBar({ mode, onMode }: Props) {
             <Battery label="5h" win={u?.codex?.fiveHour ?? null} error={loadError ?? u?.errors.find((e) => e.startsWith('codex:'))} loading={loading} />
             <Battery label={t('usage.week')} win={u?.codex?.weekly ?? null} error={loadError ?? u?.errors.find((e) => e.startsWith('codex:'))} loading={loading} />
           </div>
-        <button className={`titlebar-nodrag w-7 h-7 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-white/10 ${loading ? 'animate-spin' : ''}`} onClick={() => load(true)} title={t('usage.refresh')}><Icon name="reload" size={16} /></button>
+        <button className={`titlebar-nodrag w-7 h-7 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-white/10 ${loading ? 'animate-spin' : ''}`} onClick={() => load(true)} title={t('usage.refresh')}><Icon name="reload" size={14} /></button>
       </div>
       </div>
     </div>

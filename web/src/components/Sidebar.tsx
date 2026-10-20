@@ -92,7 +92,7 @@ export default function Sidebar(p: Props) {
   if (p.collapsed) {
     return (
       <aside className="w-10 shrink-0 h-full flex flex-col items-center border-r border-white/10 bg-[#0e1117] py-2 gap-2">
-        <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onToggle} title={t('sidebar.expand')}><Icon name="chevronsRight" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onToggle} title={t('sidebar.expand')}><Icon name="chevronsRight" /></button>
         <div className="flex-1 flex flex-col items-center gap-1 overflow-hidden">
           {favorites.slice(0, 12).map((f) => (
             <button key={f.path} title={f.name} onClick={() => p.onNavigate(f.path)}
@@ -101,8 +101,8 @@ export default function Sidebar(p: Props) {
             </button>
           ))}
         </div>
-        <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onPickFolder} title={t('sidebar.openFolder')}><Icon name="plus" /></button>
-        <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onOpenSettings} title={t('common.settings')}><Icon name="gear" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onPickFolder} title={t('sidebar.openFolder')}><Icon name="plus" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onOpenSettings} title={t('common.settings')}><Icon name="gear" /></button>
       </aside>
     );
   }
@@ -176,7 +176,7 @@ export default function Sidebar(p: Props) {
         <span className="pl-1 font-medium text-zinc-400">Mac Vibe Coder</span>
         <span className="ml-2"><UpdateBadge /></span>
         <div className="flex-1" />
-        <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onToggle} title={t('sidebar.collapse')}><Icon name="chevronsLeft" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onToggle} title={t('sidebar.collapse')}><Icon name="chevronsLeft" /></button>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-2">
         <Section title={t('sidebar.favorites')} right={<button className="text-[11px] text-zinc-500 hover:text-zinc-200" title={t('sidebar.newGroup')} onClick={() => setCreatingGroup(true)}>{t('sidebar.newGroupBtn')}</button>}>
@@ -224,7 +224,7 @@ export default function Sidebar(p: Props) {
           <span className="text-[11px] font-semibold tracking-wide text-zinc-300">{t('sidebar.recentSessions')}</span>
           <span className="text-[10px] text-zinc-500 rounded-full bg-white/5 px-1.5">{sessions.length}</span>
           <div className="flex-1" />
-          <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-white/10" onClick={reloadSessions} title={t('common.refresh')}><Icon name="reload" size={16} /></button>
+          <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-white/10" onClick={reloadSessions} title={t('common.refresh')}><Icon name="reload" size={14} /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-2 py-1">
           {sessions.length === 0 && <div className="px-2 py-2 text-xs text-zinc-600">{t('sidebar.noSessions')}</div>}
@@ -240,7 +240,7 @@ export default function Sidebar(p: Props) {
       </div>
       <div className="p-2 border-t border-white/10 flex gap-2">
         <button className="flex-1 text-sm rounded-md bg-white/5 hover:bg-white/10 py-1.5" onClick={p.onPickFolder}>{t('sidebar.openFolderBtn')}</button>
-        <button className="w-10 flex items-center justify-center rounded-md bg-white/5 hover:bg-white/10 text-zinc-300" onClick={p.onOpenSettings} title={t('common.settings')}><Icon name="gear" size={20} /></button>
+        <button className="w-9 flex items-center justify-center rounded-md bg-white/5 hover:bg-white/10 text-zinc-300" onClick={p.onOpenSettings} title={t('common.settings')}><Icon name="gear" size={17} /></button>
       </div>
     </aside>
   );

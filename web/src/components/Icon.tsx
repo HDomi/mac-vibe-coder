@@ -20,7 +20,7 @@ const PATHS: Record<string, string> = {
 
 export type IconName = keyof typeof PATHS;
 
-export default function Icon({ name, size = 18, filled, className = '' }: { name: IconName; size?: number; filled?: boolean; className?: string }) {
+export default function Icon({ name, size = 15, filled, className = '' }: { name: IconName; size?: number; filled?: boolean; className?: string }) {
   return (
     <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor"
       strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`inline-block shrink-0 ${className}`}>
