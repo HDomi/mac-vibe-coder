@@ -26,7 +26,11 @@ export type AgentEvent =
   | { kind: 'status'; status: 'running' | 'idle' | 'compacting' | 'closed'; permissionMode?: string }
   | { kind: 'result'; ok: boolean; text: string; costUsd: number; numTurns: number; durationMs: number; agentSessionId?: string }
   | { kind: 'error'; message: string; command?: string }
+  /** The agent's own task checklist (Codex plan updates; Claude's TodoWrite is read from the tool call). */
+  | { kind: 'todos'; items: TodoItem[] }
   | { kind: 'log'; text: string };
+
+export interface TodoItem { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }
 
 export type ServerMessage =
   | { sessionId: string; seq: number; ts: number; event: AgentEvent }

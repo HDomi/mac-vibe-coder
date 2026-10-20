@@ -276,6 +276,12 @@ export class CodexSession implements AgentSession {
       case 'item/agentMessage/delta': this.emit({ kind: 'text.delta', text: String(p.delta), parent: null }); return;
       case 'item/reasoning/textDelta': case 'item/reasoning/summaryTextDelta': this.emit({ kind: 'thinking.delta', text: String(p.delta), parent: null }); return;
       case 'item/plan/delta': this.emit({ kind: 'text.delta', text: String(p.delta), parent: null }); return;
+      case 'turn/plan/updated': {
+        const steps = Array.isArray(p.plan) ? (p.plan as Json[]) : [];
+        const status = (s: unknown): 'pending' | 'in_progress' | 'completed' => s === 'completed' ? 'completed' : s === 'inProgress' || s === 'in_progress' ? 'in_progress' : 'pending';
+        this.emit({ kind: 'todos', items: steps.map((s) => ({ content: String(s.step ?? ''), status: status(s.status) })).filter((s) => s.content) });
+        return;
+      }
       case 'item/commandExecution/outputDelta': case 'item/fileChange/outputDelta':
         this.emit({ kind: 'tool.output', toolUseId: String(p.itemId), chunk: String(p.delta) }); return;
       case 'turn/completed': {

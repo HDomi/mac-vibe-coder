@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ChatItem, ChatSession } from '../lib/chatStore';
+import { currentTodos, type ChatItem, type ChatSession } from '../lib/chatStore';
 import type { AgentId, Attachment, PermissionModeId } from '../lib/agent';
 import { api, type HistorySession, type ModelInfo } from '../lib/api';
 import Composer, { type BackgroundSession } from './Composer';
 import ChatSearch from './ChatSearch';
+import TodoPanel from './TodoPanel';
 import { ApprovalItem, AssistantItem, QuestionItem, ResultItem, ToolItem, UserItem } from './ChatItems';
 import { useContextMenu } from './ContextMenu';
 import { t, useLang } from '../lib/i18n';
@@ -310,6 +311,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
           <span className="truncate">{activity}</span>
         </div>
       )}
+      <TodoPanel todos={currentTodos(session)} running={running} />
       <Composer key={session.id} cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
         onSend={(text, atts) => { stick.current = true; setAtBottom(true); onSend(text, atts); requestAnimationFrame(scrollToBottom); }}
         onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments}

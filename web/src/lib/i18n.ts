@@ -130,6 +130,7 @@ const en: Record<string, string> = {
   'activity.waitingAnswer': 'Waiting for your answer',
   'activity.compacting': 'Compacting context…',
   'activity.subagent': 'Subagent working',
+  'todos.title': 'Tasks',
   // chat items
   'items.thinking': 'Thinking',
   'items.subagent': 'subagent',
@@ -444,6 +445,7 @@ const ko: Record<string, string> = {
   'activity.waitingAnswer': '답변을 기다리는 중',
   'activity.compacting': '컨텍스트 압축 중…',
   'activity.subagent': '서브에이전트 작업 중',
+  'todos.title': '할 일',
   'items.thinking': '생각 중',
   'items.subagent': '서브에이전트',
   'items.subagentWorking': '서브에이전트 작업 중…',

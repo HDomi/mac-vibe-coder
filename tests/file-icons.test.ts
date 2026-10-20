@@ -29,7 +29,7 @@ test('icon ids map to shipped svg file names', () => {
   assert.equal(fileIconSvg('nope-not-an-icon'), null);
 });
 
-import { backgroundState, displayTitle, pendingRequests, sortSessions, type ChatSession } from '../web/src/lib/chatStore';
+import { backgroundState, currentTodos, displayTitle, pendingRequests, reduceEvent, sortSessions, type ChatSession } from '../web/src/lib/chatStore';
 
 test('background state tells a working session from one waiting on the user', () => {
   const base: ChatSession = { id: 's', agent: 'claude', cwd: '/p', permissionMode: 'default', status: 'idle', totalCostUsd: 0, lastSeq: 0, items: [] };
@@ -70,4 +70,17 @@ test('tabs put pinned sessions first, then the most recent activity, keeping tie
     { id: 'none2' },
   ];
   assert.deepEqual(sortSessions(list).map((s) => s.id), ['pinnedOld', 'new', 'old', 'none', 'none2']);
+});
+
+test('task checklist follows TodoWrite calls, Codex plan updates and saved history', () => {
+  const base: ChatSession = { id: 's', agent: 'claude', cwd: '/p', permissionMode: 'default', status: 'running', totalCostUsd: 0, lastSeq: 0, items: [] };
+  const todos = [{ content: 'A', status: 'completed', activeForm: 'A 중' }, { content: 'B', status: 'in_progress', activeForm: 'B 중' }, { content: 'C', status: 'weird' }];
+  const live = reduceEvent(base, { kind: 'tool.start', toolUseId: 't1', name: 'TodoWrite', input: { todos }, parent: null }, 1);
+  assert.deepEqual(currentTodos(live).map((x) => x.status), ['completed', 'in_progress', 'pending']);
+  const codex = reduceEvent({ ...base, agent: 'codex' }, { kind: 'todos', items: [{ content: 'plan', status: 'in_progress' }] }, 1);
+  assert.equal(currentTodos(codex)[0].content, 'plan');
+  // Resumed history has no live event: the last TodoWrite tool item is used.
+  const history: ChatSession = { ...base, items: [{ kind: 'tool', id: 't', name: 'TodoWrite', input: { todos: [{ content: 'old', status: 'pending' }] }, output: null, isError: false, parent: null, elapsed: 0, done: true }] };
+  assert.equal(currentTodos(history)[0].content, 'old');
+  assert.deepEqual(currentTodos(base), []);
 });

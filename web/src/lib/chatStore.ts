@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentId, Attachment, PermissionModeId, Question } from './agent';
+import type { AgentEvent, AgentId, Attachment, PermissionModeId, Question, TodoItem } from './agent';
 
 export type ChatItem =
   | { kind: 'user'; id: string; text: string; attachments: Attachment[]; pending?: boolean; /** Compaction summary injected by the CLI, not typed by the user. */ compact?: boolean }
@@ -50,6 +50,26 @@ export function pendingRequests(s: ChatSession): number {
   return n;
 }
 
+/** TodoWrite input to checklist items; null when the input is not a todo list. */
+export function todosFromInput(input: unknown): TodoItem[] | null {
+  const list = (input as { todos?: unknown } | null)?.todos;
+  if (!Array.isArray(list)) return null;
+  return list.filter((x) => x && typeof x === 'object' && typeof (x as TodoItem).content === 'string').map((x) => {
+    const t = x as TodoItem;
+    return { content: t.content, status: t.status === 'completed' || t.status === 'in_progress' ? t.status : 'pending', activeForm: typeof t.activeForm === 'string' ? t.activeForm : undefined };
+  });
+}
+
+/** The checklist to show: the live one, else the last TodoWrite in the loaded history. */
+export function currentTodos(s: ChatSession): TodoItem[] {
+  if (s.todos) return s.todos;
+  for (let i = s.items.length - 1; i >= 0; i--) {
+    const it = s.items[i];
+    if (it.kind === 'tool' && it.name === 'TodoWrite') return todosFromInput(it.input) ?? [];
+  }
+  return [];
+}
+
 /** Tab order: pinned first, then most recent activity. Stable for ties so tabs do not shuffle. */
 export function sortSessions<T extends Pick<ChatSession, 'pinned' | 'lastActivity'>>(list: T[]): T[] {
   return list.map((s, i) => ({ s, i }))
@@ -76,6 +96,8 @@ export interface ChatSession {
   turnStartedAt?: number;
   /** Remembered from a previous page load and not yet confirmed by the server (attach ack, replay or revive). */
   restoring?: boolean;
+  /** Latest task checklist from the agent (TodoWrite / Codex plan); shown above the composer. */
+  todos?: TodoItem[];
   /** Pinned tabs stay in front of the activity order. */
   pinned?: boolean;
   /** Last turn start, turn end or request (server ms); tabs sort by this, newest first. */
@@ -158,7 +180,11 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       }
       return next;
     }
+    case 'todos':
+      next.todos = e.items;
+      return next;
     case 'tool.start':
+      if (e.name === 'TodoWrite') { const todos = todosFromInput(e.input); if (todos) next.todos = todos; }
       items.push({ kind: 'tool', id: e.toolUseId, name: e.name, input: e.input, output: null, isError: false, parent: e.parent, elapsed: 0, done: false });
       return next;
     case 'tool.result': {
