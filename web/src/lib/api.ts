@@ -43,6 +43,7 @@ export interface UpdateStatus { repo: string; branch: string | null; installed: 
 
 export interface GitFile { path: string; index: string; worktree: string; staged: boolean; untracked: boolean }
 export interface GitCommit { hash: string; parents: string[]; refs: string[]; subject: string; author: string; date: string }
+export interface GitCommitFile { path: string; status: string; oldPath?: string }
 export interface GitBranch { name: string; current: boolean; remote: boolean; upstream: string | null }
 export interface GitStatus { repo: boolean; root: string | null; branch: string | null; ahead: number; behind: number; files: GitFile[] }
 
@@ -115,6 +116,8 @@ export const api = {
   gitStatus: (cwd: string) => req<GitStatus>(`/api/git/status?cwd=${q(cwd)}`),
   gitDiff: (cwd: string, path: string, staged: boolean) => fetch(`/api/git/diff?cwd=${q(cwd)}&path=${q(path)}&staged=${staged ? 1 : 0}`).then((r) => r.text()),
   gitLog: (cwd: string, skip = 0, limit = 30) => req<{ commits: GitCommit[]; hasMore: boolean }>(`/api/git/log?cwd=${q(cwd)}&skip=${skip}&limit=${limit}`),
+  gitCommitFiles: (cwd: string, hash: string) => req<GitCommitFile[]>(`/api/git/show?cwd=${q(cwd)}&hash=${q(hash)}`),
+  gitCommitDiff: (cwd: string, hash: string, path: string) => fetch(`/api/git/show-diff?cwd=${q(cwd)}&hash=${q(hash)}&path=${q(path)}`).then(async (r) => { const text = await r.text(); if (!r.ok) throw new Error(text || r.statusText); return text; }),
   gitStage: (cwd: string, paths: string[], action: 'add' | 'reset' | 'discard') =>
     req<{ ok: true }>('/api/git/stage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, paths, action }) }),
   gitBranches: (cwd: string) => req<GitBranch[]>(`/api/git/branches?cwd=${q(cwd)}`),

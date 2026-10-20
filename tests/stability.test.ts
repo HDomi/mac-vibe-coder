@@ -178,3 +178,32 @@ test('command errors clear pending UI and mixed image/file replay keeps every at
   assert.equal((replayed.items[0] as any).text, 'hello');
   assert.equal((replayed.items[0] as any).attachments.length, 2);
 });
+
+import { gitCommitDiff, gitCommitFiles } from '../server/git';
+
+test('commit file list covers root, rename and merge commits against the first parent', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vibe-git-show-'));
+  const g = (...args: string[]) => execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  try {
+    g('init', '-q', '-b', 'main');
+    await writeFile(join(dir, 'a.txt'), 'one\ntwo\nthree\nfour\nfive\n');
+    g('add', '.'); g('commit', '-q', '-m', 'root');
+    const root = g('rev-parse', 'HEAD');
+    assert.deepEqual(await gitCommitFiles(dir, root), [{ status: 'A', path: 'a.txt' }]);
+    assert.match(await gitCommitDiff(dir, root, 'a.txt'), /\+one/);
+
+    g('mv', 'a.txt', 'b.txt'); g('commit', '-q', '-m', 'rename');
+    assert.deepEqual(await gitCommitFiles(dir, g('rev-parse', 'HEAD')), [{ status: 'R', oldPath: 'a.txt', path: 'b.txt' }]);
+
+    g('checkout', '-q', '-b', 'side');
+    await writeFile(join(dir, 'side.txt'), 'side\n'); g('add', '.'); g('commit', '-q', '-m', 'side');
+    g('checkout', '-q', 'main');
+    await writeFile(join(dir, 'main.txt'), 'main\n'); g('add', '.'); g('commit', '-q', '-m', 'main');
+    g('merge', '-q', '--no-ff', '-m', 'merge', 'side');
+    assert.deepEqual(await gitCommitFiles(dir, g('rev-parse', 'HEAD')), [{ status: 'A', path: 'side.txt' }]);
+
+    await assert.rejects(gitCommitFiles(dir, '--output=/tmp/x'), /Invalid commit hash/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

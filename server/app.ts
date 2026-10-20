@@ -21,7 +21,7 @@ const isCompactSummary = (text?: string | null) => (text ?? '').trimStart().star
 
 import { rejectReason } from './guard.js';
 import { requestShutdown } from './lifecycle.js';
-import { gitBranches, gitCheckout, gitCommit, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
+import { gitBranches, gitCheckout, gitCommit, gitCommitDiff, gitCommitFiles, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
 import { displayableIcon, findProjectIcon } from './icons.js';
 
 const WEB_DIST = path.join(REPO_ROOT, 'web', 'dist');
@@ -297,6 +297,8 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   app.get('/api/git/status', async (c) => c.json(await gitStatus(c.req.query('cwd') ?? '~')));
   app.get('/api/git/diff', async (c) => c.text(await gitDiff(c.req.query('cwd') ?? '~', c.req.query('path') ?? '', c.req.query('staged') === '1')));
   app.get('/api/git/log', async (c) => c.json(await gitLog(c.req.query('cwd') ?? '~', Number(c.req.query('skip') ?? 0) || 0, Number(c.req.query('limit') ?? 30) || 30)));
+  app.get('/api/git/show', async (c) => c.json(await gitCommitFiles(c.req.query('cwd') ?? '~', c.req.query('hash') ?? '')));
+  app.get('/api/git/show-diff', async (c) => c.text(await gitCommitDiff(c.req.query('cwd') ?? '~', c.req.query('hash') ?? '', c.req.query('path') ?? '')));
   app.post('/api/git/stage', async (c) => {
     const b = await c.req.json<{ cwd: string; paths: string[]; action: 'add' | 'reset' | 'discard' }>();
     await gitStage(b.cwd, b.paths, b.action);

@@ -78,6 +78,37 @@ export async function gitLog(dir: string, skip = 0, limit = 30): Promise<{ commi
   return { commits: rows.slice(0, lim), hasMore: rows.length > lim };
 }
 
+export interface GitCommitFile { path: string; status: string; oldPath?: string }
+
+const HASH_RE = /^[0-9a-f]{4,64}$/i;
+
+/** Files a commit changed, against its first parent (merges) or the empty tree (root commit). */
+export async function gitCommitFiles(dir: string, hash: string): Promise<GitCommitFile[]> {
+  const cwd = resolvePath(dir);
+  if (!HASH_RE.test(hash)) throw new Error('Invalid commit hash');
+  const r = await git(cwd, ['show', '--format=', '--name-status', '-z', '-M', '--diff-merges=first-parent', hash]);
+  if (!r.ok) throw new Error(r.stderr || 'git show failed');
+  const parts = r.stdout.split('\0').filter((p, i, a) => p || i < a.length - 1);
+  const files: GitCommitFile[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const status = parts[i].trim();
+    if (!status) continue;
+    if (status[0] === 'R' || status[0] === 'C') { files.push({ status: status[0], oldPath: parts[i + 1], path: parts[i + 2] }); i += 2; }
+    else { files.push({ status: status[0], path: parts[i + 1] }); i += 1; }
+  }
+  return files.filter((f) => f.path);
+}
+
+/** Patch of one file in a commit, same base as gitCommitFiles. */
+export async function gitCommitDiff(dir: string, hash: string, path: string): Promise<string> {
+  const cwd = resolvePath(dir);
+  if (!HASH_RE.test(hash)) throw new Error('Invalid commit hash');
+  if (typeof path !== 'string' || !path) throw new Error('File path required');
+  const r = await git(cwd, ['show', '--format=', '--no-ext-diff', '--no-textconv', '-M', '--diff-merges=first-parent', hash, '--', path]);
+  if (!r.ok) throw new Error(r.stderr || 'git show failed');
+  return r.stdout;
+}
+
 export interface GitBranch { name: string; current: boolean; remote: boolean; upstream: string | null }
 
 export async function gitBranches(dir: string): Promise<GitBranch[]> {

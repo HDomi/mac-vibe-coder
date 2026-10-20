@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { api, type GitBranch, type GitCommit, type GitFile, type GitStatus } from '../lib/api';
+import { api, type GitBranch, type GitCommit, type GitCommitFile, type GitFile, type GitStatus } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
 import CommitGraph from './CommitGraph';
 
@@ -60,6 +60,10 @@ export default function GitPanel({ cwd, visible }: Props) {
   const operationRef = useRef(false);
   const [diffTick, setDiffTick] = useState(0);
   const [newBranch, setNewBranch] = useState<string | null>(null);
+  /** Commit opened from the log: its changed files and the diff of the picked file. */
+  const [commitView, setCommitView] = useState<{ commit: GitCommit; files: GitCommitFile[] | null; error?: string } | null>(null);
+  const [commitFile, setCommitFile] = useState<string | null>(null);
+  const [commitDiff, setCommitDiff] = useState('');
   useEffect(() => { logRef.current = log; }, [log]);
 
   const refresh = useCallback(() => {
@@ -103,6 +107,7 @@ export default function GitPanel({ cwd, visible }: Props) {
   useEffect(() => {
     generation.current++; refreshId.current++; logRef.current = []; loadingRef.current = false; operationRef.current = false;
     setLog([]); setHasMore(false); setSel(null); setSt(null); setBranches([]); setDiff(''); setMsg(''); setNote(null); setBusy(false); setRemoteBusy(null); setLoadingMore(false); setNewBranch(null);
+    setCommitView(null); setCommitFile(null); setCommitDiff('');
   }, [cwd]);
   useEffect(() => { if (visible) refresh(); }, [visible, refresh]);
   useEffect(() => {
@@ -117,14 +122,31 @@ export default function GitPanel({ cwd, visible }: Props) {
     return () => { alive = false; };
   }, [cwd, sel, diffTick]);
 
+  const openCommit = (commit: GitCommit) => {
+    if (!cwd) return;
+    if (commitView?.commit.hash === commit.hash) { setCommitView(null); return; }
+    setCommitView({ commit, files: null }); setCommitFile(null); setCommitDiff('');
+    api.gitCommitFiles(cwd, commit.hash).then((files) => {
+      if (projectRef.current !== project) return;
+      setCommitView((v) => v?.commit.hash === commit.hash ? { ...v, files } : v);
+      if (files.length === 1) setCommitFile(files[0].path);
+    }).catch((e) => { if (projectRef.current === project) setCommitView((v) => v?.commit.hash === commit.hash ? { ...v, files: [], error: e.message } : v); });
+  };
+  useEffect(() => {
+    if (!cwd || !commitView || !commitFile) { setCommitDiff(''); return; }
+    let alive = true;
+    api.gitCommitDiff(cwd, commitView.commit.hash, commitFile).then((text) => { if (alive) setCommitDiff(text); }).catch((e) => { if (alive) setCommitDiff(e.message); });
+    return () => { alive = false; };
+  }, [cwd, commitView?.commit.hash, commitFile]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Infinite scroll: fetch the next page when the sentinel enters the commit list's viewport.
   useEffect(() => {
     const el = sentinelRef.current, root = scrollRef.current;
-    if (!el || !root || !hasMore || sel) return;
+    if (!el || !root || !hasMore || sel || commitView) return;
     const io = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) loadMore(); }, { root, rootMargin: '200px 0px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [hasMore, sel, loadMore, log.length]);
+  }, [hasMore, sel, commitView, loadMore, log.length]);
 
   if (!cwd) return <div className="h-full flex items-center justify-center text-zinc-600 text-sm">{t('git.openProject')}</div>;
   if (st && !st.repo) return <div className="h-full flex items-center justify-center text-zinc-600 text-sm">{t('git.notRepo')}</div>;
@@ -220,7 +242,8 @@ export default function GitPanel({ cwd, visible }: Props) {
           {st && unstaged.length === 0 ? <div className="px-3 py-2 text-[11px] text-zinc-600">{t('git.clean')}</div> : <div className="py-1">{unstaged.map((f) => <div key={'u' + f.path}>{row({ f, isStaged: false })}</div>)}</div>}
           </section>
         </div>
-        <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto bg-[#0b0d12]">
+        <div className="relative flex-1 min-h-0">
+        <div ref={scrollRef} className="absolute inset-0 overflow-auto bg-[#0b0d12]">
           {sel ? (
             <>
               <SectionHeader color="bg-blue-400" title={sel.path}>
@@ -234,12 +257,17 @@ export default function GitPanel({ cwd, visible }: Props) {
                 {!hasMore && log.length > 0 && <span>{t('git.allLoaded')}</span>}
               </SectionHeader>
               {log.length === 0 && <div className="px-3 py-3 text-[11px] text-zinc-600">{t('git.noCommits')}</div>}
-              <CommitGraph commits={log} />
+              <CommitGraph commits={log} selected={commitView?.commit.hash} onSelect={openCommit} />
               <div ref={sentinelRef} className="px-3 py-2 text-[10px] text-zinc-600 text-center">
                 {loadingMore ? <span className="animate-pulse">{t('git.loadingMore')}</span> : hasMore ? <button className="hover:text-zinc-300" onClick={loadMore}>{t('git.loadMore')}</button> : null}
               </div>
             </>
           )}
+        </div>
+        {commitView && !sel && (
+          <CommitDetail view={commitView} root={st?.root ?? cwd} file={commitFile} diff={commitDiff}
+            onFile={setCommitFile} onClose={() => { setCommitView(null); setCommitFile(null); }} />
+        )}
         </div>
         <div className="shrink-0 border-t border-white/10 bg-[#12151c]">
           <div className="flex items-center gap-2 px-3 h-7 text-[11px]">
@@ -259,6 +287,55 @@ export default function GitPanel({ cwd, visible }: Props) {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Overlay over the commit log (which stays mounted, keeping its scroll position): the files a commit
+ * changed, and the diff of the picked one. "Preview" opens the file as it is now in the Preview tab.
+ */
+function CommitDetail({ view, root, file, diff, onFile, onClose }: {
+  view: { commit: GitCommit; files: GitCommitFile[] | null; error?: string }; root: string; file: string | null; diff: string;
+  onFile: (path: string) => void; onClose: () => void;
+}) {
+  useLang();
+  const { commit, files, error } = view;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !(e.target as HTMLElement)?.closest?.('input, textarea, [contenteditable]')) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const preview = (path: string) => window.dispatchEvent(new CustomEvent('vibe:open-file', { detail: { path: `${root.replace(/\/$/, '')}/${path}` } }));
+  return (
+    <div className="absolute inset-0 flex flex-col bg-[#0b0d12] z-20">
+      <SectionHeader color="bg-violet-400" title={commit.subject} count={files?.length}>
+        <span className="font-mono text-violet-300/75" title={commit.hash}>{commit.hash.slice(0, 7)}</span>
+        <button className="hover:text-white" onClick={onClose} title="Esc">✕ {t('git.closeCommit')}</button>
+      </SectionHeader>
+      <div className="max-h-[40%] shrink-0 overflow-y-auto border-b border-white/10 py-1">
+        {files === null && <div className="px-3 py-2 text-[11px] text-zinc-500 animate-pulse">{t('git.loadingFiles')}</div>}
+        {error && <div className="px-3 py-2 text-[11px] text-red-300">{error}</div>}
+        {files?.length === 0 && !error && <div className="px-3 py-2 text-[11px] text-zinc-600">{t('git.noFilesInCommit')}</div>}
+        {files?.map((f) => {
+          const tone = f.status === 'A' ? 'text-emerald-300 bg-emerald-500/10' : f.status === 'D' ? 'text-red-300 bg-red-500/10' : 'text-amber-300 bg-amber-500/10';
+          const active = file === f.path;
+          return (
+            <div key={f.path} onClick={() => onFile(f.path)}
+              className={`group flex items-center gap-2 px-3 py-1 text-xs cursor-pointer border-l-2 ${active ? 'bg-blue-500/15 border-blue-400' : 'border-transparent hover:bg-white/5'}`}>
+              <span className={`w-9 text-center text-[9px] font-mono rounded px-1 py-px ${tone}`}>{CODE[f.status] ?? f.status}</span>
+              <span className="truncate flex-1 font-mono text-zinc-300" title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}>
+                {f.oldPath && <span className="text-zinc-500">{f.oldPath} → </span>}{f.path}
+              </span>
+              {f.status !== 'D' && <button className="opacity-0 group-hover:opacity-100 text-[10px] text-zinc-400 hover:text-white px-1.5 rounded hover:bg-white/10" title={t('git.openPreviewHint')}
+                onClick={(e) => { e.stopPropagation(); preview(f.path); }}>{t('git.openPreview')}</button>}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex-1 min-h-0 overflow-auto">
+        {file ? <DiffView text={diff} /> : files && files.length > 0 && <div className="p-3 text-xs text-zinc-500">{t('git.pickFile')}</div>}
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ function edgePath(edge: GraphEdge) {
   return `M ${x1} 0 C ${x1} ${middle}, ${x2} ${middle}, ${x2} ${GRAPH_ROW_HEIGHT}`;
 }
 
-export default function CommitGraph({ commits }: { commits: GitCommit[] }) {
+export default function CommitGraph({ commits, selected, onSelect }: { commits: GitCommit[]; selected?: string | null; onSelect?: (commit: GitCommit) => void }) {
   const graph = useMemo(() => layoutGitGraph(commits), [commits]);
   return (
     <div className="py-1">
@@ -18,7 +18,8 @@ export default function CommitGraph({ commits }: { commits: GitCommit[] }) {
         const row = graph.rows[i];
         const current = commit.refs.some((ref) => ref === 'HEAD' || ref.startsWith('HEAD -> '));
         return (
-          <div key={commit.hash} className={`group flex border-b border-white/[0.035] transition-colors hover:bg-white/[0.035] ${current ? 'bg-violet-400/[0.045]' : ''}`}
+          <div key={commit.hash} onClick={onSelect ? () => onSelect(commit) : undefined}
+            className={`group flex border-b border-white/[0.035] transition-colors hover:bg-white/[0.035] ${onSelect ? 'cursor-pointer' : ''} ${selected === commit.hash ? 'bg-blue-500/15' : current ? 'bg-violet-400/[0.045]' : ''}`}
             style={{ height: GRAPH_ROW_HEIGHT, minWidth: graph.width + 180 }}>
             <svg aria-hidden="true" width={graph.width} height={GRAPH_ROW_HEIGHT} className="shrink-0 overflow-visible">
               {row.edges.map((edge, j) => <path key={j} d={edgePath(edge)} fill="none" stroke={GRAPH_COLORS[edge.color]} strokeWidth="1.6" opacity="0.65" />)}
