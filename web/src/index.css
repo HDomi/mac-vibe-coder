@@ -30,3 +30,7 @@ html, body, #root {
 .prose-md th, .prose-md td { border: 1px solid #2a2f3b; padding: .3em .6em; }
 .prose-md a { color: #7aa2f7; }
 .prose-md blockquote { border-left: 3px solid #2a2f3b; padding-left: .8em; color: #9aa1b0; }
+
+/* In-chat search (CSS Custom Highlight API, see ChatSearch). */
+::highlight(chat-search) { background-color: rgba(250, 204, 21, 0.3); }
+::highlight(chat-search-active) { background-color: #f59e0b; color: #000; }

@@ -3,6 +3,7 @@ import type { ChatItem, ChatSession } from '../lib/chatStore';
 import type { AgentId, Attachment, PermissionModeId } from '../lib/agent';
 import { api, type HistorySession, type ModelInfo } from '../lib/api';
 import Composer, { type BackgroundSession } from './Composer';
+import ChatSearch from './ChatSearch';
 import { ApprovalItem, AssistantItem, QuestionItem, ResultItem, ToolItem, UserItem } from './ChatItems';
 import { useContextMenu } from './ContextMenu';
 import { t, useLang } from '../lib/i18n';
@@ -189,6 +190,14 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
   const programmatic = useRef(false);  // ignore scroll events we caused ourselves
   const [atBottom, setAtBottom] = useState(true);
   const [now, setNow] = useState(Date.now());
+  const [searching, setSearching] = useState(false);
+  // ⌘F (dispatched by the app's shortcut handler) opens the in-chat search bar.
+  useEffect(() => {
+    const open = () => setSearching(true);
+    window.addEventListener('vibe:chat-search', open);
+    return () => window.removeEventListener('vibe:chat-search', open);
+  }, []);
+  useEffect(() => { setSearching(false); }, [session?.id]);
 
   const { top, childrenOf } = useMemo(() => {
     const childrenOf = new Map<string, ChatItem[]>();
@@ -282,6 +291,8 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         <button className="text-zinc-400 hover:text-white" onClick={close} title={t('chat.closeSession')}>✕</button>
       </div>
       <div className="flex-1 min-h-0 relative">
+        {searching && <ChatSearch content={content} scroller={scroller} version={session.items} onClose={() => setSearching(false)}
+          onJump={() => { stick.current = false; setAtBottom(false); }} />}
         <div ref={scroller} className="absolute inset-0 overflow-y-auto" onScroll={onScroll} onWheel={onWheel}>
           <div ref={content} className="px-5 py-4 space-y-3">
             {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.restoring ? t('chat.restoring') : session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}

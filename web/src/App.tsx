@@ -169,6 +169,7 @@ function AppInner() {
       else if (k === 'b') { e.preventDefault(); setCollapsed((v) => !v); }
       else if (k === 'j') { e.preventDefault(); setRightCollapsed((v) => !v); }
       else if (k === 'k') { e.preventDefault(); window.dispatchEvent(new Event('vibe:focus-composer')); }
+      else if (k === 'f' && !e.shiftKey && !(e.target as HTMLElement)?.closest?.('[data-own-find]')) { e.preventDefault(); window.dispatchEvent(new Event('vibe:chat-search')); }
       else if (k === 'n' && !e.shiftKey) { e.preventDefault(); if (view === 'agent') setAgentActive('new'); else if (project) setActiveSession('new'); }
       else if (k === 'w') {
         e.preventDefault();
