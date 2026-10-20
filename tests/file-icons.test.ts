@@ -29,7 +29,7 @@ test('icon ids map to shipped svg file names', () => {
   assert.equal(fileIconSvg('nope-not-an-icon'), null);
 });
 
-import { backgroundState, displayTitle, type ChatSession } from '../web/src/lib/chatStore';
+import { backgroundState, displayTitle, pendingRequests, type ChatSession } from '../web/src/lib/chatStore';
 
 test('background state tells a working session from one waiting on the user', () => {
   const base: ChatSession = { id: 's', agent: 'claude', cwd: '/p', permissionMode: 'default', status: 'idle', totalCostUsd: 0, lastSeq: 0, items: [] };
@@ -50,4 +50,13 @@ test('tab title prefers the CLI session title over the first prompt', () => {
   assert.equal(displayTitle(base), '커밋은 일단 나눠서 해봐');
   assert.equal(displayTitle({ ...base, title: '어드민 백엔드 변경사항 프론트 반영 확인' }, 12), '어드민 백엔드 변경사항');
   assert.equal(displayTitle({ ...base, title: '   ' }), '커밋은 일단 나눠서 해봐');
+});
+
+test('tab badge counts approvals and questions of the current turn only', () => {
+  const approval = { kind: 'approval', id: 'a1', toolName: 'Bash', input: {}, canAlwaysAllow: true, decision: null } as const;
+  const question = { kind: 'question', id: 'q1', questions: [], resolved: false } as const;
+  const base: ChatSession = { id: 's', agent: 'claude', cwd: '/p', permissionMode: 'default', status: 'running', totalCostUsd: 0, lastSeq: 0, items: [approval, question] };
+  assert.equal(pendingRequests(base), 2);
+  assert.equal(pendingRequests({ ...base, status: 'idle' }), 0);
+  assert.equal(pendingRequests({ ...base, items: [approval, { kind: 'user', id: 'u', text: 'go', attachments: [] } as never, question] }), 1);
 });

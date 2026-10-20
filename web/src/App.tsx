@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { backgroundState, displayTitle, type ChatSession } from './lib/chatStore';
+import { backgroundState, displayTitle, pendingRequests, type ChatSession } from './lib/chatStore';
 import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing, type RecentSession } from './lib/api';
 import type { Attachment } from './lib/agent';
 import { requestNotificationPermission, useSessions, setOnScreenSession } from './lib/useSessions';
@@ -210,6 +210,7 @@ function AppInner() {
                       <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
                       <AgentIcon agent={s.agent} size={14} />
                       <span className="text-zinc-500">{displayTitle(s, 18) ?? t('common.new')}</span>
+                      <AttentionBadge s={s} />
                       <button className="ml-1 w-4 h-4 rounded text-[10px] leading-none text-zinc-500 hover:text-white hover:bg-white/15 opacity-0 group-hover:opacity-100" title={t('app.closeSession')}
                         onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}>✕</button>
                     </div>
@@ -308,6 +309,7 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
               <AgentIcon agent={s.agent} size={16} />
               <span className="truncate flex-1">{displayTitle(s, 40) ?? t('common.new')}</span>
+              <AttentionBadge s={s} />
               <span className="text-[10px] text-zinc-600 truncate max-w-[70px]" title={s.cwd}>{s.cwd.split('/').pop()}</span>
             </div>
           ))}
@@ -339,4 +341,11 @@ function backgroundSessions(sessions: Record<string, ChatSession>, currentId?: s
   }
   // Sessions that stopped to ask something come first: they block until the user answers.
   return out.sort((a, b) => (a.state === b.state ? 0 : a.state === 'waiting' ? -1 : 1));
+}
+
+/** Amber count on a session tab while its turn is blocked on approvals or questions. */
+function AttentionBadge({ s }: { s: ChatSession }) {
+  const n = pendingRequests(s);
+  if (!n) return null;
+  return <span className="min-w-4 h-4 px-1 rounded-full bg-amber-400 text-[10px] font-semibold leading-4 text-center text-black shrink-0" title={t('app.waitingRequests', { n })}>{n}</span>;
 }

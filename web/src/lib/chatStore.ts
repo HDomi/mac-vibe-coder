@@ -35,12 +35,19 @@ export function displayTitle(s: ChatSession, max = 40): string | null {
 export function backgroundState(s: ChatSession): 'running' | 'waiting' | null {
   if (s.status === 'compacting') return 'running';
   if (s.status !== 'running') return null;
+  return pendingRequests(s) > 0 ? 'waiting' : 'running';
+}
+
+/** Approvals and questions of the current turn still waiting for the user (tab badge count). */
+export function pendingRequests(s: ChatSession): number {
+  if (s.status !== 'running') return 0;
+  let n = 0;
   for (let i = s.items.length - 1; i >= 0; i--) {
     const it = s.items[i];
     if (it.kind === 'user') break;
-    if ((it.kind === 'approval' && !it.decision) || (it.kind === 'question' && !it.resolved)) return 'waiting';
+    if ((it.kind === 'approval' && !it.decision) || (it.kind === 'question' && !it.resolved)) n++;
   }
-  return 'running';
+  return n;
 }
 
 export interface ChatSession {
