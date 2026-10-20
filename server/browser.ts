@@ -1,20 +1,12 @@
 /**
- * Built-in Browser panel.
+ * Browser panel fallback for when the app runs in an ordinary browser tab (no Electron, so no native
+ * view; see electron/browserView.cts for the desktop app). It drives a headless Chrome over the
+ * Chrome DevTools Protocol: Page.startScreencast frames are drawn in the panel and mouse and keyboard
+ * input go back through Input.dispatch*. The browser is for quick manual checks only; agent sessions
+ * are not pointed at it.
  *
- * In the Electron app the panel is a native Chromium view (electron/browserView.cts) reachable over
- * Electron's CDP port (9323); the renderer reports that view's target to `reportNative`. This module
- * then only serves /api/browser/target. When the app runs in an ordinary browser tab there is no
- * native view, and the fallback below drives a headless Chrome over CDP instead:
- *
- * the fallback has its own Chrome, separate from the `debugweb` helper (9222): CDP port
+ * The Chrome is the app's own, separate from the `debugweb` helper (9222): CDP port
  * MVC_BROWSER_FALLBACK_PORT (9324) and profile MVC_BROWSER_PROFILE (~/.mac-vibe-coder/chrome-profile).
- * Two Chrome processes cannot share a profile, and the user's debugweb windows stay untouched.
- * When nothing listens on that port the server starts Chrome itself, headless, and the panel shows
- * it through Page.startScreencast; mouse and keyboard input are sent back with Input.dispatch*.
- *
- * Agent sessions started by this app learn which page the panel shows from GET /api/browser/target
- * (see `browserAgentHint`), so "check it in the browser" acts on the page the user is looking at.
- * Sessions outside the app never see that hint.
  */
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -25,7 +17,7 @@ import WebSocket, { type WebSocketServer } from 'ws';
 import { ATTACH_DIR } from './attachments.js';
 import { CONFIG_DIR } from './config.js';
 
-/** Fallback (browser-mode) Chrome. Not debugweb's 9222, and not 9323 where the Electron app's own CDP listens. */
+/** Fallback (browser-mode) Chrome. Not debugweb's 9222, and not 9323 where v0.3.40-41 left their headless Chrome. */
 export const CDP_PORT = Number(process.env.MVC_BROWSER_FALLBACK_PORT) || 9324;
 /** Outside /tmp so logins survive a reboot. */
 export const CHROME_PROFILE = process.env.MVC_BROWSER_PROFILE || path.join(CONFIG_DIR, 'chrome-profile');
@@ -131,33 +123,6 @@ export class BrowserBridge {
 
   private broadcast(msg: object) { for (const c of this.clients) c.send(msg); }
   private publish() { this.broadcast(this.state()); }
-
-  /** The Electron panel's native view, as last reported by the app window. */
-  private native: { targetId: string; url: string; title: string; cdpPort: number } | null = null;
-  reportNative(v: unknown) {
-    const r = v as { targetId?: unknown; url?: unknown; title?: unknown; cdpPort?: unknown } | null;
-    this.native = r && typeof r.targetId === 'string' && /^[0-9A-F]{16,64}$/i.test(r.targetId) && Number.isInteger(r.cdpPort)
-      ? { targetId: r.targetId, url: String(r.url ?? ''), title: String(r.title ?? ''), cdpPort: Number(r.cdpPort) }
-      : null;
-  }
-
-  /** What in-app agents should drive: the page on the panel. Null when the panel has none. */
-  info() {
-    if (this.native) {
-      const n = this.native;
-      return {
-        cdpPort: n.cdpPort, targetId: n.targetId, url: n.url, title: n.title, headless: false, kind: 'electron-view',
-        webSocketDebuggerUrl: `ws://127.0.0.1:${n.cdpPort}/devtools/page/${n.targetId}`, browserUrl: `http://127.0.0.1:${n.cdpPort}`,
-      };
-    }
-    if (!this.current || this.status !== 'ready') return null;
-    const t = this.targets.get(this.current.targetId);
-    return {
-      cdpPort: CDP_PORT, targetId: this.current.targetId, url: t?.url ?? this.nav.url, title: t?.title ?? this.nav.title, headless: this.headless,
-      webSocketDebuggerUrl: `ws://127.0.0.1:${CDP_PORT}/devtools/page/${this.current.targetId}`,
-      browserUrl: `http://127.0.0.1:${CDP_PORT}`,
-    };
-  }
 
   /* ── CDP connection ───────────────────────────────────────────────── */
 
@@ -433,16 +398,4 @@ export function attachBrowser(wss: WebSocketServer) {
     });
     ws.on('close', off);
   });
-}
-
-/** Appended to in-app agent sessions only, so browser checks target the panel instead of a new window. */
-export function browserAgentHint(appPort: number) {
-  const info = `http://127.0.0.1:${appPort}/api/browser/target`;
-  return [
-    '# Mac Vibe Coder browser panel',
-    'This session runs inside Mac Vibe Coder, which has a built-in Browser panel (Chrome over the Chrome DevTools Protocol). The user watches that page live in the app.',
-    'The panel has its own CDP port (the cdpPort field below, 9323 in the desktop app). It is not the usual 9222 debugweb Chrome: do not use port 9222 or run debugweb for checks the user asks for in this app.',
-    `When the user asks you to check, measure or verify something in the browser (for example "실측", "CDP 검토", "브라우저에서 확인"), work on the panel's page instead of starting a browser or opening a new window: run \`curl -s ${info}\` to get {targetId, url, webSocketDebuggerUrl, browserUrl, cdpPort}, then connect to webSocketDebuggerUrl (or attach to targetId through the browser endpoint at browserUrl/json/version) and act on that page. Navigating that page changes what the user sees, which is intended. The panel has its own Chrome profile, so the user may need to log in there once.`,
-    'That CDP port also lists the Mac Vibe Coder window itself; never attach to or act on any target other than targetId. Do not close that page and do not kill the browser. If the endpoint answers 404, ask the user to open the Browser tab in the right panel. Only drive the browser when the user asks for a browser check.',
-  ].join('\n');
 }

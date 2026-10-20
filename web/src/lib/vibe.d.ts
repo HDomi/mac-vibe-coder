@@ -1,6 +1,6 @@
 export {};
 
-export interface NativeBrowserState { url: string; title: string; loading: boolean; canBack: boolean; canForward: boolean; targetId: string | null; cdpPort: number; zoom: number }
+export interface NativeBrowserState { url: string; title: string; loading: boolean; canBack: boolean; canForward: boolean; zoom: number }
 export interface ViewBounds { x: number; y: number; width: number; height: number }
 export interface NativeBrowser {
   show: (bounds: ViewBounds) => Promise<NativeBrowserState>;

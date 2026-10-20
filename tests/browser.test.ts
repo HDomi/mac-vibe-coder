@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BrowserBridge, browserAgentHint, isUserPage, normalizeUrl } from '../server/browser';
+import { isUserPage, normalizeUrl } from '../server/browser';
 import { keyEventFor, mouseModifiers, normalizeAddress, virtualKeyCode } from '../web/src/lib/browserInput';
 
 test('address bar input becomes a URL or a search', () => {
@@ -31,25 +31,6 @@ test('keys map to CDP key events with text only where the page should get input'
   assert.equal(virtualKeyCode('ArrowLeft'), 37);
   assert.equal(virtualKeyCode('7', 'Digit7'), 55);
   assert.equal(mouseModifiers({ altKey: true, ctrlKey: false, metaKey: true, shiftKey: true }), 13);
-});
-
-test('in-app agents are pointed at the panel page, not a new browser', () => {
-  const hint = browserAgentHint(11398);
-  assert.match(hint, /http:\/\/127\.0\.0\.1:11398\/api\/browser\/target/);
-  assert.match(hint, /debugweb/);
-  // Its own port: the user's debugweb Chrome on 9222 is never the in-app target.
-  assert.match(hint, /9323/);
-  assert.match(hint, /do not use port 9222/);
-  assert.match(hint, /never attach to or act on any target other than targetId/);
-});
-
-test('the Electron panel view is reported to agents and bad reports are ignored', () => {
-  const b = new BrowserBridge();
-  assert.equal(b.info(), null);
-  b.reportNative({ targetId: 'ABCDEF0123456789ABCDEF0123456789', url: 'http://localhost:3000/', title: 'App', cdpPort: 9323 });
-  assert.equal(b.info()?.webSocketDebuggerUrl, 'ws://127.0.0.1:9323/devtools/page/ABCDEF0123456789ABCDEF0123456789');
-  b.reportNative({ targetId: '../../etc', cdpPort: 9323 });
-  assert.equal(b.info(), null);
 });
 
 test('the native panel address bar follows the same URL rules as the server', () => {

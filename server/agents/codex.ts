@@ -1,12 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { browserAgentHint } from '../browser.js';
-import { PORT } from '../config.js';
 import type { AgentEvent, AgentSession, Attachment, PermissionModeId, Question } from './types.js';
-
-/** Codex: same panel hint as Claude. Its sandbox blocks localhost unless the mode allows network access. */
-const BROWSER_HINT = () => browserAgentHint(Number(process.env.MVC_PORT) || PORT);
 
 /*
  * Codex app-server adapter. Speaks the JSON-RPC-style protocol over stdio
@@ -163,9 +158,9 @@ export class CodexSession implements AgentSession {
     const pol = policyFor(this.mode, this.cwd);
     let res: Json;
     if (this.opts.resume) {
-      res = await c.request<Json>('thread/resume', { threadId: this.opts.resume, cwd: this.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandboxMode, model: this.opts.model ?? null, developerInstructions: BROWSER_HINT() });
+      res = await c.request<Json>('thread/resume', { threadId: this.opts.resume, cwd: this.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandboxMode, model: this.opts.model ?? null });
     } else {
-      res = await c.request<Json>('thread/start', { cwd: this.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandboxMode, model: this.opts.model ?? null, developerInstructions: BROWSER_HINT() });
+      res = await c.request<Json>('thread/start', { cwd: this.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandboxMode, model: this.opts.model ?? null });
     }
     const thread = res.thread as Json;
     this.threadId = String(thread.id);

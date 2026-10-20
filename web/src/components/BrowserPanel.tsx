@@ -214,13 +214,13 @@ function ScreencastBrowserPanel({ visible, onCapture }: Props) {
             {state?.status === 'error' ? <>
               <div className="text-red-300">{state.error}</div>
               <button className="rounded bg-white/10 hover:bg-white/15 px-3 py-1.5 text-xs text-zinc-200" onMouseDown={(e) => e.stopPropagation()} onClick={() => send({ type: 'retry' })}>{t('browser.retry')}</button>
-            </> : <div className="animate-pulse">{state?.status === 'ready' ? t('browser.waitingFrame') : t('browser.connecting', { port: state?.port ?? 9323 })}</div>}
+            </> : <div className="animate-pulse">{state?.status === 'ready' ? t('browser.waitingFrame') : t('browser.connecting', { port: state?.port ?? 9324 })}</div>}
           </div>
         )}
       </div>
       <div className="h-6 shrink-0 flex items-center gap-2 px-3 text-[10px] text-zinc-600 border-t border-white/5">
         <span className={`w-1.5 h-1.5 rounded-full ${ready ? 'bg-emerald-400' : state?.status === 'error' ? 'bg-red-400' : 'bg-zinc-600'}`} />
-        <span>CDP :{state?.port ?? 9323} · {state?.headless ? t('browser.headless') : t('browser.external')}</span>
+        <span>CDP :{state?.port ?? 9324} · {state?.headless ? t('browser.headless') : t('browser.external')}</span>
         {note && <span className="ml-auto text-amber-300 truncate" title={note}>{note}</span>}
       </div>
     </div>
@@ -252,11 +252,6 @@ function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: Na
     // App shortcuts typed while the page has focus: replay them on the app window.
     window.dispatchEvent(new KeyboardEvent('keydown', { key: k.key, metaKey: true, shiftKey: k.shift, altKey: k.alt, bubbles: true }));
   }), [native]);
-  // Tell the server which CDP target the panel shows, so in-app agents act on this page.
-  useEffect(() => {
-    const body = state?.targetId ? { targetId: state.targetId, url: state.url, title: state.title, cdpPort: state.cdpPort } : null;
-    void fetch('/api/browser/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
-  }, [state?.targetId, state?.url, state?.title, state?.cdpPort]);
   useEffect(() => { if (!editing) setAddress(state?.url === 'about:blank' ? '' : state?.url ?? ''); }, [state?.url, editing]);
   useEffect(() => { if (!note) return; const timer = setTimeout(() => setNote(null), 3500); return () => clearTimeout(timer); }, [note]);
 
@@ -318,8 +313,8 @@ function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: Na
       {/* The native view is laid over this box; the box itself only shows while the view is hidden. */}
       <div ref={place} className="relative flex-1 min-h-0 bg-white" />
       <div className="h-6 shrink-0 flex items-center gap-2 px-3 text-[10px] text-zinc-600 border-t border-white/5">
-        <span className={`w-1.5 h-1.5 rounded-full ${state?.targetId ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-        <span>CDP :{state?.cdpPort ?? 9323} · {t('browser.native')}</span>
+        <span className={`w-1.5 h-1.5 rounded-full ${state ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+        <span>{t('browser.native')}</span>
         {note && <span className="ml-auto text-amber-300 truncate" title={note}>{note}</span>}
       </div>
     </div>

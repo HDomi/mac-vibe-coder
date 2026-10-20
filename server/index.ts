@@ -12,8 +12,6 @@ import { RESTART_EXIT_CODE } from './updater.js';
 
 export async function startServer(port = PORT): Promise<ServerType> {
   await syncLoginShellPath();
-  // Agent sessions read this to tell the model where the Browser panel's page info lives.
-  process.env.MVC_PORT = String(port);
   return new Promise((resolve, reject) => {
     const registry = new SessionRegistry();
     const app = createApp(registry, port);

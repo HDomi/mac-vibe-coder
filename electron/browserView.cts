@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, WebContentsView } from 'electron';
+import { BrowserWindow, ipcMain, session, WebContentsView } from 'electron';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
@@ -8,17 +8,16 @@ import path from 'node:path';
 /*
  * Browser panel, Electron build: a real Chromium view (WebContentsView) laid over the panel's
  * placeholder in the window. Rendering, cursor, IME, <select> and dialogs behave like a normal
- * browser. Agents reach the same page over Electron's own CDP endpoint (remote-debugging-port);
- * the renderer reports this view's CDP target id to the server, which hands it to in-app sessions.
+ * browser. It is a scratch browser for quick manual checks; agent sessions are not pointed at it.
  */
 
-export const BROWSER_CDP_PORT = Number(process.env.MVC_BROWSER_CDP_PORT) || 9323;
+/** Port the v0.3.40-41 headless Chrome used; see stopOldHeadlessChrome. */
+const OLD_HEADLESS_PORT = 9323;
 const PARTITION = 'persist:mvc-browser';
 const ATTACH_DIR = path.join(os.homedir(), '.mac-vibe-coder', 'attachments');
 
 export interface BrowserViewState {
   url: string; title: string; loading: boolean; canBack: boolean; canForward: boolean;
-  targetId: string | null; cdpPort: number;
   /** Page zoom. Below 1 the page gets a wider CSS viewport than the panel, so desktop layouts fit. */
   zoom: number;
 }
@@ -32,30 +31,23 @@ function stepZoom(current: number, dir: 1 | -1) {
 interface Bounds { x: number; y: number; width: number; height: number }
 
 /**
- * v0.3.40-41 ran a headless Chrome on this port. It would keep the port and Electron's DevTools
- * server would silently fail to bind, so stop it first. Only headless Chrome on exactly this
- * port is touched; any other process is left alone.
+ * v0.3.40-41 left a detached headless Chrome running on port 9323. Nothing uses it any more, so stop
+ * it once at startup. Only headless Chrome on exactly that port is touched; any other process is
+ * left alone.
  */
 function listeners(port: number): string[] {
   try { return execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], { encoding: 'utf8', timeout: 3000 }).split('\n').filter(Boolean); } catch { return []; }
 }
 function freeStaleHeadless(port: number) {
-  let killed = false;
   for (const pid of listeners(port)) {
     try {
       const cmd = execFileSync('ps', ['-o', 'command=', '-p', pid], { encoding: 'utf8', timeout: 3000 });
-      if (cmd.includes('--headless') && cmd.includes(`--remote-debugging-port=${port}`)) { process.kill(Number(pid), 'SIGTERM'); killed = true; }
+      if (cmd.includes('--headless') && cmd.includes(`--remote-debugging-port=${port}`)) process.kill(Number(pid), 'SIGTERM');
     } catch { /* already gone */ }
   }
-  // Chromium binds the DevTools port during startup; wait (up to 3s) until the old one let go.
-  for (let i = 0; killed && i < 15 && listeners(port).length; i++) execFileSync('sleep', ['0.2']);
 }
 
-/** Must run before the app is ready: Chromium reads the switch at startup. */
-export function enableBrowserCdp() {
-  freeStaleHeadless(BROWSER_CDP_PORT);
-  app.commandLine.appendSwitch('remote-debugging-port', String(BROWSER_CDP_PORT));
-}
+export function stopOldHeadlessChrome() { freeStaleHeadless(OLD_HEADLESS_PORT); }
 
 /** Chrome's own user agent without the Electron and app tokens, so sites serve their normal desktop pages. */
 /** The panel is for web pages: no file:, javascript: or custom app schemes (agents can navigate it too). */
@@ -69,7 +61,6 @@ function chromeUserAgent(ua: string) {
 
 let view: WebContentsView | null = null;
 let owner: BrowserWindow | null = null;
-let targetId: string | null = null;
 let shown = false;
 
 function state(): BrowserViewState {
@@ -78,21 +69,10 @@ function state(): BrowserViewState {
   return {
     url: live ? wc.getURL() : '', title: live ? wc.getTitle() : '', loading: live ? wc.isLoading() : false,
     canBack: live ? wc.navigationHistory.canGoBack() : false, canForward: live ? wc.navigationHistory.canGoForward() : false,
-    targetId, cdpPort: BROWSER_CDP_PORT, zoom: live ? wc.getZoomFactor() : 1,
+    zoom: live ? wc.getZoomFactor() : 1,
   };
 }
 function publish() { if (owner && !owner.isDestroyed()) owner.webContents.send('browser:state', state()); }
-
-/** CDP target id of the view, read through its own debugger (Target.getTargetInfo without an id). */
-async function readTargetId(wc: Electron.WebContents) {
-  try {
-    if (!wc.debugger.isAttached()) wc.debugger.attach('1.3');
-    const r = await wc.debugger.sendCommand('Target.getTargetInfo') as { targetInfo: { targetId: string } };
-    targetId = r.targetInfo.targetId;
-  } catch { targetId = null; }
-  try { if (wc.debugger.isAttached()) wc.debugger.detach(); } catch { /* already detached */ }
-  publish();
-}
 
 function ensureView(win: BrowserWindow): WebContentsView {
   if (view && !view.webContents.isDestroyed()) return view;
@@ -103,7 +83,6 @@ function ensureView(win: BrowserWindow): WebContentsView {
   view.setBackgroundColor('#ffffff');
   const wc = view.webContents;
   for (const ev of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page', 'page-title-updated'] as const) wc.on(ev as 'did-stop-loading', publish);
-  wc.on('render-process-gone', () => { void readTargetId(wc); });
   wc.on('zoom-changed', (_e, dir) => { wc.setZoomFactor(stepZoom(wc.getZoomFactor(), dir === 'in' ? 1 : -1)); publish(); });
   wc.on('will-navigate', (e, url) => { if (!allowedPanelUrl(url)) e.preventDefault(); });
   wc.on('will-redirect', (e, url) => { if (!allowedPanelUrl(url)) e.preventDefault(); });
@@ -134,7 +113,7 @@ function ensureView(win: BrowserWindow): WebContentsView {
       win.webContents.send('browser:shortcut', { key: k, shift: input.shift, alt: input.alt });
     }
   });
-  void wc.loadURL('about:blank').then(() => readTargetId(wc));
+  void wc.loadURL('about:blank');
   return view;
 }
 

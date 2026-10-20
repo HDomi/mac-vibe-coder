@@ -6,10 +6,6 @@ import type { AgentEvent, AgentSession, AssistantBlock, Attachment, PermissionMo
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { mimeOf } from '../mime.js';
-import { browserAgentHint } from '../browser.js';
-import { PORT } from '../config.js';
-
-const appPort = () => Number(process.env.MVC_PORT) || PORT;
 
 const IMAGE_LIMIT = 5 * 1024 * 1024;
 
@@ -101,7 +97,7 @@ export class ClaudeSession implements AgentSession {
       // Match `claude` CLI behaviour: the SDK's default system prompt is a minimal tool-calling
       // prompt, not Claude Code's. The preset restores the full prompt (coding guidance, safety rules).
       // settingSources is left at its default, which loads user/project/local settings and CLAUDE.md.
-      systemPrompt: { type: 'preset', preset: 'claude_code', snapshot: true, append: browserAgentHint(appPort()) },
+      systemPrompt: { type: 'preset', preset: 'claude_code', snapshot: true },
       model: this.opts.model,
       // Backups before each edit, keyed by the user message id we send, so a turn's file changes can be undone.
       enableFileCheckpointing: true,
@@ -109,7 +105,7 @@ export class ClaudeSession implements AgentSession {
       // Stream subagent text/thinking too, so the UI can show what a subagent is doing.
       forwardSubagentText: true,
       abortController: this.abort,
-      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: 'mac-vibe-coder/0.1.0', MVC_BROWSER_INFO_URL: `http://127.0.0.1:${appPort()}/api/browser/target` },
+      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: 'mac-vibe-coder/0.1.0' },
       stderr: (data) => this.emit({ kind: 'log', text: data }),
       canUseTool: (toolName, input, { suggestions, signal }) => this.handlePermission(toolName, input, suggestions ?? [], signal),
     };

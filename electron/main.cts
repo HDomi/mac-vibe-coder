@@ -3,7 +3,7 @@ import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';
-import { enableBrowserCdp, registerBrowserIpc } from './browserView.cjs';
+import { registerBrowserIpc, stopOldHeadlessChrome } from './browserView.cjs';
 
 /*
  * Electron shell. The Node server (dist/server/index.js) runs as a child process.
@@ -54,8 +54,7 @@ const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) {
   app.quit();
 } else {
-  // Browser panel: Electron's CDP endpoint, so agents can drive the panel's page (see browserView.cts).
-  enableBrowserCdp();
+  stopOldHeadlessChrome();
   app.on('second-instance', () => {
     const w = BrowserWindow.getAllWindows()[0];
     if (w) { if (w.isMinimized()) w.restore(); w.focus(); }

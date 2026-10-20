@@ -53,12 +53,11 @@
 - Electron 은 서버 자식이 죽으면 1.5초→30초 지수 백오프로 재시작한다. 다른 인스턴스가 포트를 쓰고 있으면 재시작 대신 그 서버에 붙는다.
 - 부모가 강제 종료(SIGKILL)돼도 Claude CLI 는 stdin 종료로, Codex app-server(stdio) 는 연결 종료로, PTY 셸은 SIGHUP 으로 스스로 끝난다.
 
-## 브라우저 탭과 CDP (v0.3.42 에서 네이티브 뷰로 교체)
+## 브라우저 탭 (v0.3.42 네이티브 뷰, v0.3.44 임시 브라우저로 정리)
 
-- 데스크톱 앱의 브라우저 탭은 Electron `WebContentsView` 다(`electron/browserView.cts`). 패널 자리의 빈 상자 위에 진짜 Chromium 뷰를 겹쳐 띄운다. 렌더링 · 커서 · 한글 IME · `<select>` · `alert` 이 일반 브라우저처럼 동작한다.
+- 브라우저 탭은 잠깐 페이지를 확인하고 캡처해 채팅에 붙이는 임시 브라우저다. 에이전트 세션을 이 탭으로 유도하지 않는다. 실측은 앱 밖에서와 똑같이 `debugweb`(9222) Chrome 을 쓴다.
+- 데스크톱 앱에서는 Electron `WebContentsView` 다(`electron/browserView.cts`). 패널 자리의 빈 상자 위에 진짜 Chromium 뷰를 겹쳐 띄운다. 렌더링 · 커서 · 한글 IME · `<select>` · `alert` 이 일반 브라우저처럼 동작한다.
 - 뷰는 DOM 위에 따로 그려지는 층이라, 렌더러가 150ms 마다 상자의 위치를 따라가게 하고 상자 위를 앱 요소(메뉴 · 대화상자 · 라이트박스)가 덮거나 다른 탭으로 바뀌면 뷰를 숨긴다.
-- 쿠키 · 로그인은 `persist:mvc-browser` 파티션에 남는다. User-Agent 에서 Electron · 앱 토큰을 빼서 사이트가 보통 Chrome 으로 본다. `window.open` 팝업(OAuth 등)은 opener 가 살아 있는 별도 창으로, 새 탭 링크는 같은 뷰로 연다. http · https · about:blank 만 연다.
-- 배율(⌘- ⌘= ⌘0, 목록)로 패널보다 넓은 CSS 폭을 줄 수 있다. 패널이 좁아 사이트가 모바일 레이아웃으로 보일 때 75% 이하로 낮춘다.
-- 에이전트용 CDP 는 Electron 자체 `remote-debugging-port`(기본 9323, `MVC_BROWSER_CDP_PORT`)다. `debugweb`(9222)과 겹치지 않는다. 이 포트에는 앱 창 자체도 타깃으로 보이므로, 렌더러가 뷰의 타깃 id 를 `POST /api/browser/report` 로 서버에 알리고, 앱 안 세션은 `GET /api/browser/target` 의 `targetId` 에만 붙으라는 안내를 받는다. 앱 밖 세션에는 안내가 없다.
-- v0.3.40-41 은 headless Chrome 을 CDP screencast 로 보여 줬다. JPEG 프레임이라 흐리고, 커서 · `<select>` · 대화상자 · 팝업이 안 보였고, User-Agent 가 HeadlessChrome 이라 Google 로그인이 막혔다. 이 방식은 앱을 일반 브라우저 탭으로 열 때만 남기고 포트를 9324(`MVC_BROWSER_FALLBACK_PORT`)로 옮겼다. 시작할 때 9323 에 남은 예전 headless Chrome 은 종료한다.
-- 제약: system prompt 는 세션 시작 때 기록되므로 안내는 새 세션부터 적용된다. Codex 기본 샌드박스(workspace-write)는 localhost 접속을 막아서, Codex 실측은 "모두 허용" 모드에서만 된다. Google 이 임베디드 브라우저 로그인을 거부하면 그 사이트만 일반 Chrome 에서 로그인해야 한다.
+- 쿠키 · 로그인은 `persist:mvc-browser` 파티션에 남는다. User-Agent 에서 Electron · 앱 토큰을 뺀다. `window.open` 팝업(OAuth 등)은 opener 가 살아 있는 별도 창으로, 새 탭 링크는 같은 뷰로 연다. http · https · about:blank 만 연다. 배율(⌘- ⌘= ⌘0)로 패널보다 넓은 레이아웃을 볼 수 있다.
+- 앱을 일반 브라우저 탭으로 열면 네이티브 뷰가 없어서 headless Chrome(9324, `MVC_BROWSER_FALLBACK_PORT`)을 CDP screencast 로 보여 준다.
+- 경과: v0.3.40 은 앱 안 세션이 "실측" 요청을 받으면 이 탭의 페이지를 쓰도록 system prompt 에 안내했다. v0.3.42 는 이를 위해 Electron CDP 포트(9323)를 열었다. 강제되면 오히려 불편해서 v0.3.44 에서 안내 · 정보 엔드포인트 · CDP 포트를 모두 뺐다. 시작할 때 9323 에 남은 예전 headless Chrome 은 한 번 종료한다.
