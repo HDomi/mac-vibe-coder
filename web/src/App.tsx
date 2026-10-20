@@ -127,6 +127,8 @@ function AppInner() {
   useEffect(() => { setOnScreenSession(view === 'agent' ? (agentActive && agentActive !== 'new' ? agentActive : null) : (session?.id ?? null)); }, [view, agentActive, session?.id]);
   // Clicking a notification brings its session on screen in whichever view is active.
   const focusSession = useRef<(id: string) => void>(() => {});
+  const approveRef = useRef<(sessionId: string, requestId: string, decision: 'allow' | 'allow_always' | 'deny') => void>(() => {});
+  approveRef.current = S.approve;
   focusSession.current = (id: string) => {
     const s = S.sessions[id];
     if (!s) return;
@@ -137,6 +139,7 @@ function AppInner() {
     const h = (ev: Event) => { const id = (ev as CustomEvent<{ sessionId: string }>).detail?.sessionId; if (id) focusSession.current(id); };
     window.addEventListener('vibe:notify-click', h);
     window.vibe?.onNotificationClick?.((id) => focusSession.current(id));
+    window.vibe?.onNotificationApproval?.(({ sessionId, requestId, decision }) => approveRef.current(sessionId, requestId, decision));
     return () => window.removeEventListener('vibe:notify-click', h);
   }, []);
 

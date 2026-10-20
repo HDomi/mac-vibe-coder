@@ -16,7 +16,8 @@ function sessionName(s: ChatSession) { return displayTitle(s, 24) ?? s.cwd.split
  * Notify when the user is not looking at this session: the window is unfocused or hidden, or
  * another session/view is on screen. Native (Electron) when available, web Notification otherwise.
  */
-function notifyIfAway(s: ChatSession, e: { kind: string; text?: string; toolName?: string; ok?: boolean }) {
+function notifyIfAway(s: ChatSession, e: { kind: string; text?: string; toolName?: string; ok?: boolean; requestId?: string; canAlwaysAllow?: boolean }) {
+  if (e.kind === 'approval.resolved' && e.requestId) { window.vibe?.closeNotification?.(e.requestId); return; }
   if (document.hasFocus() && document.visibilityState === 'visible' && onScreenSession === s.id) return;
   const name = sessionName(s);
   let title: string | null = null; let body = '';
@@ -24,7 +25,13 @@ function notifyIfAway(s: ChatSession, e: { kind: string; text?: string; toolName
   else if (e.kind === 'approval.request') { title = t('notif.approval'); body = `${name} · ${t('notif.allow', { tool: e.toolName ?? '' })}`; }
   else if (e.kind === 'question.request') { title = t('notif.question'); body = `${name} · ${t('notif.waiting')}`; }
   if (!title) return;
-  if (window.vibe?.notify) { window.vibe.notify({ title, body, sessionId: s.id }); return; }
+  if (window.vibe?.notify) {
+    const approval = e.kind === 'approval.request' && e.requestId
+      ? { requestId: e.requestId, canAlwaysAllow: !!e.canAlwaysAllow, labels: [t('items.allow'), t('items.alwaysAllow'), t('items.deny')] as [string, string, string] }
+      : undefined;
+    window.vibe.notify({ title, body, sessionId: s.id, approval });
+    return;
+  }
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   try {
     const n = new Notification(title, { body, silent: false });

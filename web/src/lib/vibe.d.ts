@@ -32,8 +32,11 @@ declare global {
       /** Receive language changes made from the macOS menu bar. */
       onLanguage: (cb: (lang: string) => void) => void;
       /** Show a native notification; the click handler receives the session id passed here. */
-      notify: (payload: { title: string; body: string; sessionId: string }) => void;
+      notify: (payload: { title: string; body: string; sessionId: string; approval?: { requestId: string; canAlwaysAllow: boolean; labels: [string, string, string] } }) => void;
       onNotificationClick: (cb: (sessionId: string) => void) => void;
+      /** Allow / always allow / deny chosen on an approval notification's buttons. */
+      onNotificationApproval?: (cb: (answer: { sessionId: string; requestId: string; decision: 'allow' | 'allow_always' | 'deny' }) => void) => void;
+      closeNotification?: (requestId: string) => void;
       /** Native browser view for the Browser panel (Electron only). */
       browser?: NativeBrowser;
     };

@@ -190,21 +190,45 @@ ipcMain.handle('login-item', (e, enable: boolean | null) => {
 });
 
 // Native notifications (task finished, approval needed) so the user is reached while in another app.
-ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?: unknown }) => {
+// Approval notifications carry buttons (macOS shows the first, the rest under its chevron) that answer the
+// request without bringing the window forward; the renderer closes them once the request is settled.
+type ApprovalDecision = 'allow' | 'allow_always' | 'deny';
+const approvalNotes = new Map<string, Notification>();
+ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?: unknown; approval?: unknown }) => {
   if (!fromApp(e) || !Notification.isSupported() || !payload || typeof payload !== 'object') return;
   const title = String(payload.title ?? '').slice(0, 200);
   const body = String(payload.body ?? '').slice(0, 500);
   const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
   if (!title) return;
   const sender = e.sender;
-  const n = new Notification({ title, body, silent: false });
+  const raw = payload.approval && typeof payload.approval === 'object' ? payload.approval as { requestId?: unknown; canAlwaysAllow?: unknown; labels?: unknown } : null;
+  const requestId = raw && typeof raw.requestId === 'string' ? raw.requestId : '';
+  const labels = raw && Array.isArray(raw.labels) && raw.labels.length === 3 && raw.labels.every((l) => typeof l === 'string') ? raw.labels as string[] : null;
+  const choices: { decision: ApprovalDecision; text: string }[] = requestId && labels
+    ? [{ decision: 'allow', text: labels[0] }, ...(raw!.canAlwaysAllow === true ? [{ decision: 'allow_always' as const, text: labels[1] }] : []), { decision: 'deny', text: labels[2] }]
+    : [];
+  const n = new Notification({ title, body, silent: false, actions: choices.map((c) => ({ type: 'button', text: c.text })) });
   n.on('click', () => {
     const win = BrowserWindow.fromWebContents(sender);
     if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
     app.focus({ steal: true });
     if (sessionId && !sender.isDestroyed()) sender.send('notify-click', sessionId);
   });
+  if (choices.length) {
+    approvalNotes.get(requestId)?.close();
+    approvalNotes.set(requestId, n);
+    n.on('action', (_ev, index) => {
+      const choice = choices[index];
+      if (choice && !sender.isDestroyed()) sender.send('notify-approval', { sessionId, requestId, decision: choice.decision });
+    });
+    n.on('close', () => { if (approvalNotes.get(requestId) === n) approvalNotes.delete(requestId); });
+  }
   n.show();
+});
+ipcMain.on('notify-close', (e, requestId: unknown) => {
+  if (!fromApp(e) || typeof requestId !== 'string') return;
+  approvalNotes.get(requestId)?.close();
+  approvalNotes.delete(requestId);
 });
 
 type Lang = 'en' | 'ko';
