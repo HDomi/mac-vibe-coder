@@ -250,7 +250,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
                   <td colSpan={3} className="py-1 pr-3"><input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={createFolder} onKeyDown={(e) => { if (e.key === 'Enter') createFolder(); if (e.key === 'Escape') setCreating(false); }} className="w-full bg-black/40 rounded px-2 py-0.5 outline-none border border-blue-400/50" /></td></tr>
               )}
               {entries.map((e) => (
-                <tr key={e.path}
+                <tr key={e.path} data-companion-rung=""
                   className={`cursor-default border-b border-white/5 ${selected.has(e.path) ? 'bg-blue-500/25' : 'hover:bg-white/5'} ${e.hidden ? 'opacity-50' : ''}`}
                   onClick={(ev) => select(e, ev)} onDoubleClick={() => open(e)} onContextMenu={(ev) => menu.open(ev, itemMenu(e))}
                   draggable
@@ -274,7 +274,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
         )}
       </div>
       )}
-      <div data-companion-floor="files-footer" className="h-6 shrink-0 flex items-center px-3 text-[10px] text-zinc-600 border-t border-white/5">
+      <div data-companion-floor="files-footer" data-companion-ground="" className="h-6 shrink-0 flex items-center px-3 text-[10px] text-zinc-600 border-t border-white/5">
         {selected.size > 0 ? t('files.selected', { n: selected.size }) : t('files.items', { n: entries.length })} · {t('files.footerHint')}
       </div>
     </div>

@@ -208,7 +208,7 @@ function AppInner() {
           </div>
           {!collapsed && <Splitter onStart={() => setDragging(true)} onEnd={() => setDragging(false)} onDrag={(dx) => sidebar.setWidth(sidebar.width + dx)} />}
           <main className="flex-1 min-w-0 flex">
-            <div className="flex-1 min-w-0 flex flex-col">
+            <div data-companion-zone="prompt" className="flex-1 min-w-0 flex flex-col">
               {project && projectSessions.length > 0 && (
                 <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs overflow-x-auto">
                   {projectSessions.map((s) => (

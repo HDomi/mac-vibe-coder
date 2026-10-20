@@ -270,7 +270,7 @@ export default function GitPanel({ cwd, visible }: Props) {
             onFile={setCommitFile} onClose={() => { setCommitView(null); setCommitFile(null); }} />
         )}
         </div>
-        <div data-companion-floor="git-commit" className="shrink-0 border-t border-white/10 bg-[#12151c]">
+        <div data-companion-floor="git-commit" data-companion-ground="" className="shrink-0 border-t border-white/10 bg-[#12151c]">
           <div className="flex items-center gap-2 px-3 h-7 text-[11px]">
             <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
             <span className="font-medium tracking-wide text-zinc-300">{t('git.commitTitle')}</span>

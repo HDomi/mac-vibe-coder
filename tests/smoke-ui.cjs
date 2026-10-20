@@ -48,16 +48,20 @@ async function main() {
         { id: 'codex-one', agent: 'codex', status: 'idle', items: [] },
       ];
       target.render(<>
-        <aside data-companion-zone="left" data-companion-wall="right" style={{ position: 'absolute', left: 0, top: 40, width: 180, height: 720, borderRight: '1px solid #555', overflowY: 'auto' }}>
+        <aside data-companion-zone="left" style={{ position: 'absolute', left: 0, top: 40, width: 180, height: 720, borderRight: '1px solid #555', overflowY: 'auto' }}>
           <div style={{ padding: 16 }}>Favorites</div>
           <div data-companion-floor="favorites-divider" style={{ marginTop: 100, borderTop: '1px solid #555' }}>Recent</div>
           <div style={{ height: 900 }} />
         </aside>
-        <button data-companion-floor="prompt" style={{ position: 'absolute', left: 200, top: 650, width: 440, height: 90, border: '1px solid #555', borderRadius: 12 }}
-          onClick={() => window.companionClicks = (window.companionClicks || 0) + 1}>Prompt input</button>
-        <aside data-companion-zone="right" data-companion-wall="left" style={{ position: 'absolute', left: 680, top: 40, width: 360, height: 720, borderLeft: '1px solid #555' }}>
-          <div data-companion-floor={scene + '-toolbar'} style={{ marginTop: 260, borderTop: '1px solid #555' }}>{scene} toolbar</div>
-          <div data-companion-floor={scene + '-footer'} style={{ marginTop: 290, borderTop: '1px solid #555' }}>Status</div>
+        <div data-companion-zone="prompt" style={{ position: 'absolute', left: 180, top: 40, width: 500, height: 720 }}>
+          <button data-companion-floor="prompt" data-companion-ground="" style={{ position: 'absolute', left: 20, top: 610, width: 440, height: 90, border: '1px solid #555', borderRadius: 12 }}
+            onClick={() => window.companionClicks = (window.companionClicks || 0) + 1}>Prompt input</button>
+        </div>
+        <aside data-companion-zone="right" style={{ position: 'absolute', left: 680, top: 40, width: 360, height: 720, borderLeft: '1px solid #555' }}>
+          <div data-companion-floor={scene + '-toolbar'} style={{ marginTop: scene === 'git' ? 400 : 260, borderTop: '1px solid #555' }}>{scene} toolbar</div>
+          <table style={{ position: 'absolute', left: 0, top: 480, width: 360, borderCollapse: 'collapse' }}><tbody>
+            {[0, 1, 2, 3, 4].map((i) => <tr key={i} data-companion-rung="" style={{ height: 30, borderBottom: '1px solid #555' }}><td>file-{i}.ts</td></tr>)}
+          </tbody></table>
           <div data-companion-floor="hidden-tab" style={{ visibility: 'hidden', marginTop: 10 }}>Hidden tab</div>
         </aside>
         <SessionCompanions sessions={sessions} scene={scene} />
@@ -100,6 +104,7 @@ async function main() {
       if (url.pathname === '/api/git/checkout') { json({ ok: true, output: 'branch created' }); return; }
       if (url.pathname === '/api/update/status') { json({ installed: { version: '0.3.15', commit: 'old' }, remote: { version: '0.3.16', commit: 'new' }, branch: 'main', available: true, commits: [], error: null }); return; }
       if (url.pathname === '/api/usage') { json({ fetchedAt: Date.now(), claude: usageFailed ? null : { fiveHour: { usedPct: 0, resetsAt: null }, weekly: { usedPct: 10, resetsAt: null }, model: null, plan: null }, codex: { fiveHour: { usedPct: 1, resetsAt: null }, weekly: null, plan: null }, errors: usageFailed ? ['claude: HTTP 429'] : [] }); return; }
+      if (url.pathname === '/api/tools') { json({ tools: [{ id: 'claude', name: 'Claude', installed: false }, { id: 'codex', name: 'Codex', installed: false }], installers: {} }); return; }
       if (url.pathname === '/api/update/apply') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
         res.write('event: start\ndata: fixture update\n\n');
@@ -162,33 +167,45 @@ async function main() {
   await until(`!!document.querySelector('[aria-label^="5h: 0% used"]')`);
   assert.equal(await js(`document.querySelector('[aria-label^="5h: 0% used"]').textContent.includes('100%')`), true);
   win.setSize(1100, 820);
-  await js(`window.originalRandom = Math.random; Math.random = () => .5; renderCompanions()`);
+  // Math.random fixed at .1 keeps both figures idle (short rests) so positions are deterministic.
+  await js(`window.originalRandom = Math.random; Math.random = () => .1; renderCompanions()`);
   await until(`document.querySelectorAll('.session-companion').length === 2 && [...document.querySelectorAll('.session-companion')].every(e => e.style.visibility === 'visible')`);
   const firstPosition = await js(`document.querySelector('.session-companion').style.transform`);
   await wait(1200);
   assert.equal(await js(`document.querySelector('.session-companion').style.transform`), firstPosition);
-  assert.equal(await js(`Math.round(document.querySelector('.session-companion').getBoundingClientRect().width * 10)`), 336);
+  assert.equal(await js(`Math.round(document.querySelector('.session-companion').getBoundingClientRect().width * 10)`), 370);
   assert.equal(await js(`getComputedStyle(document.querySelector('.session-companions')).pointerEvents`), 'none');
   assert.equal(await js(`const r = document.querySelector('[data-companion-floor="prompt"]').getBoundingClientRect(); document.elementFromPoint(r.x + 20, r.y + 20).click(); window.companionClicks`), 1);
+  const FOOT = 54 * .77, HALF = 24 * .77;
   async function dragCompanion(agent, x, feetY) {
     const start = await js(`const r = document.querySelector('[data-agent="${agent}"]').getBoundingClientRect(); ({x:Math.round(r.x+r.width/2), y:Math.round(r.y+14)})`);
     win.webContents.sendInputEvent({type:'mouseMove', ...start});
     win.webContents.sendInputEvent({type:'mouseDown', ...start, button:'left', clickCount:1});
+    await until(`document.querySelector('[data-agent="${agent}"]').dataset.travel === 'drag'`);
+    win.webContents.sendInputEvent({type:'mouseMove', x:Math.round(x), y:Math.round(feetY - FOOT + 14)});
     await until(`document.querySelector('[data-agent="${agent}"]').dataset.pose === 'drag'`);
-    win.webContents.sendInputEvent({type:'mouseMove', x:Math.round(x), y:Math.round(feetY-23.8)});
-    win.webContents.sendInputEvent({type:'mouseUp', x:Math.round(x), y:Math.round(feetY-23.8), button:'left', clickCount:1});
+    win.webContents.sendInputEvent({type:'mouseUp', x:Math.round(x), y:Math.round(feetY - FOOT + 14), button:'left', clickCount:1});
     await until(`document.querySelector('[data-agent="${agent}"]').dataset.travel === 'rest'`);
   }
+  // Dropping into the right panel lands on its toolbar; a tab switch removes it and the figure falls onto the new one.
   await dragCompanion('claude', 820, 280);
   assert.equal(await js(`document.querySelector('[data-agent="claude"]').dataset.zone`), 'right');
+  assert.equal(await js(`document.querySelector('[data-agent="claude"]').dataset.floor`), 'files-toolbar');
   await js(`renderCompanions('idle', 'git')`);
-  await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'eject' && document.querySelector('[data-agent="claude"]').dataset.floor === 'prompt'`);
+  await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'fall'`);
+  await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'rest' && document.querySelector('[data-agent="claude"]').dataset.floor === 'git-toolbar'`);
   await js(`renderCompanions('running', 'git')`);
   await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'rest'`);
+  assert.equal(await js(`document.querySelector('[data-agent="claude"]').dataset.floor`), 'git-toolbar');
+  // Ladder: dropping onto a file row lands on that rung.
+  await dragCompanion('claude', 760, 530);
+  assert.equal(await js(`document.querySelector('[data-agent="claude"]').dataset.floor`), 'rung:0');
+  // Back to the prompt; the figure follows the prompt box when the layout moves.
+  await dragCompanion('claude', 420, 640);
   assert.equal(await js(`document.querySelector('[data-agent="claude"]').dataset.floor`), 'prompt');
-  await js(`document.querySelector('[data-companion-floor="prompt"]').style.top = '580px'`);
-  await until(`Math.abs(new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m42 - 542.2) < 1`);
-  const claudeX = await js(`new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m41 + 16.8`);
+  await js(`document.querySelector('[data-companion-floor="prompt"]').style.top = '540px'`);
+  await until(`Math.abs(new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m42 - ${580 - FOOT}) < 1`);
+  const claudeX = await js(`new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m41 + ${HALF}`);
   await dragCompanion('codex', claudeX + 30, 570);
   await until(`[...document.querySelectorAll('.session-companion')].every(e => e.dataset.pose === 'fight')`);
   const punch = await js(`document.querySelector('[data-agent="claude"] .companion-body').lastElementChild.getAttribute('d')`);
@@ -199,11 +216,28 @@ async function main() {
   const beforeScroll = await js(`new DOMMatrixReadOnly(document.querySelector('[data-agent="codex"]').style.transform).m42`);
   await js(`document.querySelector('[data-companion-zone="left"]').scrollTop = 20`);
   await until(`Math.abs(new DOMMatrixReadOnly(document.querySelector('[data-agent="codex"]').style.transform).m42 - ${beforeScroll - 20}) < 1`);
+  // A click hurts: the figure recoils, then flees along its floor.
+  await until(`document.querySelector('[data-agent="codex"]').dataset.travel === 'rest'`);
+  const codexSpot = await js(`const r = document.querySelector('[data-agent="codex"]').getBoundingClientRect(); ({x:Math.round(r.x+r.width/2), y:Math.round(r.y+14)})`);
+  win.webContents.sendInputEvent({type:'mouseMove', ...codexSpot});
+  win.webContents.sendInputEvent({type:'mouseDown', ...codexSpot, button:'left', clickCount:1});
+  win.webContents.sendInputEvent({type:'mouseUp', ...codexSpot, button:'left', clickCount:1});
+  await until(`document.querySelector('[data-agent="codex"]').dataset.pose === 'hurt'`);
+  await until(`document.querySelector('[data-agent="codex"]').dataset.pose === 'flee'`);
+  await until(`document.querySelector('[data-agent="codex"]').dataset.travel === 'rest'`);
+  assert.equal(await js(`document.querySelector('[data-agent="codex"]').dataset.floor`), 'favorites-divider');
+  // Walking: Math.random .7 picks a stroll; the stride animates.
   await js(`Math.random = () => .7`);
   await until(`document.querySelector('[data-agent="codex"]').dataset.pose === 'walk'`, 400);
   const step = await js(`document.querySelector('[data-agent="codex"] .companion-body').children[1].getAttribute('d')`);
   await wait(200);
   assert.notEqual(await js(`document.querySelector('[data-agent="codex"] .companion-body').children[1].getAttribute('d')`), step);
+  // Walls: Math.random .3 walks claude to the prompt panel's left wall, where it knocks, climbs over and drops onto the left panel's floor.
+  await js(`renderCompanions('idle', 'git'); Math.random = () => .3`);
+  await until(`document.querySelector('[data-agent="claude"]').dataset.pose === 'knock'`, 600);
+  await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'climb'`, 200);
+  await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'rest' && document.querySelector('[data-agent="claude"]').dataset.floor === 'ground:left'`, 200);
+  assert.equal(await js(`document.querySelector('[data-agent="claude"]').dataset.zone`), 'left');
   const companionScreenshot = path.join(os.tmpdir(), 'mac-vibe-companions.png');
   await fs.writeFile(companionScreenshot, (await win.webContents.capturePage()).toPNG());
   win.webContents.debugger.attach('1.3');
@@ -217,7 +251,7 @@ async function main() {
   await js(`Math.random = originalRandom; renderUsage()`);
   await until(`!document.querySelector('.session-companions')`);
   assert.deepEqual(errors, []);
-  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage, companion idle timing, 70% size, drag/drop, sparring, tab ejection, click-through, layout changes, reduced motion and cleanup. Screenshots: ${screenshot}, ${companionScreenshot}`);
+  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage, companion idle timing, 77% size, drag/drop, tab fall, ladder rungs, sparring, click flee, wall knock and crossing, click-through, layout changes, reduced motion and cleanup. Screenshots: ${screenshot}, ${companionScreenshot}`);
 }
 
 async function finish(code) {
