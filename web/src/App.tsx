@@ -93,6 +93,13 @@ function AppInner() {
     }).catch((e: ApiError) => { if (alive) setError({ code: e.code ?? 'ERR', message: e.message }); });
     return () => { alive = false; };
   }, [cwd, refreshTick]);
+  // Live refresh: the server watches the folder on screen and nudges us when its contents change.
+  useEffect(() => {
+    if (!listing?.path) return;
+    const es = new EventSource(api.fsWatchUrl(listing.path));
+    es.addEventListener('change', () => setRefreshTick((t) => t + 1));
+    return () => es.close();
+  }, [listing?.path]);
 
   useEffect(() => { try { project ? localStorage.setItem(LS_PROJECT, project) : localStorage.removeItem(LS_PROJECT); } catch { /* ignore */ } }, [project]);
   useEffect(() => { const h = () => requestNotificationPermission(); window.addEventListener('click', h, { once: true }); return () => window.removeEventListener('click', h); }, []);

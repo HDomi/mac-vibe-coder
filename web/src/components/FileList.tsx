@@ -16,7 +16,9 @@ interface Props {
   onAttach?: (entries: Entry[]) => void;
 }
 
-interface Clipboard { paths: string[]; cut: boolean }
+// `change` is the macOS pasteboard changeCount right after we put these files there; if it has moved
+// since, something else (Finder, another app) owns the pasteboard and its content wins.
+interface Clipboard { paths: string[]; cut: boolean; change?: number }
 interface SearchHit { path: string; rel: string; isDir: boolean }
 let clipboard: Clipboard | null = null; // module-level so it survives re-renders and folder changes
 
@@ -90,16 +92,29 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
 
   const open = (e: Entry) => (e.isDir ? onNavigate(e.path) : onPreview(e));
 
-  const copy = (cut: boolean) => {
-    if (!selectedEntries.length) return;
-    clipboard = { paths: selectedEntries.map((e) => e.path), cut };
-    void navigator.clipboard.writeText(clipboard.paths.join('\n'));
-    setNote(t(cut ? 'files.cutItems' : 'files.copiedItems', { n: clipboard.paths.length }));
+  // Copies go to the system pasteboard as files, so Finder (or any app taking files) can paste them.
+  const copy = (cut: boolean, items = selectedEntries) => {
+    if (!items.length) return;
+    const c: Clipboard = { paths: items.map((e) => e.path), cut };
+    clipboard = c;
+    api.setClipboardFiles(c.paths).then((r) => { c.change = r.change; }).catch(() => { void navigator.clipboard.writeText(c.paths.join('\n')); });
+    setNote(t(cut ? 'files.cutItems' : 'files.copiedItems', { n: c.paths.length }));
   };
-  const paste = () => {
-    if (!clipboard || !listing) return;
-    const c = clipboard;
-    (c.cut ? api.fsMove(c.paths, listing.path) : api.fsCopy(c.paths, listing.path)).then(() => { if (c.cut) clipboard = null; onRefresh(); }).catch(fail);
+  // Pastes whatever files are on the system pasteboard (e.g. copied in Finder); a cut made here moves.
+  const paste = async () => {
+    if (!listing) return;
+    const dest = listing.path;
+    const own = clipboard;
+    const sys = await api.clipboardFiles().catch(() => null);
+    let paths: string[]; let cut = false;
+    if (own && (!sys || own.change === undefined || own.change === sys.change)) { paths = own.paths; cut = own.cut; }
+    else paths = sys?.paths ?? [];
+    if (!paths.length) { setNote(t('files.nothingToPaste')); return; }
+    (cut ? api.fsMove(paths, dest) : api.fsCopy(paths, dest)).then((r) => {
+      if (cut) clipboard = null;
+      setSelected(new Set(r.paths)); setAnchor(r.paths[0] ?? null);
+      onRefresh();
+    }).catch(fail);
   };
   const trash = () => {
     if (!selectedEntries.length) return;
@@ -136,7 +151,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
     else if (mod && ev.key.toLowerCase() === 'a') { ev.preventDefault(); setSelected(new Set(entries.map((e) => e.path))); }
     else if (mod && ev.key.toLowerCase() === 'c') { ev.preventDefault(); copy(false); }
     else if (mod && ev.key.toLowerCase() === 'x') { ev.preventDefault(); copy(true); }
-    else if (mod && ev.key.toLowerCase() === 'v') { ev.preventDefault(); paste(); }
+    else if (mod && ev.key.toLowerCase() === 'v') { ev.preventDefault(); void paste(); }
     else if (mod && ev.key.toLowerCase() === 'd') { ev.preventDefault(); duplicate(); }
     else if (mod && ev.key === 'Backspace') { ev.preventDefault(); trash(); }
     else if (ev.key === 'Backspace' && !mod) { ev.preventDefault(); if (listing?.parent) onNavigate(listing.parent); }
@@ -159,9 +174,9 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
       { label: t('common.openInCursor'), onClick: () => api.open(e.path, 'cursor').catch(fail) },
       { label: many ? t('common.copyPaths') : t('common.copyPath'), onClick: () => navigator.clipboard.writeText(sel.map((x) => x.path).join('\n')) },
       { separator: true },
-      { label: t('common.copy'), shortcut: '⌘C', onClick: () => { clipboard = { paths: sel.map((x) => x.path), cut: false }; setNote(t('files.copiedN', { n: sel.length })); } },
-      { label: t('common.cut'), shortcut: '⌘X', onClick: () => { clipboard = { paths: sel.map((x) => x.path), cut: true }; setNote(t('files.cutN', { n: sel.length })); } },
-      { label: t('common.paste'), shortcut: '⌘V', disabled: !clipboard, onClick: paste },
+      { label: t('common.copy'), shortcut: '⌘C', onClick: () => copy(false, sel) },
+      { label: t('common.cut'), shortcut: '⌘X', onClick: () => copy(true, sel) },
+      { label: t('common.paste'), shortcut: '⌘V', onClick: () => void paste() },
       { label: t('files.duplicate'), shortcut: '⌘D', disabled: many, onClick: () => api.fsDuplicate(e.path).then(onRefresh).catch(fail) },
       { label: t('files.renameItem'), shortcut: '⏎', disabled: many, onClick: () => { setRenaming(e.path); setDraft(e.name); } },
       { separator: true },
@@ -170,7 +185,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
   };
   const bgMenu = (): MenuItem[] => [
     { label: t('files.newFolderMenu'), shortcut: '⇧⌘N', onClick: newFolder },
-    { label: t('common.paste'), shortcut: '⌘V', disabled: !clipboard, onClick: paste },
+    { label: t('common.paste'), shortcut: '⌘V', onClick: () => void paste() },
     { separator: true },
     { label: t('common.openInTerminal'), onClick: () => listing && api.open(listing.path, 'terminal').catch(fail) },
     { label: t('common.openInVSCode'), onClick: () => listing && api.open(listing.path, 'vscode').catch(fail) },

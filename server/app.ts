@@ -20,6 +20,8 @@ import { applyUpdate, checkUpdate, isUpdating, readBuildInfo, REPO_ROOT, RESTART
 const isCompactSummary = (text?: string | null) => (text ?? '').trimStart().startsWith('This session is being continued from a previous conversation');
 
 import { rejectReason } from './guard.js';
+import { readPasteboardFiles, writePasteboardFiles } from './pasteboard.js';
+import { watch } from 'node:fs';
 import { requestShutdown } from './lifecycle.js';
 import { gitBranches, gitCheckout, gitCommit, gitCommitDiff, gitCommitFiles, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
 import { displayableIcon, findProjectIcon } from './icons.js';
@@ -79,6 +81,27 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   app.post('/api/fs/move', async (c) => { const b = await c.req.json<{ paths: string[]; dest: string }>(); return c.json({ paths: await transfer(b.paths, b.dest, true) }); });
   app.post('/api/fs/duplicate', async (c) => { const b = await c.req.json<{ path: string }>(); return c.json({ path: await duplicate(b.path) }); });
   app.post('/api/fs/trash', async (c) => { const b = await c.req.json<{ paths: string[] }>(); await trash(b.paths); return c.json({ ok: true }); });
+  app.get('/api/clipboard/files', async (c) => c.json(await readPasteboardFiles()));
+  app.post('/api/clipboard/files', async (c) => { const b = await c.req.json<{ paths: string[] }>(); return c.json(await writePasteboardFiles(b.paths)); });
+  // Pushes a "change" event whenever the folder's direct children change (agent edits, Finder,
+  // a terminal), so the file browser stays current without ⌘R. Throttled: a burst of writes
+  // (npm install, git checkout) becomes one refetch every 300ms instead of hundreds.
+  app.get('/api/fs/watch', (c) => {
+    const dir = resolvePath(c.req.query('path') ?? '~');
+    return streamSSE(c, async (stream) => {
+      let timer: NodeJS.Timeout | null = null;
+      const fire = () => { timer = null; void stream.writeSSE({ event: 'change', data: '' }).catch(() => {}); };
+      let watcher: ReturnType<typeof watch>;
+      try { watcher = watch(dir, () => { timer ??= setTimeout(fire, 300); }); } catch { return; }
+      watcher.on('error', () => {});
+      // Comment pings keep idle connections from being reaped and surface a dead client as an abort.
+      const ping = setInterval(() => { void stream.write(': ping\n\n').catch(() => {}); }, 30000);
+      await new Promise<void>((resolve) => stream.onAbort(resolve));
+      clearInterval(ping);
+      if (timer) clearTimeout(timer);
+      watcher.close();
+    });
+  });
 
   const favPayload = (cfg: { favorites: unknown; groups: unknown }) => ({ favorites: cfg.favorites, groups: cfg.groups });
   // Project icon auto-detected from common locations; 404 when none.

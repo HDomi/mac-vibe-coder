@@ -1,0 +1,5 @@
+#!/bin/zsh
+# Keep package.json and package-lock.json in step so `npm ci` in install/update never fails.
+if git diff --cached --name-only | grep -qE '^package(-lock)?\.json$'; then
+  "$(git rev-parse --show-toplevel)/scripts/check-lock.sh" --staged || { echo 'pre-commit: lock check failed (see above).' >&2; exit 1; }
+fi

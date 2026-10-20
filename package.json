@@ -1,7 +1,7 @@
 {
   "name": "mac-vibe-coder",
   "productName": "Mac Vibe Coder",
-  "version": "0.3.54",
+  "version": "0.3.55",
   "private": true,
   "type": "module",
   "main": "dist/electron/main.cjs",
@@ -19,8 +19,10 @@
     "test": "LC_ALL=en_US.UTF-8 tsx --tsconfig web/tsconfig.json --test tests/*.test.ts tests/*.test.tsx",
     "test:ui": "env -u ELECTRON_RUN_AS_NODE electron tests/smoke-ui.cjs",
     "app": "env -u ELECTRON_RUN_AS_NODE electron .",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true; scripts/brand-electron.sh || true",
-    "brand": "scripts/brand-electron.sh"
+    "postinstall": "git config core.hooksPath .githooks 2>/dev/null || true; chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true; scripts/brand-electron.sh || true",
+    "brand": "scripts/brand-electron.sh",
+    "version:bump": "scripts/bump-version.sh",
+    "check:lock": "scripts/check-lock.sh"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.303",
