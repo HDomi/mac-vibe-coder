@@ -1,7 +1,7 @@
 export type Floor = { id: string; left: number; right: number; y: number; zone: string; ground?: boolean; rung?: boolean };
 export type Point = { x: number; y: number };
 export type Pose = 'idle' | 'wave' | 'walk' | 'run' | 'flee' | 'jump' | 'fall' | 'land' | 'knock' | 'climb' | 'hurt' | 'drag' | 'sit' | 'stretch' | 'look' | 'scratch'
-  | 'fight' | 'punch' | 'kick' | 'block' | 'hit' | 'down';
+  | 'fight' | 'punch' | 'kick' | 'block' | 'hit' | 'down' | 'aim' | 'shoot' | 'shot' | 'limp';
 export type Action = 'idle' | 'walk' | 'run' | 'hop' | 'gesture' | 'leap';
 export type Side = 'left' | 'right';
 export type AttackKind = 'punch' | 'kick' | 'block';
@@ -20,6 +20,10 @@ export const ATTACKS: Record<AttackKind, { duration: number; strikeAt: number; r
   block: { duration: 500, strikeAt: 2, reach: 0, knockback: 0 },
 };
 export const HIT_DURATION = 380, DOWN_DURATION = 1100, FIGHT_RANGE = 20, FIGHT_BREAK = 70;
+/** Rifle: draw, three rounds 300ms apart, lower; the muzzle sits ahead of the figure at chest height (figure units). */
+export const RIFLE = { draw: 350, interval: 300, shots: 3, total: 1350, flash: 120, stun: 330, knockback: 6, minGap: 60, maxGap: 260, collapse: 1500 };
+export const MUZZLE = { x: 46, y: 25 };
+export const muzzle = (position: Point, direction: number): Point => ({ x: position.x + direction * (MUZZLE.x - 24) * SCALE, y: position.y - (54 - MUZZLE.y) * SCALE });
 const stride = (pose: Pose) => (pose === 'walk' ? 5 : 8);
 /** Screen pixels covered by one full gait cycle, so a planted foot stays put instead of skating. */
 export const cycleLength = (pose: Pose) => stride(pose) * SCALE * Math.PI * 2;
@@ -54,6 +58,10 @@ export function hops(floor: Floor, x: number, floors: Floor[]) {
 }
 /** Grounds of other panels: targets for the rare long leap. */
 export const leapTargets = (floor: Floor, floors: Floor[]) => floors.filter((f) => f.ground && f.zone !== floor.zone);
+/** The nearest platform underneath the feet in the same panel, if there is one to tumble onto. */
+export function floorBelow(point: Point, floorId: string, floors: Floor[], zone: string) {
+  return floors.filter((f) => f.id !== floorId && f.zone === zone && f.y > point.y + 4 && point.x >= f.left - 4 && point.x <= f.right + 4).sort((a, b) => a.y - b.y)[0];
+}
 export function dropFloor(point: Point, floors: Floor[], zone?: string) {
   const pool = zone ? floors.filter((f) => f.zone === zone) : floors;
   const below = pool.filter((f) => point.x >= f.left - 4 && point.x <= f.right + 4 && f.y >= point.y - 8).sort((a, b) => a.y - b.y)[0];
@@ -85,9 +93,10 @@ export function skeleton(pose: Pose, phase: number, time: number) {
   if (pose === 'land') hipY = 36 + 4 * Math.sin(Math.min(1, time / 240) * Math.PI);
   if (pose === 'stretch') hipY = 36 - 1.5 * ramp;
   if (pose === 'fight' || pose === 'punch' || pose === 'kick') hipY = 37 - Math.abs(Math.sin(time / 180)) * .6;
+  if (pose === 'aim' || pose === 'shoot') hipY = 37;
   if (pose === 'block') hipY = 38;
   const strike = pose === 'punch' || pose === 'kick' ? Math.sin(Math.min(1, time / ATTACKS[pose].duration) * Math.PI) : 0;
-  const lean = moving ? (pose === 'flee' ? 5 : fast ? 4 : 1.5) : pose === 'knock' ? 2 : pose === 'hurt' || pose === 'hit' ? -4 : pose === 'land' ? 2
+  const lean = moving ? (pose === 'flee' ? 5 : fast ? 4 : 1.5) : pose === 'knock' ? 2 : pose === 'hurt' || pose === 'hit' ? -4 : pose === 'shot' ? -6 : pose === 'aim' ? 1.5 : pose === 'shoot' ? -.5 : pose === 'land' ? 2
     : pose === 'punch' ? 1 + strike * 3 : pose === 'kick' ? 1 - strike * 4 : pose === 'fight' || pose === 'block' ? 1 : 0;
   let hip = { x: 23 + (pose === 'hurt' ? Math.sin(time / 40) : 0), y: hipY };
   let shoulder = { x: hip.x + lean, y: hipY - 11 };
@@ -124,9 +133,21 @@ export function skeleton(pose: Pose, phase: number, time: number) {
     const beat = time % 1400, tap = beat < 800 ? Math.max(0, Math.sin(beat / 400 * Math.PI)) : 0;
     arms = [path(shoulder, { x: 22, y: 32 }, { x: 23, y: 38 }), path(shoulder, { x: 31 + tap * 2, y: 23 }, { x: 33 + tap * 5, y: 22 })];
   }
-  if (pose === 'hurt' || pose === 'hit') {
-    feet = pose === 'hurt' ? [{ x: 18, y: 54 }, { x: 30, y: 48 }] : [{ x: 20, y: 54 }, { x: 28, y: 54 }];
+  if (pose === 'hurt' || pose === 'hit' || pose === 'shot') {
+    feet = pose === 'hurt' ? [{ x: 18, y: 54 }, { x: 30, y: 48 }] : pose === 'shot' ? [{ x: 20, y: 54 }, { x: 27, y: 50 }] : [{ x: 20, y: 54 }, { x: 28, y: 54 }];
     arms = [path(shoulder, { x: 14, y: 20 }, { x: 10, y: 15 }), path(shoulder, { x: 32, y: 20 }, { x: 36, y: 14 })];
+  }
+  let rifle = '', flash = '';
+  if (pose === 'aim' || pose === 'shoot') {
+    // Stock at the shoulder, cheek on it, trigger hand close and the other hand on the fore-end; recoil slides it back.
+    const recoil = pose === 'shoot' ? 2 * (1 - Math.min(1, time / RIFLE.flash)) : 0;
+    feet = [{ x: 18, y: 54 }, { x: 29, y: 54 }];
+    rifle = path({ x: 25 - recoil, y: 28 }, { x: MUZZLE.x - recoil, y: MUZZLE.y });
+    arms = [path(shoulder, { x: 29, y: shoulder.y + 4 }, { x: 31 - recoil, y: 27 }), path(shoulder, { x: 33, y: shoulder.y + 4 }, { x: 39 - recoil, y: 26 })];
+    if (pose === 'shoot' && time < RIFLE.flash * .7) {
+      const m = { x: MUZZLE.x - recoil, y: MUZZLE.y };
+      flash = `M${m.x} ${m.y - 4} L${m.x + 2} ${m.y - 1} L${m.x + 10} ${m.y} L${m.x + 2} ${m.y + 1} L${m.x} ${m.y + 4} L${m.x - 1} ${m.y + 1} L${m.x - 3} ${m.y} L${m.x - 1} ${m.y - 1} Z`;
+    }
   }
   if (pose === 'sit') {
     feet = [{ x: 30, y: 54 }, { x: 33, y: 54 }];
@@ -146,8 +167,8 @@ export function skeleton(pose: Pose, phase: number, time: number) {
     if (pose === 'kick') { feet = [{ x: 18, y: 54 }, { x: 30 + strike * 13, y: 54 - strike * 18 }]; arms[0] = path(shoulder, { x: 18, y: shoulder.y + 4 }, { x: 15, y: shoulder.y + 1 }); }
     if (pose === 'block') arms = [path(shoulder, { x: 29, y: shoulder.y + 3 }, { x: 28, y: shoulder.y - 4 }), path(shoulder, { x: 30, y: shoulder.y + 6 }, { x: 28, y: shoulder.y + 1 })];
   }
-  let headX = shoulder.x - 11 + (pose === 'hurt' || pose === 'hit' ? -3 : pose === 'look' ? 2 : 0);
-  let headY = shoulder.y - 25 + (pose === 'hurt' || pose === 'hit' ? -2 : 0);
+  let headX = shoulder.x - 11 + (pose === 'hurt' || pose === 'hit' ? -3 : pose === 'shot' ? -4 : pose === 'look' ? 2 : pose === 'aim' || pose === 'shoot' ? 1 : 0);
+  let headY = shoulder.y - 25 + (pose === 'hurt' || pose === 'hit' ? -2 : pose === 'shot' ? -3 : 0);
   if (pose === 'down') {
     // Flat on the back, knees up; the renderer eases in from the standing hit so it reads as toppling over.
     const rise = time > DOWN_DURATION - 250 ? (time - (DOWN_DURATION - 250)) / 250 : 0;
@@ -157,5 +178,12 @@ export function skeleton(pose: Pose, phase: number, time: number) {
     arms = [path(shoulder, { x: 22, y: 46 }, { x: 28, y: 48 }), path(shoulder, { x: 14, y: 47 }, { x: 10, y: 52 })];
     headX = shoulder.x - 23 + rise * 12; headY = shoulder.y - 11 - rise * 14;
   }
-  return { body: path({ x: shoulder.x, y: shoulder.y - 3 }, hip), legs: feet.map((foot) => leg(hip, foot)), arms, headX, headY };
+  if (pose === 'limp') {
+    // Tumbling off the ledge: body sideways in the air, limbs hanging.
+    hip = { x: 29, y: 46 }; shoulder = { x: 19, y: 44 };
+    feet = [{ x: 36, y: 52 }, { x: 38, y: 54 }];
+    arms = [path(shoulder, { x: 14, y: 50 }, { x: 13, y: 55 }), path(shoulder, { x: 22, y: 51 }, { x: 24, y: 56 })];
+    headX = shoulder.x - 23; headY = shoulder.y - 11;
+  }
+  return { body: path({ x: shoulder.x, y: shoulder.y - 3 }, hip), legs: feet.map((foot) => leg(hip, foot)), arms, headX, headY, rifle, flash };
 }

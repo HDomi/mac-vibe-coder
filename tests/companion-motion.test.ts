@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { atWall, chooseAction, chooseAttack, cycleLength, dropFloor, fallDuration, groundOf, hops, landsHit, leapTargets, neighborZone, restDuration, SCALE, skeleton, type Floor, type Pose } from '../web/src/lib/companionMotion';
+import { atWall, chooseAction, chooseAttack, cycleLength, dropFloor, fallDuration, floorBelow, groundOf, hops, landsHit, leapTargets, muzzle, neighborZone, restDuration, RIFLE, SCALE, skeleton, type Floor, type Pose } from '../web/src/lib/companionMotion';
 const floors: Floor[] = [
   { id: 'ground:left', left: 20, right: 180, y: 700, zone: 'left', ground: true },
   { id: 'left', left: 20, right: 180, y: 200, zone: 'left' },
@@ -57,7 +57,7 @@ test('drop finds a platform below the pointer, within a panel when asked, and fa
   assert.equal(dropFloor({ x: 0, y: 0 }, floors, 'nowhere'), undefined);
 });
 test('every pose draws two-bone limbs without NaN and plants a foot while moving', () => {
-  const poses: Pose[] = ['idle', 'wave', 'walk', 'run', 'flee', 'jump', 'fall', 'land', 'knock', 'climb', 'hurt', 'drag', 'sit', 'stretch', 'look', 'scratch', 'fight', 'punch', 'kick', 'block', 'hit', 'down'];
+  const poses: Pose[] = ['idle', 'wave', 'walk', 'run', 'flee', 'jump', 'fall', 'land', 'knock', 'climb', 'hurt', 'drag', 'sit', 'stretch', 'look', 'scratch', 'fight', 'punch', 'kick', 'block', 'hit', 'down', 'aim', 'shoot', 'shot', 'limp'];
   for (const pose of poses) {
     for (const phase of [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]) {
       const s = skeleton(pose, phase, 300);
@@ -70,6 +70,11 @@ test('every pose draws two-bone limbs without NaN and plants a foot while moving
   assert.notEqual(skeleton('punch', 0, 210).arms[1], skeleton('fight', 0, 210).arms[1]);
   assert.notEqual(skeleton('kick', 0, 300).legs[1], skeleton('fight', 0, 300).legs[1]);
   assert.ok(skeleton('down', 0, 100).headY > skeleton('idle', 0, 100).headY + 30);
+  assert.ok(skeleton('aim', 0, 100).rifle.startsWith('M') && skeleton('shoot', 0, 10).rifle.startsWith('M'));
+  assert.equal(skeleton('idle', 0, 100).rifle, '');
+  assert.ok(skeleton('shoot', 0, 10).flash.endsWith('Z'), 'muzzle flash right after the shot');
+  assert.equal(skeleton('shoot', 0, RIFLE.flash).flash, '');
+  assert.equal(skeleton('aim', 0, 100).flash, '');
   assert.notEqual(skeleton('sit', 0, 2000).body, skeleton('idle', 0, 2000).body);
 });
 test('standing legs are nearly straight and only the swinging knee bends', () => {
@@ -79,6 +84,16 @@ test('standing legs are nearly straight and only the swinging knee bends', () =>
   const stance = skeleton('walk', 3 * Math.PI / 2, 300), swing = skeleton('walk', Math.PI / 2, 300);
   assert.ok(Math.abs(knee(stance.legs[0])[0] - 23) < 2.5, 'stance leg straight');
   assert.ok(knee(swing.legs[0])[0] - 23 > 4, 'swing knee bends forward');
+});
+test('a shot figure tumbles onto the platform below or stays put when there is none', () => {
+  assert.equal(floorBelow({ x: 800, y: 600 }, 'rung:2', floors, 'right')?.id, 'rung:1');
+  assert.equal(floorBelow({ x: 800, y: 630 }, 'rung:1', floors, 'right')?.id, 'rung:0');
+  assert.equal(floorBelow({ x: 800, y: 690 }, 'files-footer', floors, 'right'), undefined);
+  assert.equal(floorBelow({ x: 70, y: 200 }, 'left', floors, 'left')?.id, 'ground:left');
+  assert.equal(floorBelow({ x: 70, y: 200 }, 'left', floors, 'prompt'), undefined);
+  const m = muzzle({ x: 100, y: 500 }, 1);
+  assert.ok(m.x > 100 && m.y < 500);
+  assert.ok(muzzle({ x: 100, y: 500 }, -1).x < 100);
 });
 test('blows connect only in front of the attacker within reach', () => {
   const me = { x: 100, y: 500 };

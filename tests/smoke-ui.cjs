@@ -211,6 +211,17 @@ async function main() {
   // Blows are hit-box tested: with Math.random fixed both throw punches, so both take hits.
   await until(`[...document.querySelectorAll('.session-companion')].every(e => Number(e.dataset.hits) > 0)`, 200);
   await until(`[...document.querySelectorAll('.session-companion')].every(e => e.dataset.travel === 'rest' && !['fight', 'punch', 'kick', 'block', 'hit', 'down'].includes(e.dataset.pose))`, 300);
+  // Rifle ambush: with Math.random .98 a figure draws a rifle at a peer 60–260px away, fires three tracer rounds and the target collapses.
+  const claudeNow = await js(`new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m41 + ${HALF}`);
+  await dragCompanion('codex', claudeNow + 140, 570);
+  await js(`Math.random = () => .98`);
+  await until(`document.querySelector('[data-pose="aim"]')`, 300);
+  await until(`document.querySelector('.companion-tracer') && document.querySelector('.companion-spark')`, 100);
+  await until(`document.querySelector('[data-pose="shoot"] .companion-flash').getAttribute('d')`, 100);
+  await until(`document.querySelector('[data-pose="down"]')`, 100);
+  await js(`Math.random = () => .1`);
+  await until(`[...document.querySelectorAll('.session-companion')].every(e => e.dataset.travel === 'rest')`, 400);
+  assert.equal(await js(`document.querySelectorAll('.companion-tracer, .companion-spark').length`), 0);
   await dragCompanion('codex', 90, 170);
   assert.equal(await js(`document.querySelector('[data-agent="codex"]').dataset.floor`), 'favorites-divider');
   const beforeScroll = await js(`new DOMMatrixReadOnly(document.querySelector('[data-agent="codex"]').style.transform).m42`);
@@ -233,6 +244,8 @@ async function main() {
   await wait(200);
   assert.notEqual(await js(`document.querySelector('[data-agent="codex"] .companion-body').children[1].getAttribute('d')`), step);
   // Walls: Math.random .3 walks claude to the prompt panel's left wall, where it knocks, climbs over and drops onto the left panel's floor.
+  await dragCompanion('claude', 420, 560);
+  assert.equal(await js(`document.querySelector('[data-agent="claude"]').dataset.floor`), 'prompt');
   await js(`renderCompanions('idle', 'git'); Math.random = () => .3`);
   await until(`document.querySelector('[data-agent="claude"]').dataset.pose === 'knock'`, 600);
   await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'climb'`, 200);
@@ -251,7 +264,7 @@ async function main() {
   await js(`Math.random = originalRandom; renderUsage()`);
   await until(`!document.querySelector('.session-companions')`);
   assert.deepEqual(errors, []);
-  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage, companion idle timing, 77% size, drag/drop, tab fall, ladder rungs, hit-box sparring, click flee, wall knock and crossing, click-through, layout changes, reduced motion and cleanup. Screenshots: ${screenshot}, ${companionScreenshot}`);
+  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage, companion idle timing, 77% size, drag/drop, tab fall, ladder rungs, hit-box sparring, rifle ambush with tracers, click flee, wall knock and crossing, click-through, layout changes, reduced motion and cleanup. Screenshots: ${screenshot}, ${companionScreenshot}`);
 }
 
 async function finish(code) {
