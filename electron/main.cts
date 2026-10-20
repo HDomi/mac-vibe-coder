@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell } from 'electron';
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -183,6 +183,24 @@ ipcMain.handle('login-item', (e, enable: boolean | null) => {
   if (!fromApp(e)) return false;
   if (typeof enable === 'boolean') app.setLoginItemSettings({ openAtLogin: enable });
   return app.getLoginItemSettings().openAtLogin;
+});
+
+// Native notifications (task finished, approval needed) so the user is reached while in another app.
+ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?: unknown }) => {
+  if (!fromApp(e) || !Notification.isSupported() || !payload || typeof payload !== 'object') return;
+  const title = String(payload.title ?? '').slice(0, 200);
+  const body = String(payload.body ?? '').slice(0, 500);
+  const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
+  if (!title) return;
+  const sender = e.sender;
+  const n = new Notification({ title, body, silent: false });
+  n.on('click', () => {
+    const win = BrowserWindow.fromWebContents(sender);
+    if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+    app.focus({ steal: true });
+    if (sessionId && !sender.isDestroyed()) sender.send('notify-click', sessionId);
+  });
+  n.show();
 });
 
 type Lang = 'en' | 'ko';

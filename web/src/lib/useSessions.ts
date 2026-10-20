@@ -1,20 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { agentClient, type AgentId, type Attachment, type PermissionModeId, type ServerMessage } from './agent';
-import { itemsFromHistory, reduceEvent, type ChatItem, type ChatSession } from './chatStore';
+import { itemsFromHistory, reduceEvent, sessionTitle, type ChatItem, type ChatSession } from './chatStore';
 import { api } from './api';
 import { t } from './i18n';
 
 const LS_ACTIVE = 'vibe.sessions';
 
-function notifyIfHidden(e: { kind: string; text?: string; toolName?: string; ok?: boolean }) {
-  if (typeof Notification === 'undefined' || document.visibilityState === 'visible') return;
-  if (Notification.permission !== 'granted') return;
+/** Session currently on screen; a result there needs no notification while the window is focused. */
+let onScreenSession: string | null = null;
+export function setOnScreenSession(id: string | null) { onScreenSession = id; }
+
+function sessionName(s: ChatSession) { return sessionTitle(s.items, 24) ?? s.cwd.split('/').pop() ?? s.agent; }
+
+/**
+ * Notify when the user is not looking at this session: the window is unfocused or hidden, or
+ * another session/view is on screen. Native (Electron) when available, web Notification otherwise.
+ */
+function notifyIfAway(s: ChatSession, e: { kind: string; text?: string; toolName?: string; ok?: boolean }) {
+  if (document.hasFocus() && document.visibilityState === 'visible' && onScreenSession === s.id) return;
+  const name = sessionName(s);
   let title: string | null = null; let body = '';
-  if (e.kind === 'result') { title = e.ok ? t('notif.finished') : t('notif.failed'); body = (e.text ?? '').slice(0, 120); }
-  else if (e.kind === 'approval.request') { title = t('notif.approval'); body = t('notif.allow', { tool: e.toolName ?? '' }); }
-  else if (e.kind === 'question.request') { title = t('notif.question'); body = t('notif.waiting'); }
+  if (e.kind === 'result') { title = t(e.ok ? 'notif.sessionDone' : 'notif.sessionFailed', { name }); body = (e.text ?? '').slice(0, 120); }
+  else if (e.kind === 'approval.request') { title = t('notif.approval'); body = `${name} · ${t('notif.allow', { tool: e.toolName ?? '' })}`; }
+  else if (e.kind === 'question.request') { title = t('notif.question'); body = `${name} · ${t('notif.waiting')}`; }
   if (!title) return;
-  try { new Notification(title, { body, silent: false }); } catch { /* ignore */ }
+  if (window.vibe?.notify) { window.vibe.notify({ title, body, sessionId: s.id }); return; }
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification(title, { body, silent: false });
+    n.onclick = () => { window.focus(); window.dispatchEvent(new CustomEvent('vibe:notify-click', { detail: { sessionId: s.id } })); };
+  } catch { /* ignore */ }
 }
 
 export function requestNotificationPermission() {
@@ -87,7 +102,8 @@ export function useSessions() {
         }
         return;
       }
-      notifyIfHidden(m.event);
+      const live = sessionsRef.current[m.sessionId];
+      if (live) notifyIfAway(live, m.event);
       setSessions((prev) => {
         const s = prev[m.sessionId];
         if (!s) return prev;

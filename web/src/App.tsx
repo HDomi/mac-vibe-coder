@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { sessionTitle } from './lib/chatStore';
 import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing, type RecentSession } from './lib/api';
 import type { Attachment } from './lib/agent';
-import { requestNotificationPermission, useSessions } from './lib/useSessions';
+import { requestNotificationPermission, useSessions, setOnScreenSession } from './lib/useSessions';
 import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
 import Preview from './components/Preview';
@@ -110,6 +110,22 @@ function AppInner() {
     setProject(p); navigate(p); setActiveSession(null);
     api.pushRecent(p).then(setRecent).catch(() => {});
   }, [navigate]);
+  // Notifications are skipped for the session on screen while the window is focused.
+  useEffect(() => { setOnScreenSession(view === 'agent' ? (agentActive && agentActive !== 'new' ? agentActive : null) : (session?.id ?? null)); }, [view, agentActive, session?.id]);
+  // Clicking a notification brings its session on screen in whichever view is active.
+  const focusSession = useRef<(id: string) => void>(() => {});
+  focusSession.current = (id: string) => {
+    const s = S.sessions[id];
+    if (!s) return;
+    if (view === 'agent') setAgentActive(id);
+    else { if (s.cwd !== project) openProject(s.cwd); setActiveSession(id); }
+  };
+  useEffect(() => {
+    const h = (ev: Event) => { const id = (ev as CustomEvent<{ sessionId: string }>).detail?.sessionId; if (id) focusSession.current(id); };
+    window.addEventListener('vibe:notify-click', h);
+    window.vibe?.onNotificationClick?.((id) => focusSession.current(id));
+    return () => window.removeEventListener('vibe:notify-click', h);
+  }, []);
 
   const isFavorite = !!listing && favorites.favorites.some((f) => f.path === listing.path);
   const toggleFavorite = () => {

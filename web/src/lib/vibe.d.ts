@@ -11,6 +11,9 @@ declare global {
       setLanguage: (lang: string) => void;
       /** Receive language changes made from the macOS menu bar. */
       onLanguage: (cb: (lang: string) => void) => void;
+      /** Show a native notification; the click handler receives the session id passed here. */
+      notify: (payload: { title: string; body: string; sessionId: string }) => void;
+      onNotificationClick: (cb: (sessionId: string) => void) => void;
     };
   }
 }

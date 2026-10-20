@@ -10,4 +10,7 @@ contextBridge.exposeInMainWorld('vibe', {
   // UI language sync with the macOS menu bar.
   setLanguage: (lang) => ipcRenderer.send('language', lang),
   onLanguage: (cb) => { ipcRenderer.on('language', (_e, lang) => cb(lang)); },
+  // Native macOS notification; a click brings the window back and reports the session id.
+  notify: (payload) => ipcRenderer.send('notify', payload),
+  onNotificationClick: (cb) => { ipcRenderer.on('notify-click', (_e, sessionId) => cb(sessionId)); },
 });

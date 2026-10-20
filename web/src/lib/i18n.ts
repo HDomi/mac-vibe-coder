@@ -294,6 +294,8 @@ const en: Record<string, string> = {
   'usage.week': 'wk',
   // notifications / sessions
   'notif.finished': 'Task finished',
+  'notif.sessionDone': 'Task in session "{name}" finished',
+  'notif.sessionFailed': 'Task in session "{name}" failed',
   'notif.failed': 'Task failed',
   'notif.approval': 'Approval needed',
   'notif.allow': 'Allow {tool}?',
@@ -576,6 +578,8 @@ const ko: Record<string, string> = {
   'usage.refresh': '사용량 새로고침',
   'usage.week': '주',
   'notif.finished': '작업 완료',
+  'notif.sessionDone': '{name} 세션의 작업이 완료되었습니다',
+  'notif.sessionFailed': '{name} 세션의 작업이 실패했습니다',
   'notif.failed': '작업 실패',
   'notif.approval': '승인 필요',
   'notif.allow': '{tool} 실행을 허용하시겠습니까?',
