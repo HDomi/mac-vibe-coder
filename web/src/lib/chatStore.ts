@@ -50,6 +50,16 @@ export function pendingRequests(s: ChatSession): number {
   return n;
 }
 
+/** Tab order: pinned first, then most recent activity. Stable for ties so tabs do not shuffle. */
+export function sortSessions<T extends Pick<ChatSession, 'pinned' | 'lastActivity'>>(list: T[]): T[] {
+  return list.map((s, i) => ({ s, i }))
+    .sort((a, b) => Number(!!b.s.pinned) - Number(!!a.s.pinned) || (b.s.lastActivity ?? 0) - (a.s.lastActivity ?? 0) || a.i - b.i)
+    .map((x) => x.s);
+}
+
+/** Events that move a tab forward; streaming deltas do not, or running tabs would jump around constantly. */
+export const ACTIVITY_EVENTS = new Set(['user', 'result', 'approval.request', 'question.request']);
+
 export interface ChatSession {
   id: string;
   agent: AgentId;
@@ -66,6 +76,10 @@ export interface ChatSession {
   turnStartedAt?: number;
   /** Remembered from a previous page load and not yet confirmed by the server (attach ack, replay or revive). */
   restoring?: boolean;
+  /** Pinned tabs stay in front of the activity order. */
+  pinned?: boolean;
+  /** Last turn start, turn end or request (server ms); tabs sort by this, newest first. */
+  lastActivity?: number;
   status: 'starting' | 'running' | 'idle' | 'compacting' | 'closed';
   items: ChatItem[];
   totalCostUsd: number;

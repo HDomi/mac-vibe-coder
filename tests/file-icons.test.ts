@@ -29,7 +29,7 @@ test('icon ids map to shipped svg file names', () => {
   assert.equal(fileIconSvg('nope-not-an-icon'), null);
 });
 
-import { backgroundState, displayTitle, pendingRequests, type ChatSession } from '../web/src/lib/chatStore';
+import { backgroundState, displayTitle, pendingRequests, sortSessions, type ChatSession } from '../web/src/lib/chatStore';
 
 test('background state tells a working session from one waiting on the user', () => {
   const base: ChatSession = { id: 's', agent: 'claude', cwd: '/p', permissionMode: 'default', status: 'idle', totalCostUsd: 0, lastSeq: 0, items: [] };
@@ -59,4 +59,15 @@ test('tab badge counts approvals and questions of the current turn only', () => 
   assert.equal(pendingRequests(base), 2);
   assert.equal(pendingRequests({ ...base, status: 'idle' }), 0);
   assert.equal(pendingRequests({ ...base, items: [approval, { kind: 'user', id: 'u', text: 'go', attachments: [] } as never, question] }), 1);
+});
+
+test('tabs put pinned sessions first, then the most recent activity, keeping ties in place', () => {
+  const list = [
+    { id: 'old', lastActivity: 1 },
+    { id: 'none' },
+    { id: 'pinnedOld', pinned: true, lastActivity: 2 },
+    { id: 'new', lastActivity: 9 },
+    { id: 'none2' },
+  ];
+  assert.deepEqual(sortSessions(list).map((s) => s.id), ['pinnedOld', 'new', 'old', 'none', 'none2']);
 });

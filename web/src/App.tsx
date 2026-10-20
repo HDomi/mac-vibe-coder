@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { backgroundState, displayTitle, pendingRequests, type ChatSession } from './lib/chatStore';
+import { backgroundState, displayTitle, pendingRequests, sortSessions, type ChatSession } from './lib/chatStore';
 import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing, type RecentSession } from './lib/api';
 import type { Attachment } from './lib/agent';
 import { requestNotificationPermission, useSessions, setOnScreenSession } from './lib/useSessions';
@@ -13,7 +13,7 @@ import type { BackgroundSession } from './components/Composer';
 import TerminalPanel from './components/TerminalPanel';
 import GitPanel from './components/GitPanel';
 import Splitter, { usePaneWidth } from './components/Splitter';
-import { ContextMenuProvider, useContextMenu } from './components/ContextMenu';
+import { ContextMenuProvider, useContextMenu, type MenuItem } from './components/ContextMenu';
 import QuickOpen from './components/QuickOpen';
 import { t, useLang } from './lib/i18n';
 import AgentIcon from './components/AgentIcon';
@@ -92,9 +92,9 @@ function AppInner() {
   useEffect(() => { try { project ? localStorage.setItem(LS_PROJECT, project) : localStorage.removeItem(LS_PROJECT); } catch { /* ignore */ } }, [project]);
   useEffect(() => { const h = () => requestNotificationPermission(); window.addEventListener('click', h, { once: true }); return () => window.removeEventListener('click', h); }, []);
 
-  const projectSessions = Object.values(S.sessions).filter((s) => s.cwd === project);
+  const projectSessions = sortSessions(Object.values(S.sessions).filter((s) => s.cwd === project));
   const session = activeSession === 'new' ? null
-    : (activeSession && S.sessions[activeSession]?.cwd === project ? S.sessions[activeSession] : projectSessions[projectSessions.length - 1]) ?? null;
+    : (activeSession && S.sessions[activeSession]?.cwd === project ? S.sessions[activeSession] : projectSessions[0]) ?? null;
 
   const navigate = useCallback((p: string) => { setCwd(p); setSelected(null); }, []);
   // Local file links inside markdown (chat or preview) open in the Preview tab.
@@ -206,9 +206,11 @@ function AppInner() {
                 <div className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs overflow-x-auto">
                   {projectSessions.map((s) => (
                     <div key={s.id} onClick={() => setActiveSession(s.id)} onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeSession(s.id); } }}
+                      onContextMenu={(e) => menu.open(e, sessionMenu(s, S.setPinned, () => closeSession(s.id)))}
                       className={`group flex items-center gap-1.5 rounded-md pl-2.5 pr-1 py-1 whitespace-nowrap cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
                       <AgentIcon agent={s.agent} size={14} />
+                      {s.pinned && <span className="text-[9px]" title={t('common.pin')}>📌</span>}
                       <span className="text-zinc-500">{displayTitle(s, 18) ?? t('common.new')}</span>
                       <AttentionBadge s={s} />
                       <button className="ml-1 w-4 h-4 rounded text-[10px] leading-none text-zinc-500 hover:text-white hover:bg-white/15 opacity-0 group-hover:opacity-100" title={t('app.closeSession')}
@@ -289,7 +291,8 @@ function AppInner() {
 /** Agent mode: free conversation not tied to a project. Left: live sessions; center: chat / all previous conversations. */
 function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType<typeof useSessions>; active: string | 'new' | null; setActive: (v: string | 'new' | null) => void }) {
   useLang();
-  const live = Object.values(S.sessions);
+  const menu = useContextMenu();
+  const live = sortSessions(Object.values(S.sessions));
   const session = active && active !== 'new' ? S.sessions[active] ?? null : null;
   const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActive).catch((e) => window.alert(e.message));
   return (
@@ -305,9 +308,14 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
           {live.length === 0 && <div className="px-2 text-xs text-zinc-600">{t('app.nothingOpen')}</div>}
           {live.map((s) => (
             <div key={s.id} onClick={() => setActive(s.id)}
+              onContextMenu={(e) => menu.open(e, sessionMenu(s, S.setPinned, () => {
+                if ((s.status === 'running' || s.status === 'compacting') && !window.confirm(t('app.confirmCloseRunning'))) return;
+                S.close(s.id); if (session?.id === s.id) setActive(null);
+              }))}
               className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}>
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
               <AgentIcon agent={s.agent} size={16} />
+              {s.pinned && <span className="text-[10px]" title={t('common.pin')}>📌</span>}
               <span className="truncate flex-1">{displayTitle(s, 40) ?? t('common.new')}</span>
               <AttentionBadge s={s} />
               <span className="text-[10px] text-zinc-600 truncate max-w-[70px]" title={s.cwd}>{s.cwd.split('/').pop()}</span>
@@ -348,4 +356,13 @@ function AttentionBadge({ s }: { s: ChatSession }) {
   const n = pendingRequests(s);
   if (!n) return null;
   return <span className="min-w-4 h-4 px-1 rounded-full bg-amber-400 text-[10px] font-semibold leading-4 text-center text-black shrink-0" title={t('app.waitingRequests', { n })}>{n}</span>;
+}
+
+/** Right-click menu shared by project tabs and the Agent view list. */
+function sessionMenu(s: ChatSession, setPinned: (id: string, pinned: boolean) => void, close: () => void): MenuItem[] {
+  return [
+    { label: t(s.pinned ? 'common.unpin' : 'common.pin'), onClick: () => setPinned(s.id, !s.pinned) },
+    { separator: true },
+    { label: t('app.closeSession'), shortcut: '⌘W', danger: true, onClick: close },
+  ];
 }

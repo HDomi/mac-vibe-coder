@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { agentClient, type AgentId, type Attachment, type PermissionModeId, type ServerMessage } from './agent';
-import { displayTitle, itemsFromHistory, reduceEvent, type ChatItem, type ChatSession } from './chatStore';
+import { ACTIVITY_EVENTS, displayTitle, itemsFromHistory, reduceEvent, type ChatItem, type ChatSession } from './chatStore';
 import { api } from './api';
 import { t } from './i18n';
 
@@ -36,7 +36,7 @@ export function requestNotificationPermission() {
   if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission();
 }
 
-interface Persisted { id: string; cwd: string; agent: AgentId; agentSessionId?: string; permissionMode?: PermissionModeId; model?: string; historyLen?: number; title?: string }
+interface Persisted { id: string; cwd: string; agent: AgentId; agentSessionId?: string; permissionMode?: PermissionModeId; model?: string; historyLen?: number; title?: string; pinned?: boolean; lastActivity?: number }
 interface PendingStart { cwd: string; resolve: (id: string) => void; reject: (err: Error) => void; preload: ChatItem[]; historyLen?: number; replaces?: string; title?: string }
 /** A revived session that goes missing again this soon is reported lost instead of looping. */
 const REVIVE_COOLDOWN_MS = 30000;
@@ -77,7 +77,7 @@ export function useSessions() {
           if (m.requestId) pendingStart.current.delete(m.requestId);
           const fresh: ChatSession = {
             id: m.sessionId, agent: m.agent ?? 'claude', cwd: m.requestCwd, permissionMode: 'default', status: 'starting',
-            items: p?.preload ?? [], historyLen: p?.historyLen, title: p?.title, totalCostUsd: 0, lastSeq: 0,
+            items: p?.preload ?? [], historyLen: p?.historyLen, title: p?.title, totalCostUsd: 0, lastSeq: 0, lastActivity: Date.now(),
           };
           const old = p?.replaces;
           setSessions((prev) => {
@@ -86,7 +86,7 @@ export function useSessions() {
             // Keep the tab where it was and the conversation on screen; history replay (Claude) wins when available.
             const items = fresh.items.length ? fresh.items : was.items.filter((it) => !it.id.startsWith('gone-')).map((it) =>
               it.kind === 'assistant' ? { ...it, streaming: false } : it.kind === 'tool' ? { ...it, done: true } : it);
-            const revived: ChatSession = { ...fresh, title: fresh.title ?? was.title, permissionMode: was.permissionMode, model: was.model, agentSessionId: was.agentSessionId, items: [...items, { kind: 'system', id: `revived-${m.sessionId}`, text: t('session.revived') }] };
+            const revived: ChatSession = { ...fresh, title: fresh.title ?? was.title, pinned: was.pinned, lastActivity: was.lastActivity, permissionMode: was.permissionMode, model: was.model, agentSessionId: was.agentSessionId, items: [...items, { kind: 'system', id: `revived-${m.sessionId}`, text: t('session.revived') }] };
             return Object.fromEntries(Object.entries(prev).map(([k, v]) => k === old ? [m.sessionId, revived] : [k, v]));
           });
           if (old) {
@@ -114,7 +114,9 @@ export function useSessions() {
         const s = prev[m.sessionId];
         if (!s) return prev;
         if (m.seq > 0 && m.seq <= s.lastSeq) return prev;
-        return { ...prev, [m.sessionId]: reduceEvent(s, m.event, m.seq) };
+        const next = reduceEvent(s, m.event, m.seq);
+        if (ACTIVITY_EVENTS.has(m.event.kind) && m.ts > (next.lastActivity ?? 0)) next.lastActivity = m.ts;
+        return { ...prev, [m.sessionId]: next };
       });
     });
     return off;
@@ -138,7 +140,7 @@ export function useSessions() {
     if (!saved.length) return;
     setSessions((prev) => {
       const next = { ...prev };
-      for (const p of saved) if (!next[p.id]) next[p.id] = { id: p.id, agent: p.agent, cwd: p.cwd, agentSessionId: p.agentSessionId, historyLen: p.historyLen, title: p.title, permissionMode: p.permissionMode ?? 'default', model: p.model, status: 'idle', items: [], totalCostUsd: 0, lastSeq: 0, restoring: true };
+      for (const p of saved) if (!next[p.id]) next[p.id] = { id: p.id, agent: p.agent, cwd: p.cwd, agentSessionId: p.agentSessionId, historyLen: p.historyLen, title: p.title, pinned: p.pinned, lastActivity: p.lastActivity, permissionMode: p.permissionMode ?? 'default', model: p.model, status: 'idle', items: [], totalCostUsd: 0, lastSeq: 0, restoring: true };
       return next;
     });
     for (const p of saved) void reattach(p);
@@ -167,7 +169,7 @@ export function useSessions() {
   };
 
   useEffect(() => {
-    const list: Persisted[] = Object.values(sessions).filter((s) => s.status !== 'closed').map((s) => ({ id: s.id, cwd: s.cwd, agent: s.agent, agentSessionId: s.agentSessionId, permissionMode: s.permissionMode, model: s.model, historyLen: s.historyLen, title: s.title }));
+    const list: Persisted[] = Object.values(sessions).filter((s) => s.status !== 'closed').map((s) => ({ id: s.id, cwd: s.cwd, agent: s.agent, agentSessionId: s.agentSessionId, permissionMode: s.permissionMode, model: s.model, historyLen: s.historyLen, title: s.title, pinned: s.pinned, lastActivity: s.lastActivity }));
     try { localStorage.setItem(LS_ACTIVE, JSON.stringify(list)); } catch { /* ignore */ }
   }, [sessions]);
 
@@ -200,7 +202,7 @@ export function useSessions() {
     setSessions((prev) => {
       const s = prev[sessionId];
       if (!s) return prev;
-      return { ...prev, [sessionId]: { ...s, items: [...s.items, { kind: 'user', id: `local-${Date.now()}`, text, attachments, pending: true }], status: s.status === 'idle' ? 'running' : s.status, turnStartedAt: s.turnStartedAt ?? Date.now() } };
+      return { ...prev, [sessionId]: { ...s, items: [...s.items, { kind: 'user', id: `local-${Date.now()}`, text, attachments, pending: true }], status: s.status === 'idle' ? 'running' : s.status, turnStartedAt: s.turnStartedAt ?? Date.now(), lastActivity: Date.now() } };
     });
     agentClient.send({ type: 'session.send', sessionId, text, attachments });
   }, []);
@@ -213,10 +215,13 @@ export function useSessions() {
   const interrupt = useCallback((sessionId: string) => agentClient.send({ type: 'session.interrupt', sessionId }), []);
   const setMode = useCallback((sessionId: string, mode: PermissionModeId) => agentClient.send({ type: 'session.mode', sessionId, mode }), []);
   const setModel = useCallback((sessionId: string, model: string | null) => agentClient.send({ type: 'session.model', sessionId, model }), []);
+  const setPinned = useCallback((sessionId: string, pinned: boolean) => {
+    setSessions((prev) => prev[sessionId] ? { ...prev, [sessionId]: { ...prev[sessionId], pinned: pinned || undefined } } : prev);
+  }, []);
   const close = useCallback((sessionId: string) => {
     agentClient.send({ type: 'session.close', sessionId });
     setSessions((prev) => { const n = { ...prev }; delete n[sessionId]; return n; });
   }, []);
 
-  return { sessions, replaced, start, send, approve, answer, interrupt, setMode, setModel, close };
+  return { sessions, replaced, start, send, approve, answer, interrupt, setMode, setModel, setPinned, close };
 }
