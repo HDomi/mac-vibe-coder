@@ -7,6 +7,7 @@ export const LANGS: { id: Lang; label: string }[] = [
 ];
 
 const en: Record<string, string> = {
+  'usage.companions': 'Session companions',
   // common
   'common.open': 'Open',
   'common.rename': 'Rename…',
@@ -374,6 +375,7 @@ const en: Record<string, string> = {
 };
 
 const ko: Record<string, string> = {
+  'usage.companions': '세션 졸라맨',
   'common.open': '열기',
   'common.rename': '이름 변경…',
   'common.resume': '이어하기',

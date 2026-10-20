@@ -20,6 +20,7 @@ import { t, useLang } from './lib/i18n';
 import AgentIcon from './components/AgentIcon';
 import Lightbox from './components/Lightbox';
 import Icon from './components/Icon';
+import SessionCompanions from './components/SessionCompanions';
 
 const LS_CWD = 'vibe.cwd';
 const LS_PROJECT = 'vibe.project';
@@ -59,6 +60,8 @@ function AppInner() {
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [companions, setCompanions] = useState(() => { try { return localStorage.getItem('vibe.companions') !== '0'; } catch { return true; } });
+  useEffect(() => { try { localStorage.setItem('vibe.companions', companions ? '1' : '0'); } catch { /* ignore */ } }, [companions]);
   const [view, setView] = useState<ViewMode>(() => { try { return (localStorage.getItem(LS_MODE) as ViewMode) || 'ide'; } catch { return 'ide'; } });
   const [agentActive, setAgentActive] = useState<string | 'new' | null>(null);
   useEffect(() => { try { localStorage.setItem(LS_MODE, view); } catch { /* ignore */ } }, [view]);
@@ -192,12 +195,13 @@ function AppInner() {
   return (
       <div className="h-full flex flex-col">
         <Lightbox />
-        <UsageBar mode={view} onMode={setView} />
+        <UsageBar mode={view} onMode={setView} companions={companions} onCompanions={() => setCompanions((v) => !v)} />
+        {companions && <SessionCompanions sessions={Object.values(S.sessions)} scene={`${view}:${rightTab}:${rightCollapsed}`} />}
         {view === 'agent' ? (
           <AgentView home={home?.home ?? '~'} S={S} active={agentActive} setActive={setAgentActive} />
         ) : (
         <div className="flex-1 flex min-h-0 relative">
-          <div style={{ width: collapsed ? 40 : sidebar.width }} className={`shrink-0 h-full overflow-hidden ${paneTransition}`}>
+          <div data-companion-zone="left" data-companion-wall="right" style={{ width: collapsed ? 40 : sidebar.width }} className={`shrink-0 h-full overflow-hidden ${paneTransition}`}>
             <Sidebar home={home} favorites={favorites} recent={recent} cwd={project ?? ''} collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)}
               onNavigate={openProject} onFavoritesChange={setFavorites} onRecentChange={setRecent}
               onPickFolder={pickFolder} onOpenSettings={() => setShowTools(true)} onResumeSession={resumeSession} />
@@ -248,8 +252,8 @@ function AppInner() {
                 ))}
               </div>
             )}
-            <div style={{ width: rightCollapsed ? 0 : right.width }} className={`shrink-0 flex flex-col min-w-0 overflow-hidden ${paneTransition}`}>
-              <div className="h-10 shrink-0 flex items-stretch border-b border-white/10 text-xs" style={{ minWidth: right.width }}>
+            <div data-companion-zone="right" data-companion-wall="left" style={{ width: rightCollapsed ? 0 : right.width }} className={`shrink-0 flex flex-col min-w-0 overflow-hidden ${paneTransition}`}>
+              <div data-companion-floor="right-tabs" data-companion-edge="bottom" className="h-10 shrink-0 flex items-stretch border-b border-white/10 text-xs" style={{ minWidth: right.width }}>
                 <div className="flex-1 min-w-0 flex items-stretch overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {rightTabs.map(([t, label]) => (
                     <button key={t} className={`shrink-0 px-3 ${rightTab === t ? 'text-white border-b-2 border-blue-400' : 'text-zinc-500 hover:text-zinc-300'}`} onClick={() => setRightTab(t)}>{label}</button>
@@ -302,7 +306,7 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
   const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActive).catch((e) => window.alert(e.message));
   return (
     <div className="flex-1 flex min-h-0 relative">
-      <aside className="w-64 shrink-0 h-full flex flex-col border-r border-white/10 bg-[#0e1117]">
+      <aside data-companion-zone="left" data-companion-wall="right" className="w-64 shrink-0 h-full flex flex-col border-r border-white/10 bg-[#0e1117]">
         <div className="h-10 flex items-center px-3 text-xs text-zinc-500">
           <span className="font-medium text-zinc-400">{t('app.agent')}</span>
           <div className="flex-1" />
@@ -327,6 +331,7 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
             </div>
           ))}
         </div>
+        <div data-companion-floor="agent-list-bottom" className="h-px shrink-0 bg-white/10 mb-4" />
       </aside>
       <div className="flex-1 min-w-0">
         <ChatPanel cwd={home} scope="all" session={session}

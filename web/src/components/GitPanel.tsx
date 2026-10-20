@@ -203,7 +203,7 @@ export default function GitPanel({ cwd, visible }: Props) {
 
   return (
     <div className="h-full flex flex-col text-sm">
-      <div className="h-9 shrink-0 flex items-center gap-2 px-2 border-b border-white/10 text-xs">
+      <div data-companion-floor="git-toolbar" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-2 px-2 border-b border-white/10 text-xs">
         <select value={st?.branch ?? ''} onChange={(e) => checkout(e.target.value)} disabled={busy || !!remoteBusy} title={t('git.switchBranch')}
           className="bg-white/5 rounded-md px-1.5 py-1 outline-none max-w-[45%] font-medium text-zinc-200">
           {st?.branch && !branches.some((b) => b.name === st.branch) && <option value={st.branch}>{st.branch}</option>}
@@ -226,7 +226,7 @@ export default function GitPanel({ cwd, visible }: Props) {
       </form>}
       {note && <div className="px-3 py-1 text-[11px] text-amber-200 border-b border-white/5 truncate" title={note}>{note}</div>}
       <div className="flex-1 min-h-0 flex flex-col">
-        <div className="max-h-[45%] overflow-y-auto border-b border-white/10">
+        <div data-companion-floor="git-changes" data-companion-edge="bottom" className="max-h-[45%] overflow-y-auto border-b border-white/10">
           <section>
           <SectionHeader color="bg-emerald-400" title={t('git.stagedTitle')} count={staged.length}>
             {staged.length > 0 && <button className="hover:text-white" onClick={() => stage(staged, 'reset')}>{t('git.unstageAll')}</button>}
@@ -270,7 +270,7 @@ export default function GitPanel({ cwd, visible }: Props) {
             onFile={setCommitFile} onClose={() => { setCommitView(null); setCommitFile(null); }} />
         )}
         </div>
-        <div className="shrink-0 border-t border-white/10 bg-[#12151c]">
+        <div data-companion-floor="git-commit" className="shrink-0 border-t border-white/10 bg-[#12151c]">
           <div className="flex items-center gap-2 px-3 h-7 text-[11px]">
             <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
             <span className="font-medium tracking-wide text-zinc-300">{t('git.commitTitle')}</span>

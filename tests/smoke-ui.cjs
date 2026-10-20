@@ -36,11 +36,33 @@ async function main() {
     import { UpdateBadge } from ${JSON.stringify(path.join(root, 'web/src/components/UpdatePanel.tsx'))};
     import MarkdownView from ${JSON.stringify(path.join(root, 'web/src/components/MarkdownView.tsx'))};
     import UsageBar from ${JSON.stringify(path.join(root, 'web/src/components/UsageBar.tsx'))};
+    import SessionCompanions from ${JSON.stringify(path.join(root, 'web/src/components/SessionCompanions.tsx'))};
     const target = createRoot(document.getElementById('root'));
     window.renderGit = cwd => target.render(<GitPanel cwd={cwd} visible />);
     window.renderUpdate = () => target.render(<UpdateBadge />);
     window.renderMarkdown = text => target.render(<MarkdownView text={text} baseDir="/fixture" />);
     window.renderUsage = () => target.render(<UsageBar mode="ide" onMode={() => {}} />);
+    window.renderCompanions = (status = 'idle', scene = 'files') => {
+      const sessions = [
+        { id: 'claude-one', agent: 'claude', status, items: status === 'running' ? [{ kind: 'approval', decision: null }] : [] },
+        { id: 'codex-one', agent: 'codex', status: 'idle', items: [] },
+      ];
+      target.render(<>
+        <aside data-companion-zone="left" data-companion-wall="right" style={{ position: 'absolute', left: 0, top: 40, width: 180, height: 720, borderRight: '1px solid #555', overflowY: 'auto' }}>
+          <div style={{ padding: 16 }}>Favorites</div>
+          <div data-companion-floor="favorites-divider" style={{ marginTop: 100, borderTop: '1px solid #555' }}>Recent</div>
+          <div style={{ height: 900 }} />
+        </aside>
+        <button data-companion-floor="prompt" style={{ position: 'absolute', left: 200, top: 650, width: 440, height: 90, border: '1px solid #555', borderRadius: 12 }}
+          onClick={() => window.companionClicks = (window.companionClicks || 0) + 1}>Prompt input</button>
+        <aside data-companion-zone="right" data-companion-wall="left" style={{ position: 'absolute', left: 680, top: 40, width: 360, height: 720, borderLeft: '1px solid #555' }}>
+          <div data-companion-floor={scene + '-toolbar'} style={{ marginTop: 260, borderTop: '1px solid #555' }}>{scene} toolbar</div>
+          <div data-companion-floor={scene + '-footer'} style={{ marginTop: 290, borderTop: '1px solid #555' }}>Status</div>
+          <div data-companion-floor="hidden-tab" style={{ visibility: 'hidden', marginTop: 10 }}>Hidden tab</div>
+        </aside>
+        <SessionCompanions sessions={sessions} scene={scene} />
+      </>);
+    };
     window.addEventListener('error', event => console.error(event.message));
   `);
   await build({ entryPoints: [entry], outfile: path.join(temp, 'harness.js'), bundle: true, platform: 'browser', jsx: 'automatic', nodePaths: [path.join(root, 'node_modules')] });
@@ -139,8 +161,41 @@ async function main() {
   await js(`document.querySelector('button[title="Refresh usage"]').click()`);
   await until(`!!document.querySelector('[aria-label^="5h: 0% used"]')`);
   assert.equal(await js(`document.querySelector('[aria-label^="5h: 0% used"]').textContent.includes('100%')`), true);
+  win.setSize(1100, 820);
+  await js(`window.originalRandom = Math.random; Math.random = () => .5; renderCompanions()`);
+  await until(`document.querySelectorAll('.session-companion').length === 2 && [...document.querySelectorAll('.session-companion')].every(e => e.style.visibility === 'visible')`);
+  const firstPosition = await js(`document.querySelector('.session-companion').style.transform`);
+  await until(`document.querySelector('.session-companion').style.transform !== ${JSON.stringify(firstPosition)}`);
+  await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'vault'`);
+  assert.equal(await js(`getComputedStyle(document.querySelector('.session-companions')).pointerEvents`), 'none');
+  assert.equal(await js(`const r = document.querySelector('[data-companion-floor="prompt"]').getBoundingClientRect(); document.elementFromPoint(r.x + 20, r.y + 20).click(); window.companionClicks`), 1);
+  await until(`document.querySelector('[data-agent="claude"]').dataset.zone === 'right' && document.querySelector('[data-agent="claude"]').dataset.travel === 'rest'`);
+  await js(`renderCompanions('idle', 'git')`);
+  await until(`document.querySelector('[data-agent="claude"]').dataset.travel === 'eject' && document.querySelector('[data-agent="claude"]').dataset.floor === 'prompt'`);
+  await js(`renderCompanions('running', 'git')`);
+  await until(`document.querySelector('[data-agent="claude"]').dataset.pose === 'wave'`);
+  assert.equal(await js(`document.querySelector('[data-agent="claude"]').dataset.floor`), 'prompt');
+  await js(`document.querySelector('[data-companion-floor="prompt"]').style.top = '580px'`);
+  await until(`Math.abs(new DOMMatrixReadOnly(document.querySelector('[data-agent="claude"]').style.transform).m42 - 526) < 1`);
+  await js(`Math.random = () => .01`);
+  await until(`document.querySelector('[data-agent="codex"]').dataset.floor === 'favorites-divider' && document.querySelector('[data-agent="codex"]').dataset.travel === 'rest'`);
+  const beforeScroll = await js(`new DOMMatrixReadOnly(document.querySelector('[data-agent="codex"]').style.transform).m42`);
+  await js(`document.querySelector('[data-companion-zone="left"]').scrollTop = 20`);
+  await until(`Math.abs(new DOMMatrixReadOnly(document.querySelector('[data-agent="codex"]').style.transform).m42 - ${beforeScroll - 20}) < 1`);
+  const companionScreenshot = path.join(os.tmpdir(), 'mac-vibe-companions.png');
+  await fs.writeFile(companionScreenshot, (await win.webContents.capturePage()).toPNG());
+  win.webContents.debugger.attach('1.3');
+  await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  await until(`getComputedStyle(document.querySelector('.session-companions')).display === 'none'`);
+  await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+  await until(`document.querySelector('[data-agent="claude"]').style.visibility === 'visible'`);
+  win.webContents.debugger.detach();
+  await js(`renderCompanions('closed', 'git')`);
+  await until(`document.querySelectorAll('.session-companion').length === 1 && !document.querySelector('[data-agent="claude"]')`);
+  await js(`Math.random = originalRandom; renderUsage()`);
+  await until(`!document.querySelector('.session-companions')`);
   assert.deepEqual(errors, []);
-  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage. Screenshot: ${screenshot}`);
+  console.log(`UI checks passed: project/diff races, branch creation, duplicate commit, markdown safety, update disconnect and restart timeout, usage failure and zero usage, companion wall vaults, tab ejection, click-through, waiting, layout changes, reduced motion and cleanup. Screenshots: ${screenshot}, ${companionScreenshot}`);
 }
 
 async function finish(code) {

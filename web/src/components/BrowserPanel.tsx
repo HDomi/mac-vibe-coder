@@ -179,7 +179,7 @@ function ScreencastBrowserPanel({ visible, onCapture }: Props) {
 
   return (
     <div className="h-full flex flex-col" data-own-find>
-      <div className="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
+      <div data-companion-floor="browser-toolbar" data-companion-edge="bottom" className="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
         <button className={btn} disabled={!state?.canBack} onClick={() => send({ type: 'back' })} title={t('browser.back')}><Icon name="back" /></button>
         <button className={btn} disabled={!state?.canForward} onClick={() => send({ type: 'forward' })} title={t('browser.forward')}><Icon name="forward" /></button>
         <button className={btn} disabled={!ready} onClick={() => send({ type: state?.loading ? 'stop' : 'reload' })} title={state?.loading ? t('browser.stop') : t('browser.reload')}><Icon name={state?.loading ? 'close' : 'reload'} /></button>
@@ -292,7 +292,7 @@ function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: Na
 
   return (
     <div className="h-full flex flex-col" data-own-find>
-      <div className="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
+      <div data-companion-floor="browser-toolbar" data-companion-edge="bottom" className="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
         <button className={btn} disabled={!state?.canBack} onClick={() => void native.back()} title={t('browser.back')}><Icon name="back" /></button>
         <button className={btn} disabled={!state?.canForward} onClick={() => void native.forward()} title={t('browser.forward')}><Icon name="forward" /></button>
         <button className={btn} onClick={() => void (state?.loading ? native.stop() : native.reload())} title={state?.loading ? t('browser.stop') : t('browser.reload')}><Icon name={state?.loading ? 'close' : 'reload'} /></button>

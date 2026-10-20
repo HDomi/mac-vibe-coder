@@ -209,6 +209,7 @@ export default function Sidebar(p: Props) {
           </div>
           {favorites.length === 0 && !creatingGroup && <div className="px-2 text-xs text-zinc-600">{t('sidebar.emptyFavorites')}</div>}
         </Section>
+        <div data-companion-floor="favorites-divider" role="separator" className="h-px bg-white/10 mx-2 mb-4" />
         {p.recent.length > 0 && (
           <Section title={t('sidebar.recent')} right={<button className="text-[10px] text-zinc-600 hover:text-zinc-300" onClick={() => Promise.all(p.recent.map((r) => api.removeRecent(r))).then(() => p.onRecentChange([])).catch(() => {})}>{t('sidebar.clear')}</button>}>
             {p.recent.slice(0, 8).map((r) => (
@@ -218,7 +219,7 @@ export default function Sidebar(p: Props) {
         )}
       </div>
       {/* Recent sessions: pinned to the bottom quarter of the sidebar with its own scroll. */}
-      <div className="h-1/4 min-h-[120px] shrink-0 flex flex-col border-t border-white/10 bg-[#0b0d12]">
+      <div data-companion-floor="recent-sessions" className="h-1/4 min-h-[120px] shrink-0 flex flex-col border-t border-white/10 bg-[#0b0d12]">
         <div className="h-8 shrink-0 flex items-center gap-2 px-3 bg-white/[0.04] border-b border-white/5">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
           <span className="text-[11px] font-semibold tracking-wide text-zinc-300">{t('sidebar.recentSessions')}</span>

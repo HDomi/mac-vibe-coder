@@ -199,7 +199,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
         <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={newFolder} title={t('files.newFolder')}><Icon name="plus" /></button>
         <button className={`w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 ${isFavorite ? 'text-amber-300' : 'text-zinc-400'}`} onClick={onToggleFavorite} title={isFavorite ? t('sidebar.removeFavorite') : t('sidebar.addFavorite')}><Icon name="star" filled={isFavorite} /></button>
       </div>
-      <div className="h-9 shrink-0 flex items-center gap-2 px-3 border-b border-white/5">
+      <div data-companion-floor="files-toolbar" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-2 px-3 border-b border-white/5">
         <Icon name="search" size={14} className="text-zinc-500" />
         <input ref={searchInput} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('files.searchPlaceholder')} aria-label={t('files.searchPlaceholder')}
           onKeyDown={(e) => {
@@ -274,7 +274,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
         )}
       </div>
       )}
-      <div className="h-6 shrink-0 flex items-center px-3 text-[10px] text-zinc-600 border-t border-white/5">
+      <div data-companion-floor="files-footer" className="h-6 shrink-0 flex items-center px-3 text-[10px] text-zinc-600 border-t border-white/5">
         {selected.size > 0 ? t('files.selected', { n: selected.size }) : t('files.items', { n: entries.length })} · {t('files.footerHint')}
       </div>
     </div>
