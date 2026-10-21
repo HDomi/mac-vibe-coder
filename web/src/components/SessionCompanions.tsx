@@ -17,12 +17,53 @@ type Actor = {
   airborne: boolean;
   /** Lets the shooter stop whatever the target was doing. */
   halt: () => void;
+  /** Ends a calm-pace wait so the figure reacts on the next frame (the peer starts a fight with it). */
+  wake: () => void;
 };
 /** One queued motion: a hold (no `to`) or a move between two points, optionally landing on a floor. */
 type Step = { pose: Pose; duration: number; start?: number; from?: Point; to?: Point; height?: number; ease?: 'linear' | 'smooth' | 'gravity'; floor?: Floor; face?: number; onEnd?: (now: number) => void };
 type Rect = { left: number; right: number; top: number; bottom: number };
 const AGENTS: AgentId[] = ['claude', 'codex'];
 const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
+
+/**
+ * One clock drives both figures so their updates land in the same frame. A figure standing still in its idle pose
+ * only steps at the calm pace, and while every figure is calm a timer waits out the gap instead of asking for every
+ * display refresh.
+ */
+const FRAME_MS = 30, SETTLE_MS = 600;
+/** A calm figure steps at most every CALM_STEP_MS; the all-calm timer waits a little longer because a frame's timestamp can trail the clock by one refresh. */
+const CALM_STEP_MS = 70, CALM_WAIT_MS = 90;
+/** A figure's step for one frame; returns true when it is settled and can run at the calm pace. */
+type Stepper = (now: number) => boolean;
+const clock = { steppers: new Set<Stepper>(), frame: 0, wait: 0, last: 0 };
+function clockTick(now: number) {
+  clock.frame = 0;
+  if (now - clock.last < FRAME_MS) { clock.frame = requestAnimationFrame(clockTick); return; }
+  clock.last = now;
+  let calm = true;
+  for (const step of clock.steppers) if (!step(now)) calm = false;
+  if (!clock.steppers.size) return;
+  if (calm) clock.wait = window.setTimeout(() => { clock.wait = 0; clock.frame = requestAnimationFrame(clockTick); }, CALM_WAIT_MS);
+  else clock.frame = requestAnimationFrame(clockTick);
+}
+/** Run the next frame at once instead of after the calm-pace wait (input, scroll, resize). */
+function wakeClock() {
+  if (clock.frame || !clock.steppers.size) return;
+  window.clearTimeout(clock.wait); clock.wait = 0;
+  clock.frame = requestAnimationFrame(clockTick);
+}
+function joinClock(step: Stepper) { clock.steppers.add(step); wakeClock(); }
+function leaveClock(step: Stepper) {
+  clock.steppers.delete(step);
+  if (!clock.steppers.size) { cancelAnimationFrame(clock.frame); window.clearTimeout(clock.wait); clock.frame = 0; clock.wait = 0; }
+}
+/** Platforms are measured once for both figures, at most every 300ms or when the scene changes; `at = -Infinity` forces a re-read. */
+const sharedScene = { at: -Infinity, scene: '', floors: [] as Floor[] };
+function measuredScenery(now: number, scene: string) {
+  if (scene !== sharedScene.scene || now - sharedScene.at > 300) { sharedScene.floors = scenery(); sharedScene.at = now; sharedScene.scene = scene; }
+  return sharedScene.floors;
+}
 
 /** Platforms: explicit floors, list rows as ladder rungs, and one ground per panel (marked or the panel's bottom edge). */
 function scenery() {
@@ -110,10 +151,10 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
     const drawn: number[][] = [];
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
     const actor: Actor = { position: { x: 0, y: 0 }, floor: '', busy: false, direction: 1, cooldown: 0, fight: 0, fightUntil: 0, hits: 0, hitUntil: 0, downUntil: 0, nextAttack: 0, attack: null,
-      gun: null, lastGun: -Infinity, shotUntil: 0, collapse: 0, airborne: false, halt: () => { queue = []; actor.busy = false; actor.attack = null; } };
+      gun: null, lastGun: -Infinity, shotUntil: 0, collapse: 0, airborne: false, halt: () => { queue = []; actor.busy = false; actor.attack = null; calmUntil = 0; }, wake: () => { calmUntil = 0; } };
     actors.current.set(agent, actor);
-    let frame = 0, last = 0, measured = -Infinity, nextMove = 0, lastCross = -Infinity, lastLeap = -Infinity, phase = 0, poseSince = 0, shownPose: Pose = 'idle';
-    let floors: Floor[] = [], initialized = false, zone = '', seenScene = scene;
+    let last = 0, calmUntil = 0, nextMove = 0, lastCross = -Infinity, lastLeap = -Infinity, phase = 0, poseSince = 0, shownPose: Pose = 'idle';
+    let floors: Floor[] = [], initialized = false, zone = '';
     let queue: Step[] = [], tilt = 0;
     let drag: { pointer: number; dx: number; dy: number; x: number; y: number; moved: boolean } | null = null;
     const clamp = (floor: Floor, x: number) => ({ x: Math.max(floor.left, Math.min(floor.right, x)), y: floor.y });
@@ -249,6 +290,7 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
     };
     const startFight = (peer: Actor, now: number) => {
       const until = now + fightDuration();
+      peer.wake();
       for (const a of [actor, peer]) { a.fight = now; a.fightUntil = until; a.hits = 0; a.hitUntil = 0; a.downUntil = 0; a.attack = null; a.nextAttack = now + 300 + Math.random() * 400; a.cooldown = now + 45000; }
       actor.direction = peer.position.x > actor.position.x ? 1 : -1; peer.direction = -actor.direction;
     };
@@ -312,27 +354,25 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
       el.dataset.pose = pose; el.dataset.floor = actor.floor; el.dataset.zone = zone; el.dataset.hits = String(actor.hits);
       el.dataset.travel = drag ? 'drag' : queue.length ? queue[0].pose : 'rest';
     };
-    const tick = (now: number) => {
-      frame = requestAnimationFrame(tick);
-      if (now - last < 30) return;
+    /** One animation step; returns true when the figure is settled in its idle pose and can run at the calm pace. */
+    const advance = (now: number): boolean => {
+      if (now < calmUntil) return true;
       const dt = Math.min(64, now - last); last = now;
-      const changed = seenScene !== current.current.scene;
-      if (changed) seenScene = current.current.scene;
-      if (changed || now - measured > 300) { floors = scenery(); measured = now; }
-      if (!floors.length) { el.style.visibility = 'hidden'; initialized = false; actor.busy = true; return; }
+      floors = measuredScenery(now, current.current.scene);
+      if (!floors.length) { el.style.visibility = 'hidden'; initialized = false; actor.busy = true; return true; }
       el.style.visibility = 'visible';
       if (!initialized) {
         const floor = groundOf('prompt', floors) ?? floors.find((f) => f.ground) ?? floors[0];
         actor.position = clamp(floor, floor.left + (agent === 'claude' ? .35 : .65) * (floor.right - floor.left));
         actor.floor = floor.id; zone = floor.zone; initialized = true; actor.busy = false; queue = []; rest(now);
       }
-      if (drag) { render(drag.moved ? 'drag' : 'idle', now); return; }
+      if (drag) { render(drag.moved ? 'drag' : 'idle', now); return false; }
       if (queue.some((s) => s.floor && !floors.some((f) => f.id === s.floor!.id))) { queue = []; actor.busy = false; }
       let floor = floors.find((f) => f.id === actor.floor);
       if (!floor && !queue.length) {
         // Lost scenery drops onto the panel's own floor; a vanished panel sends the figure back to the prompt.
         const landing = dropFloor(actor.position, floors, zone) ?? groundOf('prompt', floors) ?? dropFloor(actor.position, floors);
-        if (!landing) { el.style.visibility = 'hidden'; actor.busy = true; return; }
+        if (!landing) { el.style.visibility = 'hidden'; actor.busy = true; return true; }
         actor.fight = 0; actor.attack = null; landOn(landing, actor.position.x); floor = landing;
       }
       const waiting = current.current.sessions.some((s) => s.agent === agent && pendingRequests(s) > 0);
@@ -364,12 +404,17 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
         if (now < actor.shotUntil && !actor.gun) pose = 'shot';
       }
       render(pose, now);
+      const calm = pose === 'idle' && !queue.length && !actor.fight && !actor.gun && !actor.collapse && now - poseSince > SETTLE_MS;
+      calmUntil = calm ? now + CALM_STEP_MS : 0;
+      return calm;
     };
+    const stop = () => leaveClock(advance);
     const down = (e: PointerEvent) => {
       if (e.button !== 0 || !initialized || drag) return;
       e.preventDefault(); e.stopPropagation();
       drag = { pointer: e.pointerId, dx: actor.position.x - e.clientX, dy: actor.position.y - e.clientY, x: e.clientX, y: e.clientY, moved: false };
       el.setPointerCapture(e.pointerId);
+      calmUntil = 0; wakeClock();
     };
     const moveDrag = (e: PointerEvent) => {
       if (!drag || e.pointerId !== drag.pointer) return;
@@ -382,16 +427,18 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
       const { pointer, moved, x } = drag; drag = null;
       if (el.hasPointerCapture(pointer)) el.releasePointerCapture(pointer);
       const now = performance.now();
+      calmUntil = 0; wakeClock();
       if (!moved) { ouch(x, now); return; }
-      floors = scenery(); measured = now;
+      sharedScene.at = -Infinity;
+      floors = measuredScenery(now, current.current.scene);
       const floor = dropFloor(actor.position, floors);
       if (floor) { queue = []; landOn(floor, actor.position.x); }
       else { initialized = false; actor.busy = true; }
     };
-    const invalidate = () => { measured = -Infinity; };
+    const invalidate = () => { sharedScene.at = -Infinity; calmUntil = 0; wakeClock(); };
     const sync = () => {
-      cancelAnimationFrame(frame); drop(); el.style.visibility = 'hidden'; actor.busy = true; actor.fight = 0; actor.attack = null; actor.gun = null; actor.collapse = 0;
-      if (!document.hidden && !media.matches) { measured = -Infinity; last = 0; queue = []; actor.busy = false; rest(performance.now()); frame = requestAnimationFrame(tick); }
+      stop(); drop(); el.style.visibility = 'hidden'; actor.busy = true; actor.fight = 0; actor.attack = null; actor.gun = null; actor.collapse = 0;
+      if (!document.hidden && !media.matches) { sharedScene.at = -Infinity; last = 0; calmUntil = 0; queue = []; actor.busy = false; rest(performance.now()); joinClock(advance); }
     };
     el.addEventListener('pointerdown', down); el.addEventListener('pointermove', moveDrag);
     el.addEventListener('pointerup', drop); el.addEventListener('pointercancel', drop); el.addEventListener('lostpointercapture', drop);
@@ -400,7 +447,7 @@ function Companion({ agent, sessions, scene, actors }: { agent: AgentId; session
     window.addEventListener('resize', invalidate); document.addEventListener('scroll', invalidate, true);
     sync();
     return () => {
-      cancelAnimationFrame(frame); actors.current.delete(agent);
+      stop(); actors.current.delete(agent);
       el.removeEventListener('pointerdown', down); el.removeEventListener('pointermove', moveDrag);
       el.removeEventListener('pointerup', drop); el.removeEventListener('pointercancel', drop); el.removeEventListener('lostpointercapture', drop);
       window.removeEventListener('blur', drop);
