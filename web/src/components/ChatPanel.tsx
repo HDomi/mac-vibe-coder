@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { currentTodos, type ChatItem, type ChatSession } from '../lib/chatStore';
+import { currentTodos, displayTitle, type ChatItem, type ChatSession } from '../lib/chatStore';
 import type { AgentId, Attachment, PermissionModeId, RewindResult } from '../lib/agent';
 import { api, type HistorySession, type ModelInfo } from '../lib/api';
 import Composer, { type BackgroundSession } from './Composer';
@@ -263,6 +263,15 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
     if (!done.canRewind) window.alert(t('rewind.failed', { reason: done.error ?? '' }));
   };
   const jump = () => { stick.current = true; setAtBottom(true); scrollToBottom(); };
+  // Bring the tool card that started a subagent into view (from the task relation graph).
+  const showToolCard = (toolUseId: string) => {
+    const el = content.current?.querySelector<HTMLElement>(`[data-tool-use="${CSS.escape(toolUseId)}"]`);
+    if (!el) return;
+    stick.current = false; setAtBottom(false);
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.add('ring-2', 'ring-violet-400/60');
+    setTimeout(() => el.classList.remove('ring-2', 'ring-violet-400/60'), 1800);
+  };
   const onScroll = () => {
     if (programmatic.current) return;
     const el = scroller.current; if (!el) return;
@@ -337,7 +346,8 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
       <Composer key={session.id} draftKey={session.id} cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
         onSend={(text, atts) => { stick.current = true; setAtBottom(true); onSend(text, atts); requestAnimationFrame(scrollToBottom); }}
         onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments}
-        background={background} onFocusSession={onFocusSession} />
+        background={background} onFocusSession={onFocusSession}
+        tasks={session.tasks} taskRootLabel={displayTitle(session, 24) ?? (session.agent === 'codex' ? 'Codex' : 'Claude')} taskRootSub={session.agentSessionId?.slice(0, 8)} onShowTaskCard={showToolCard} />
     </div>
   );
 }

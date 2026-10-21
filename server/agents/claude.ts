@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { query, type Options, type PermissionResult, type PermissionUpdate, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AgentEvent, AgentSession, AssistantBlock, Attachment, PermissionModeId, Question, RewindResult } from './types.js';
+import type { AgentEvent, AgentSession, AssistantBlock, Attachment, PermissionModeId, Question, RewindResult, TaskInfo } from './types.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { mimeOf } from '../mime.js';
@@ -68,6 +68,8 @@ export class ClaudeSession implements AgentSession {
   /** Incremented on every (re)launch so a superseded pump does not report 'closed'. */
   private generation = 0;
   private relaunching: Promise<void> | null = null;
+  /** Subagents and background tasks of the current CLI process, by task id. */
+  private tasks = new Map<string, TaskInfo>();
 
   constructor(private opts: ClaudeSessionOptions) {
     this.cwd = opts.cwd;
@@ -87,6 +89,8 @@ export class ClaudeSession implements AgentSession {
 
   private launch() {
     const gen = ++this.generation;
+    // Tasks are per process: a relaunch leaves the old ones orphaned.
+    if (this.tasks.size) { this.tasks.clear(); this.emit({ kind: 'task.reset' }); }
     const options: Options = {
       cwd: this.opts.cwd,
       pathToClaudeCodeExecutable: this.opts.claudePath,
@@ -177,6 +181,8 @@ export class ClaudeSession implements AgentSession {
           const s = (m as { status?: string | null }).status;
           const status = s === 'compacting' ? 'compacting' : s === 'requesting' ? 'running' : this.running ? 'running' : 'idle';
           this.emit({ kind: 'status', status, permissionMode: (m as { permissionMode?: string }).permissionMode });
+        } else if (m.subtype === 'task_started' || m.subtype === 'task_progress' || m.subtype === 'task_updated' || m.subtype === 'task_notification' || m.subtype === 'background_tasks_changed') {
+          this.handleTask(m);
         }
         return;
       }
@@ -231,6 +237,74 @@ export class ClaudeSession implements AgentSession {
       }
       default:
         return;
+    }
+  }
+
+  /**
+   * Keep one TaskInfo per subagent / background task and push every change to the client.
+   * task_started and task_notification bookend a task; task_progress / task_updated patch it;
+   * background_tasks_changed is the level signal (REPLACE semantics) and is the only thing that
+   * tells us a backgrounded task is gone when its notification was missed.
+   */
+  private handleTask(m: Extract<SDKMessage, { type: 'system' }>) {
+    const upsert = (t: TaskInfo) => { this.tasks.set(t.id, t); this.emit({ kind: 'task', task: t }); };
+    const now = Date.now();
+    switch (m.subtype) {
+      case 'task_started': {
+        const prev = this.tasks.get(m.task_id);
+        upsert({
+          ...prev,
+          id: m.task_id, type: m.task_type ?? prev?.type ?? 'local_agent', subagentType: m.subagent_type ?? prev?.subagentType,
+          description: m.description || prev?.description || '', parentId: m.parent_task_id ?? prev?.parentId, toolUseId: m.tool_use_id ?? prev?.toolUseId,
+          status: 'running', background: m.is_backgrounded ?? prev?.background, ambient: m.ambient || m.skip_transcript || undefined, startedAt: prev?.startedAt ?? now,
+        });
+        return;
+      }
+      case 'task_progress': {
+        const prev = this.tasks.get(m.task_id);
+        upsert({
+          ...prev,
+          id: m.task_id, type: prev?.type ?? 'local_agent', subagentType: m.subagent_type ?? prev?.subagentType, description: m.description || prev?.description || '',
+          toolUseId: m.tool_use_id ?? prev?.toolUseId, status: prev?.status ?? 'running', startedAt: prev?.startedAt ?? now,
+          usage: { totalTokens: m.usage.total_tokens, toolUses: m.usage.tool_uses, durationMs: m.usage.duration_ms }, lastTool: m.last_tool_name ?? prev?.lastTool, summary: m.summary ?? prev?.summary,
+        });
+        return;
+      }
+      case 'task_updated': {
+        const prev = this.tasks.get(m.task_id);
+        if (!prev) return;
+        const p = m.patch;
+        const status: TaskInfo['status'] = p.status === 'completed' ? 'completed' : p.status === 'failed' ? 'failed' : p.status === 'killed' ? 'stopped' : prev.status;
+        upsert({ ...prev, status, description: p.description ?? prev.description, background: p.is_backgrounded ?? prev.background, error: p.error ?? prev.error, endedAt: status === 'running' ? prev.endedAt : prev.endedAt ?? p.end_time ?? now });
+        return;
+      }
+      case 'task_notification': {
+        const prev = this.tasks.get(m.task_id);
+        upsert({
+          ...prev,
+          id: m.task_id, type: prev?.type ?? 'local_agent', description: prev?.description ?? m.summary ?? '', toolUseId: m.tool_use_id ?? prev?.toolUseId,
+          status: m.status, ambient: prev?.ambient ?? (m.ambient || m.skip_transcript || undefined), startedAt: prev?.startedAt ?? now, endedAt: now,
+          usage: m.usage ? { totalTokens: m.usage.total_tokens, toolUses: m.usage.tool_uses, durationMs: m.usage.duration_ms } : prev?.usage, summary: m.summary || prev?.summary,
+        });
+        return;
+      }
+      case 'background_tasks_changed': {
+        const live = new Set<string>();
+        for (const t of m.tasks) {
+          live.add(t.task_id);
+          const prev = this.tasks.get(t.task_id);
+          const next: TaskInfo = {
+            ...prev, id: t.task_id, type: t.task_type, subagentType: t.subagent_type ?? prev?.subagentType, description: t.description || prev?.description || '',
+            parentId: t.parent_task_id ?? prev?.parentId, status: prev?.status ?? 'running', background: true, ambient: t.ambient || prev?.ambient || undefined, startedAt: prev?.startedAt ?? now,
+          };
+          if (!prev || prev.parentId !== next.parentId || prev.ambient !== next.ambient || prev.description !== next.description || !prev.background) upsert(next);
+        }
+        // A backgrounded task that left the set without a notification has ended; foreground tasks are never listed here, so leave them alone.
+        for (const t of this.tasks.values()) {
+          if (t.background && t.status === 'running' && !live.has(t.id)) upsert({ ...t, status: 'completed', endedAt: now });
+        }
+        return;
+      }
     }
   }
 

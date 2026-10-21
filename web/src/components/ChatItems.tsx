@@ -89,7 +89,7 @@ export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: '
   const isSubagent = SUBAGENT_TOOLS.has(item.name);
   const i = (item.input ?? {}) as Record<string, unknown>;
   return (
-    <div className={`rounded-lg border ${item.isError ? 'border-red-500/30' : isSubagent && !item.done ? 'border-violet-400/40' : 'border-white/10'} ${isSubagent ? 'bg-violet-500/[0.04]' : 'bg-white/[0.03]'} text-[13px] ${item.parent ? 'ml-6' : ''}`}>
+    <div data-tool-use={item.id} className={`rounded-lg border ${item.isError ? 'border-red-500/30' : isSubagent && !item.done ? 'border-violet-400/40' : 'border-white/10'} ${isSubagent ? 'bg-violet-500/[0.04]' : 'bg-white/[0.03]'} text-[13px] ${item.parent ? 'ml-6' : ''}`}>
       <button className="w-full flex items-center gap-2 px-3 py-1.5 text-left" onClick={() => setOpen((v) => !v)}>
         <span className={`w-1.5 h-1.5 rounded-full ${item.done ? (item.isError ? 'bg-red-400' : 'bg-emerald-400') : 'bg-amber-400 animate-pulse'}`} />
         {isSubagent && <span className={`text-[10px] rounded px-1.5 py-0.5 ${item.done ? 'bg-violet-500/15 text-violet-200' : 'bg-violet-500/25 text-violet-100 animate-pulse'}`}>{item.done ? t('items.subagent') : t('items.subagentWorking')}</span>}

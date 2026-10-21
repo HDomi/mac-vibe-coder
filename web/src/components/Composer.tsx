@@ -6,6 +6,8 @@ import { openLightbox } from './Lightbox';
 import FileIcon from './FileIcon';
 import PromptMenu from './PromptMenu';
 import { draftKey as draftStorageKey, readDraft, writeDraft } from '../lib/draft';
+import TaskChips from './TaskChips';
+import type { TaskInfo } from '../lib/agent';
 
 interface Props {
   /** Session working directory; root for "@" file mentions. */
@@ -27,6 +29,12 @@ interface Props {
   onFocusSession?: (id: string) => void;
   /** Stable id (session id) under which unsent text and attachments survive view switches and restarts. */
   draftKey?: string;
+  /** This session's subagents / background tasks (Claude); shown as purple chips that open the relation graph. */
+  tasks?: Record<string, TaskInfo>;
+  /** Root node label of that graph: the session title, else the agent name. */
+  taskRootLabel?: string;
+  taskRootSub?: string;
+  onShowTaskCard?: (toolUseId: string) => void;
 }
 
 export interface BackgroundSession { id: string; name: string; state: 'running' | 'waiting' }
@@ -46,7 +54,7 @@ function toAttachment(path: string, name?: string): Attachment {
   return { path, name: n, kind: IMAGE_RE.test(n) ? 'image' : 'file' };
 }
 
-export default function Composer({ cwd, agent, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments, background = [], onFocusSession, draftKey }: Props) {
+export default function Composer({ cwd, agent, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments, background = [], onFocusSession, draftKey, tasks, taskRootLabel, taskRootSub, onShowTaskCard }: Props) {
   useLang();
   const storageKey = draftKey ? draftStorageKey(draftKey) : null;
   const [draft] = useState(() => readDraft(storageKey));
@@ -254,6 +262,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
           </label>
           <PromptMenu draft={text} onInsert={insertText} disabled={disabled} />
           {uploading && <span className="text-xs text-zinc-500">{t('composer.uploading')}</span>}
+          {tasks && <TaskChips tasks={tasks} rootLabel={taskRootLabel ?? (agent === 'codex' ? 'Codex' : 'Claude')} rootSub={taskRootSub} onShowCard={onShowTaskCard} />}
           {background.length > 0 && (
             <div className="flex items-center gap-1 min-w-0 overflow-hidden" title={t('composer.backgroundTitle', { n: background.length })}>
               {background.slice(0, MAX_BACKGROUND_CHIPS).map((b) => (

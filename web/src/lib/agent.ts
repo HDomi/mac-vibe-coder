@@ -28,9 +28,39 @@ export type AgentEvent =
   | { kind: 'error'; message: string; command?: string }
   /** The agent's own task checklist (Codex plan updates; Claude's TodoWrite is read from the tool call). */
   | { kind: 'todos'; items: TodoItem[] }
+  /** Upsert of one subagent / background task (Claude). Replace the entry with the same id. */
+  | { kind: 'task'; task: TaskInfo }
+  /** The CLI process (re)started: every remembered task belongs to a process that is gone. */
+  | { kind: 'task.reset' }
   | { kind: 'log'; text: string };
 
 export interface TodoItem { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }
+
+export type TaskStatus = 'running' | 'completed' | 'failed' | 'stopped';
+
+/** A subagent, background shell, monitor or workflow the session spawned; the chips above the composer and the relation graph are built from these. */
+export interface TaskInfo {
+  id: string;
+  /** CLI task type: local_agent, local_bash, monitor, local_workflow, ... */
+  type: string;
+  /** Agent type name of a local_agent task (general-purpose, Explore, ...). */
+  subagentType?: string;
+  description: string;
+  /** Task that spawned this one; absent when the main thread did. */
+  parentId?: string;
+  /** The tool_use block that started the task; its card in the transcript. */
+  toolUseId?: string;
+  status: TaskStatus;
+  background?: boolean;
+  /** Housekeeping tasks the CLI asks hosts to keep out of activity indicators. */
+  ambient?: boolean;
+  startedAt: number;
+  endedAt?: number;
+  usage?: { totalTokens: number; toolUses: number; durationMs: number };
+  lastTool?: string;
+  summary?: string;
+  error?: string;
+}
 
 export interface RewindResult { canRewind: boolean; error?: string; filesChanged?: string[]; insertions?: number; deletions?: number }
 

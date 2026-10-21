@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentId, Attachment, PermissionModeId, Question, TodoItem } from './agent';
+import type { AgentEvent, AgentId, Attachment, PermissionModeId, Question, TaskInfo, TodoItem } from './agent';
 
 export type ChatItem =
   | { kind: 'user'; id: string; text: string; attachments: Attachment[]; pending?: boolean; /** Compaction summary injected by the CLI, not typed by the user. */ compact?: boolean }
@@ -70,6 +70,11 @@ export function currentTodos(s: ChatSession): TodoItem[] {
   return [];
 }
 
+/** Subagents and background tasks still working, oldest first; housekeeping tasks are left out. */
+export function liveTasks(s: Pick<ChatSession, 'tasks'>): TaskInfo[] {
+  return Object.values(s.tasks ?? {}).filter((t) => t.status === 'running' && !t.ambient).sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id));
+}
+
 /** Tab order: pinned first, then most recent activity. Stable for ties so tabs do not shuffle. */
 export function sortSessions<T extends Pick<ChatSession, 'pinned' | 'lastActivity'>>(list: T[]): T[] {
   return list.map((s, i) => ({ s, i }))
@@ -98,6 +103,8 @@ export interface ChatSession {
   restoring?: boolean;
   /** Latest task checklist from the agent (TodoWrite / Codex plan); shown above the composer. */
   todos?: TodoItem[];
+  /** Subagents and background tasks of the current CLI process, by task id (Claude). Ended ones stay for the relation graph. */
+  tasks?: Record<string, TaskInfo>;
   /** Pinned tabs stay in front of the activity order. */
   pinned?: boolean;
   /** Last turn start, turn end or request (server ms); tabs sort by this, newest first. */
@@ -185,6 +192,12 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
     case 'todos':
       next.todos = e.items;
       return next;
+    case 'task':
+      next.tasks = { ...s.tasks, [e.task.id]: e.task };
+      return next;
+    case 'task.reset':
+      next.tasks = undefined;
+      return next;
     case 'tool.start':
       if (e.name === 'TodoWrite') { const todos = todosFromInput(e.input); if (todos) next.todos = todos; }
       items.push({ kind: 'tool', id: e.toolUseId, name: e.name, input: e.input, output: null, isError: false, parent: e.parent, elapsed: 0, done: false });
@@ -229,6 +242,11 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
           const item = items[i];
           if (item.kind === 'user' && item.pending) items[i] = { ...item, pending: false };
           if (item.kind === 'assistant' && item.streaming) items[i] = { ...item, streaming: false };
+        }
+        // The CLI process is gone, and its subagents with it.
+        if (s.tasks && Object.values(s.tasks).some((t) => t.status === 'running')) {
+          const ended = Date.now();
+          next.tasks = Object.fromEntries(Object.values(s.tasks).map((t) => [t.id, t.status === 'running' ? { ...t, status: 'stopped' as const, endedAt: ended } : t]));
         }
       }
       if (e.permissionMode) next.permissionMode = e.permissionMode as PermissionModeId;
