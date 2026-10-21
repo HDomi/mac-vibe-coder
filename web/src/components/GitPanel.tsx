@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type GitBranch, type GitCommit, type GitCommitFile, type GitFile, type GitStatus } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
+import { pollWhileActive } from '../lib/poll';
 import CommitGraph from './CommitGraph';
 import Icon from './Icon';
 
@@ -113,8 +114,7 @@ export default function GitPanel({ cwd, visible }: Props) {
   useEffect(() => { if (visible) refresh(); }, [visible, refresh]);
   useEffect(() => {
     if (!visible || !cwd) return;
-    const timer = setInterval(refresh, 8000);
-    return () => clearInterval(timer);
+    return pollWhileActive(refresh, 8000);
   }, [visible, cwd, refresh]);
   useEffect(() => {
     if (!cwd || !sel) { setDiff(''); return; }

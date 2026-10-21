@@ -280,7 +280,8 @@ function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: Na
     ro.observe(el);
     window.addEventListener('resize', sync);
     // Position changes (panel animations, overlays opening) do not always resize the placeholder.
-    const timer = setInterval(sync, 150);
+    // A hidden panel has nothing to track, so it skips the 150ms layout probe.
+    const timer = visible ? setInterval(sync, 150) : undefined;
     return () => { ro.disconnect(); window.removeEventListener('resize', sync); clearInterval(timer); shownRef.current = false; void native.hide(); };
   }, [visible, native]);
 

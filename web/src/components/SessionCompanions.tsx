@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { pendingRequests, type ChatSession } from '../lib/chatStore';
 import AgentIcon from './AgentIcon';
 import { aimAngle, ATTACKS, atWall, chooseAction, chooseAttack, cycleLength, DOWN_DURATION, dropFloor, fallDuration, FIGHT_BREAK, FIGHT_RANGE, fightDuration, floorBelow, FOOT, GESTURE_DURATION, GESTURES, groundOf, HALF_WIDTH, HIT_DURATION, hops, landsHit, leapTargets, muzzle, neighborZone, restDuration, RIFLE, SCALE, skeleton, SPEED, STOCK, type AttackKind, type Floor, type Point, type Pose, type Side } from '../lib/companionMotion';
+import { pollWhileActive } from '../lib/poll';
 
 type Actor = {
   position: Point; floor: string; busy: boolean; direction: number; cooldown: number;
@@ -87,8 +88,8 @@ export default function SessionCompanions({ sessions, scene = '' }: { sessions: 
     let on = true;
     const load = () => api.tools().then((info) => { if (on) setConnected(info.tools.filter((t) => t.installed && t.loggedIn !== false).map((t) => t.id)); }).catch(() => {});
     load();
-    const timer = setInterval(load, 60000);
-    return () => { on = false; clearInterval(timer); };
+    const stop = pollWhileActive(load, 60000);
+    return () => { on = false; stop(); };
   }, []);
   const live = sessions.filter((s) => !s.restoring && s.status !== 'closed' && s.status !== 'starting');
   return <div className="session-companions">

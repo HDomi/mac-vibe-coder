@@ -3,6 +3,7 @@ import { api, type Favorite, type FavoriteGroup, type Favorites, type HomeInfo, 
 import { useContextMenu, type MenuItem } from './ContextMenu';
 import { UpdateBadge } from './UpdatePanel';
 import { t, useLang } from '../lib/i18n';
+import { pollWhileActive } from '../lib/poll';
 import ProjectIcon from './ProjectIcon';
 import AgentIcon from './AgentIcon';
 import Icon from './Icon';
@@ -85,8 +86,7 @@ export default function Sidebar(p: Props) {
   useEffect(() => {
     const load = () => api.historyAll().then(setSessions).catch(() => {});
     load();
-    const timer = setInterval(load, 60000);
-    return () => clearInterval(timer);
+    return pollWhileActive(load, 60000);
   }, []);
 
   if (p.collapsed) {
