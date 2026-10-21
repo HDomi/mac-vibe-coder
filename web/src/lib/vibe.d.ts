@@ -37,6 +37,7 @@ declare global {
       /** Allow / always allow / deny chosen on an approval notification's buttons. */
       onNotificationApproval?: (cb: (answer: { sessionId: string; requestId: string; decision: 'allow' | 'allow_always' | 'deny' }) => void) => void;
       closeNotification?: (requestId: string) => void;
+      openNotificationSettings?: () => void;
       /** Native browser view for the Browser panel (Electron only). */
       browser?: NativeBrowser;
     };

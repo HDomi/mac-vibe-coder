@@ -225,6 +225,12 @@ ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?:
   }
   n.show();
 });
+// macOS remembers the first style it registered for the app, so the "alert" default in Info.plist only helps fresh
+// installs; existing users switch to alerts in System Settings, which this opens straight at the app's page.
+ipcMain.on('open-notification-settings', (e) => {
+  if (!fromApp(e)) return;
+  void shell.openExternal('x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.hdomi.mac-vibe-coder');
+});
 ipcMain.on('notify-close', (e, requestId: unknown) => {
   if (!fromApp(e) || typeof requestId !== 'string') return;
   approvalNotes.get(requestId)?.close();

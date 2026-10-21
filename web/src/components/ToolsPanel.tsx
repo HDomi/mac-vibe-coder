@@ -38,6 +38,12 @@ function GeneralSettings() {
           {t('settings.openAtLogin')}
         </label>
       ) : <div className="text-xs text-zinc-500">{t('settings.browserNote')}</div>}
+      {window.vibe?.openNotificationSettings && (
+        <div className="flex items-start gap-3 text-xs">
+          <span className="text-zinc-500 leading-relaxed flex-1">{t('settings.notificationStyle')}</span>
+          <button className="shrink-0 rounded-md bg-white/10 hover:bg-white/15 px-2.5 py-1.5 text-zinc-200" onClick={() => window.vibe!.openNotificationSettings!()}>{t('settings.openNotificationSettings')}</button>
+        </div>
+      )}
       <div className="text-xs text-zinc-500 leading-relaxed">{t('settings.shortcuts')}</div>
     </div>
   );

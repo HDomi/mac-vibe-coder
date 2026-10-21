@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('vibe', {
   // Approval answered from a notification button; closing drops a notification whose request was settled in the app.
   onNotificationApproval: (cb) => { ipcRenderer.on('notify-approval', (_e, answer) => cb(answer)); },
   closeNotification: (requestId) => ipcRenderer.send('notify-close', requestId),
+  // System Settings > Notifications > Mac Vibe Coder, for switching banners to alerts that stay on screen.
+  openNotificationSettings: () => ipcRenderer.send('open-notification-settings'),
   // Browser panel: a native Chromium view laid over the panel (see electron/browserView.cts).
   browser: {
     show: (bounds) => ipcRenderer.invoke('browser:show', bounds),

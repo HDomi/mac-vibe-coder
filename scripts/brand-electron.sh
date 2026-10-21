@@ -16,6 +16,8 @@ PB=/usr/libexec/PlistBuddy
 $PB -c "Set :CFBundleName $NAME" "$PLIST"
 $PB -c "Set :CFBundleDisplayName $NAME" "$PLIST" 2>/dev/null || $PB -c "Add :CFBundleDisplayName string $NAME" "$PLIST"
 $PB -c "Set :CFBundleIdentifier $BUNDLE_ID" "$PLIST"
+# Approval notifications carry buttons, so default to the "alert" style that stays on screen until dismissed.
+$PB -c "Set :NSUserNotificationAlertStyle alert" "$PLIST" 2>/dev/null || $PB -c "Add :NSUserNotificationAlertStyle string alert" "$PLIST"
 if [ -f "$ICON" ]; then
   cp "$ICON" "$APP/Contents/Resources/electron.icns"
 fi
