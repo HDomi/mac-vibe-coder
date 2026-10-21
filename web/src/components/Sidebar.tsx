@@ -3,7 +3,6 @@ import { api, type Favorite, type FavoriteGroup, type Favorites, type HomeInfo, 
 import { useContextMenu, type MenuItem } from './ContextMenu';
 import { UpdateBadge } from './UpdatePanel';
 import { t, useLang } from '../lib/i18n';
-import { alertDialog, confirmDialog } from '../lib/dialogs';
 import ProjectIcon from './ProjectIcon';
 import AgentIcon from './AgentIcon';
 import Icon from './Icon';
@@ -31,12 +30,12 @@ function Item({ label, path, active, onClick, onContextMenu, hint, indent, dragg
 }) {
   return (
     <div data-companion-rung=""
-      className={`group flex items-center gap-2 rounded-md py-1.5 text-sm cursor-pointer select-none ${indent ? 'pl-6 pr-2' : 'px-2'} ${active ? 'bg-fill/10 text-fg' : 'text-fg-2 hover:bg-fill/5'}`}
+      className={`group flex items-center gap-2 rounded-md py-1.5 text-sm cursor-pointer select-none ${indent ? 'pl-6 pr-2' : 'px-2'} ${active ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}
       onClick={onClick} onContextMenu={onContextMenu} title={path} draggable={draggable} onDragStart={onDragStart}
     >
-      {lead ?? (icon ? <ProjectIcon path={path} name={label} size={18} /> : <span className="text-fg-4">▸</span>)}
+      {lead ?? (icon ? <ProjectIcon path={path} name={label} size={18} /> : <span className="text-zinc-500">▸</span>)}
       <span className="truncate flex-1">{label}</span>
-      {hint && <span className="text-[10px] text-fg-5">{hint}</span>}
+      {hint && <span className="text-[10px] text-zinc-600">{hint}</span>}
     </div>
   );
 }
@@ -44,7 +43,7 @@ function Item({ label, path, active, onClick, onContextMenu, hint, indent, dragg
 function Section({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="mb-4">
-      <div className="px-2 mb-1 text-[11px] uppercase tracking-wider text-fg-4 flex items-center">{title}<div className="flex-1" />{right}</div>
+      <div className="px-2 mb-1 text-[11px] uppercase tracking-wider text-zinc-500 flex items-center">{title}<div className="flex-1" />{right}</div>
       {children}
     </div>
   );
@@ -92,18 +91,18 @@ export default function Sidebar(p: Props) {
 
   if (p.collapsed) {
     return (
-      <aside className="w-10 shrink-0 h-full flex flex-col items-center border-r border-fill/10 py-2 gap-2">
-        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-fill/10 text-fg-3" onClick={p.onToggle} title={t('sidebar.expand')}><Icon name="chevronsRight" /></button>
+      <aside className="w-10 shrink-0 h-full flex flex-col items-center border-r border-white/10 bg-[#0e1117] py-2 gap-2">
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onToggle} title={t('sidebar.expand')}><Icon name="chevronsRight" /></button>
         <div className="flex-1 flex flex-col items-center gap-1 overflow-hidden">
           {favorites.slice(0, 12).map((f) => (
             <button key={f.path} title={f.name} onClick={() => p.onNavigate(f.path)}
-              className={`w-7 h-7 rounded flex items-center justify-center ${p.cwd === f.path ? 'bg-fill/15 ring-1 ring-fill/30' : 'hover:bg-fill/10'}`}>
+              className={`w-7 h-7 rounded flex items-center justify-center ${p.cwd === f.path ? 'bg-white/15 ring-1 ring-white/30' : 'hover:bg-white/10'}`}>
               <ProjectIcon path={f.path} name={f.name} size={22} />
             </button>
           ))}
         </div>
-        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-fill/10 text-fg-3" onClick={p.onPickFolder} title={t('sidebar.openFolder')}><Icon name="plus" /></button>
-        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-fill/10 text-fg-3" onClick={p.onOpenSettings} title={t('common.settings')}><Icon name="gear" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onPickFolder} title={t('sidebar.openFolder')}><Icon name="plus" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onOpenSettings} title={t('common.settings')}><Icon name="gear" /></button>
       </aside>
     );
   }
@@ -145,8 +144,8 @@ export default function Sidebar(p: Props) {
     { label: t('common.copySessionId'), onClick: () => navigator.clipboard.writeText(s.sessionId) },
     ...(s.cwd ? [{ separator: true }, ...commonItems(s.cwd)] : []),
     { separator: true },
-    { label: s.pinned ? t('common.deleteUnpinFirst') : t('common.deletePermanently'), danger: true, disabled: !!s.pinned, onClick: async () => {
-      if (await confirmDialog(t('common.confirmDeleteSession', { title: s.title }), { ok: t('common.delete'), danger: true })) api.historyDelete(s.agent, s.sessionId, s.cwd ?? undefined).then(reloadSessions).catch((e) => alertDialog(e.message, 'error'));
+    { label: s.pinned ? t('common.deleteUnpinFirst') : t('common.deletePermanently'), danger: true, disabled: !!s.pinned, onClick: () => {
+      if (window.confirm(t('common.confirmDeleteSession', { title: s.title }))) api.historyDelete(s.agent, s.sessionId, s.cwd ?? undefined).then(reloadSessions).catch((e) => window.alert(e.message));
     } },
   ];
 
@@ -172,16 +171,15 @@ export default function Sidebar(p: Props) {
   const topLevel = favorites.filter((f) => !f.group || !groups.some((g) => g.id === f.group));
 
   return (
-    // No background: the sidebar column shows the window's vibrancy (see index.css / electron/main.cts).
-    <aside className="h-full flex flex-col border-r border-fill/10 min-w-0">
-      <div className="h-10 flex items-center px-3 text-xs text-fg-4">
-        <span className="pl-1 font-medium text-fg-3">Mac Vibe Coder</span>
+    <aside className="h-full flex flex-col border-r border-white/10 bg-[#0e1117] min-w-0">
+      <div className="h-10 flex items-center px-3 text-xs text-zinc-500">
+        <span className="pl-1 font-medium text-zinc-400">Mac Vibe Coder</span>
         <span className="ml-2"><UpdateBadge /></span>
         <div className="flex-1" />
-        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-fill/10 text-fg-3" onClick={p.onToggle} title={t('sidebar.collapse')}><Icon name="chevronsLeft" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onToggle} title={t('sidebar.collapse')}><Icon name="chevronsLeft" /></button>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-2">
-        <Section title={t('sidebar.favorites')} right={<button className="text-[11px] text-fg-4 hover:text-fg-1" title={t('sidebar.newGroup')} onClick={() => setCreatingGroup(true)}>{t('sidebar.newGroupBtn')}</button>}>
+        <Section title={t('sidebar.favorites')} right={<button className="text-[11px] text-zinc-500 hover:text-zinc-200" title={t('sidebar.newGroup')} onClick={() => setCreatingGroup(true)}>{t('sidebar.newGroupBtn')}</button>}>
           {creatingGroup && (
             <div className="px-2 mb-1 flex items-center gap-1">
               <span>📁</span>
@@ -192,28 +190,28 @@ export default function Sidebar(p: Props) {
             const items = favorites.filter((f) => f.group === g.id);
             return (
               <div key={g.id} className={`rounded-md ${dragOver === g.id ? 'bg-blue-500/15 ring-1 ring-blue-400/40' : ''}`} {...dropTarget(g.id)}>
-                <div className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-fg-1 cursor-pointer select-none hover:bg-fill/5"
+                <div className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-zinc-200 cursor-pointer select-none hover:bg-white/5"
                   onClick={() => apply(api.updateFavoriteGroup(g.id, { collapsed: !g.collapsed }))} onContextMenu={(e) => menu.open(e, groupMenu(g))}>
-                  <span className="text-[10px] text-fg-4 w-3">{g.collapsed ? '▸' : '▾'}</span>
+                  <span className="text-[10px] text-zinc-500 w-3">{g.collapsed ? '▸' : '▾'}</span>
                   <span>{g.collapsed ? '📁' : '📂'}</span>
                   {renaming?.kind === 'group' && renaming.id === g.id
                     ? <InlineInput value={g.name} onCancel={() => setRenaming(null)} onCommit={(v) => { setRenaming(null); if (v.trim() && v !== g.name) apply(api.updateFavoriteGroup(g.id, { name: v })); }} />
                     : <span className="truncate flex-1 font-medium">{g.name}</span>}
-                  <span className="text-[10px] text-fg-5">{items.length}</span>
+                  <span className="text-[10px] text-zinc-600">{items.length}</span>
                 </div>
                 {!g.collapsed && items.map((f) => renderFav(f, true))}
-                {!g.collapsed && items.length === 0 && <div className="pl-8 pr-2 py-1 text-[11px] text-fg-5">{t('sidebar.dropHere')}</div>}
+                {!g.collapsed && items.length === 0 && <div className="pl-8 pr-2 py-1 text-[11px] text-zinc-600">{t('sidebar.dropHere')}</div>}
               </div>
             );
           })}
           <div className={`rounded-md min-h-2 ${dragOver === '__top__' ? 'bg-blue-500/15 ring-1 ring-blue-400/40' : ''}`} {...dropTarget(null)}>
             {topLevel.map((f) => renderFav(f, false))}
           </div>
-          {favorites.length === 0 && !creatingGroup && <div className="px-2 text-xs text-fg-5">{t('sidebar.emptyFavorites')}</div>}
+          {favorites.length === 0 && !creatingGroup && <div className="px-2 text-xs text-zinc-600">{t('sidebar.emptyFavorites')}</div>}
         </Section>
-        <div data-companion-floor="favorites-divider" role="separator" className="h-px bg-fill/10 mx-2 mb-4" />
+        <div data-companion-floor="favorites-divider" role="separator" className="h-px bg-white/10 mx-2 mb-4" />
         {p.recent.length > 0 && (
-          <Section title={t('sidebar.recent')} right={<button className="text-[10px] text-fg-5 hover:text-fg-2" onClick={() => Promise.all(p.recent.map((r) => api.removeRecent(r))).then(() => p.onRecentChange([])).catch(() => {})}>{t('sidebar.clear')}</button>}>
+          <Section title={t('sidebar.recent')} right={<button className="text-[10px] text-zinc-600 hover:text-zinc-300" onClick={() => Promise.all(p.recent.map((r) => api.removeRecent(r))).then(() => p.onRecentChange([])).catch(() => {})}>{t('sidebar.clear')}</button>}>
             {p.recent.slice(0, 8).map((r) => (
               <Item key={r} label={r.split('/').pop() || r} path={r} active={p.cwd === r} icon onClick={() => p.onNavigate(r)} onContextMenu={(e) => menu.open(e, recentMenu(r))} />
             ))}
@@ -221,16 +219,16 @@ export default function Sidebar(p: Props) {
         )}
       </div>
       {/* Recent sessions: pinned to the bottom quarter of the sidebar with its own scroll. */}
-      <div data-companion-floor="recent-sessions" className="h-1/4 min-h-[120px] shrink-0 flex flex-col border-t border-fill/10">
-        <div className="h-8 shrink-0 flex items-center gap-2 px-3 bg-fill/[0.04] border-b border-fill/5">
+      <div data-companion-floor="recent-sessions" className="h-1/4 min-h-[120px] shrink-0 flex flex-col border-t border-white/10 bg-[#0b0d12]">
+        <div className="h-8 shrink-0 flex items-center gap-2 px-3 bg-white/[0.04] border-b border-white/5">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-          <span className="text-[11px] font-semibold tracking-wide text-fg-2">{t('sidebar.recentSessions')}</span>
-          <span className="text-[10px] text-fg-4 rounded-full bg-fill/5 px-1.5">{sessions.length}</span>
+          <span className="text-[11px] font-semibold tracking-wide text-zinc-300">{t('sidebar.recentSessions')}</span>
+          <span className="text-[10px] text-zinc-500 rounded-full bg-white/5 px-1.5">{sessions.length}</span>
           <div className="flex-1" />
-          <button className="w-7 h-7 flex items-center justify-center rounded-md text-fg-4 hover:text-fg-1 hover:bg-fill/10" onClick={reloadSessions} title={t('common.refresh')}><Icon name="reload" size={14} /></button>
+          <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-white/10" onClick={reloadSessions} title={t('common.refresh')}><Icon name="reload" size={14} /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-2 py-1">
-          {sessions.length === 0 && <div className="px-2 py-2 text-xs text-fg-5">{t('sidebar.noSessions')}</div>}
+          {sessions.length === 0 && <div className="px-2 py-2 text-xs text-zinc-600">{t('sidebar.noSessions')}</div>}
           {sessions.map((s) => renaming?.kind === 'session' && renaming.id === s.sessionId ? (
             <div key={s.agent + s.sessionId} className="px-2">
               <InlineInput value={s.title} onCancel={() => setRenaming(null)} onCommit={(v) => { setRenaming(null); if (v.trim() && v !== s.title) api.historyRename(s.agent, s.sessionId, v.trim(), s.cwd ?? undefined).then(reloadSessions).catch(() => {}); }} />
@@ -241,9 +239,9 @@ export default function Sidebar(p: Props) {
           ))}
         </div>
       </div>
-      <div className="p-2 border-t border-fill/10 flex gap-2">
-        <button className="flex-1 text-sm rounded-md bg-fill/5 hover:bg-fill/10 py-1.5" onClick={p.onPickFolder}>{t('sidebar.openFolderBtn')}</button>
-        <button className="w-9 flex items-center justify-center rounded-md bg-fill/5 hover:bg-fill/10 text-fg-2" onClick={p.onOpenSettings} title={t('common.settings')}><Icon name="gear" size={17} /></button>
+      <div className="p-2 border-t border-white/10 flex gap-2">
+        <button className="flex-1 text-sm rounded-md bg-white/5 hover:bg-white/10 py-1.5" onClick={p.onPickFolder}>{t('sidebar.openFolderBtn')}</button>
+        <button className="w-9 flex items-center justify-center rounded-md bg-white/5 hover:bg-white/10 text-zinc-300" onClick={p.onOpenSettings} title={t('common.settings')}><Icon name="gear" size={17} /></button>
       </div>
     </aside>
   );

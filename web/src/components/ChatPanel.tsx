@@ -8,7 +8,6 @@ import TodoPanel from './TodoPanel';
 import { ApprovalItem, AssistantItem, QuestionItem, ResultItem, ToolItem, UserItem } from './ChatItems';
 import { useContextMenu } from './ContextMenu';
 import { t, useLang } from '../lib/i18n';
-import { alertDialog, confirmDialog } from '../lib/dialogs';
 import ProjectIcon from './ProjectIcon';
 import AgentIcon from './AgentIcon';
 import Icon from './Icon';
@@ -57,7 +56,7 @@ export function ModelSelect({ agent, value, onChange, compact }: { agent: AgentI
   const known = value && models.some((m) => m.id === value || m.name === value);
   return (
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} title={t('chat.model')}
-      className={`bg-fill/5 rounded-md outline-none ${compact ? 'text-[11px] px-1.5 py-0.5 max-w-45' : 'text-xs px-2 py-1.5'}`}>
+      className={`bg-white/5 rounded-md outline-none ${compact ? 'text-[11px] px-1.5 py-0.5 max-w-45' : 'text-xs px-2 py-1.5'}`}>
       <option value="">{t('chat.defaultModel')}</option>
       {value && !known && <option value={value}>{value}</option>}
       {models.map((m) => <option key={m.id} value={m.id}>{m.name}{m.isDefault ? t('chat.defaultSuffix') : ''}</option>)}
@@ -77,7 +76,7 @@ function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: 
     case 'question': return <QuestionItem key={it.id} item={it} onAnswer={(a) => actions.answer(it.id, a)} />;
     case 'result': return <ResultItem key={it.id} item={it} />;
     case 'error': return <div key={it.id} className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[13px] text-red-200 whitespace-pre-wrap">{it.message}</div>;
-    case 'system': return <div key={it.id} className="text-xs text-fg-4 text-center py-1">{it.text}</div>;
+    case 'system': return <div key={it.id} className="text-xs text-zinc-500 text-center py-1">{it.text}</div>;
   }
 }
 
@@ -116,7 +115,7 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
   };
   useEffect(() => { setHistory([]); loadHistory(); return () => { historyRequest.current++; }; /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cwd, scope]);
 
-  if (!cwd) return <div className="h-full flex items-center justify-center text-fg-5 text-sm">{t('chat.openFolderFirst')}</div>;
+  if (!cwd) return <div className="h-full flex items-center justify-center text-zinc-600 text-sm">{t('chat.openFolderFirst')}</div>;
   const shown = filter.trim() ? history.filter((h) => `${h.customTitle ?? ''} ${h.summary} ${h.firstPrompt ?? ''} ${h.cwd ?? ''}`.toLowerCase().includes(filter.toLowerCase())) : history;
   const opts = (extra: Partial<StartOptions> = {}) => ({ permissionMode: mode, agent, model, ...extra });
   const rename = (h: HistorySession) => {
@@ -125,44 +124,44 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
     api.historyRename(h.agent, h.sessionId, title, cwd).then(loadHistory).catch(() => {});
   };
   const titleOf = (h: HistorySession) => h.customTitle || h.summary || h.firstPrompt || h.sessionId;
-  const remove = async (h: HistorySession) => {
-    if (h.pinned) { await alertDialog(t('common.pinnedUnpinFirst', { title: titleOf(h) })); return; }
-    if (!(await confirmDialog(t('common.confirmDeleteSession', { title: titleOf(h) }), { ok: t('common.delete'), danger: true }))) return;
-    api.historyDelete(h.agent, h.sessionId, cwd).then(loadHistory).catch((e) => alertDialog(e.message, 'error'));
+  const remove = (h: HistorySession) => {
+    if (h.pinned) { window.alert(t('common.pinnedUnpinFirst', { title: titleOf(h) })); return; }
+    if (!window.confirm(t('common.confirmDeleteSession', { title: titleOf(h) }))) return;
+    api.historyDelete(h.agent, h.sessionId, cwd).then(loadHistory).catch((e) => window.alert(e.message));
   };
   const togglePin = (h: HistorySession) => api.historyPin(h.agent, h.sessionId, !h.pinned).then(loadHistory).catch(() => {});
   const agentName = agent === 'claude' ? 'Claude' : 'Codex';
 
   return (
     <div className="h-full overflow-y-auto p-8 max-w-2xl mx-auto">
-      <div className="text-xs text-fg-4 mb-1">{scope === 'all' ? t('chat.agent') : t('chat.project')}</div>
+      <div className="text-xs text-zinc-500 mb-1">{scope === 'all' ? t('chat.agent') : t('chat.project')}</div>
       {scope === 'all'
         ? <div className="text-lg font-medium mb-6">{t('chat.freeConversation')}</div>
         : <div className="flex items-center gap-3 mb-6" title={cwd}><ProjectIcon path={cwd} name={cwd.split('/').pop() || cwd} size={40} /><div className="text-xl font-semibold truncate">{cwd.split('/').pop() || cwd}</div></div>}
-      {scope === 'all' && <div className="text-xs text-fg-4 -mt-4 mb-6">{t('chat.freeHint', { cwd })}</div>}
-      <div className="flex items-center gap-1 mb-4 rounded-lg bg-fill/5 p-1 w-fit text-sm">
+      {scope === 'all' && <div className="text-xs text-zinc-500 -mt-4 mb-6">{t('chat.freeHint', { cwd })}</div>}
+      <div className="flex items-center gap-1 mb-4 rounded-lg bg-white/5 p-1 w-fit text-sm">
         {(['claude', 'codex'] as AgentId[]).map((a) => (
-          <button key={a} onClick={() => setAgent(a)} className={`px-4 py-1.5 rounded-md ${agent === a ? 'bg-fill/10 text-fg' : 'text-fg-3 hover:text-fg'}`}>{a === 'claude' ? t('chat.claudeCode') : 'Codex'}</button>
+          <button key={a} onClick={() => setAgent(a)} className={`px-4 py-1.5 rounded-md ${agent === a ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white'}`}>{a === 'claude' ? t('chat.claudeCode') : 'Codex'}</button>
         ))}
       </div>
       <div className="flex items-center gap-3 mb-3 flex-wrap">
-        <button className="rounded-lg bg-blue-500/30 hover:bg-blue-500/40 px-4 py-2 text-sm" onClick={() => onStart(cwd, opts())}>{t('chat.newSession', { agent: agentName })} <span className="text-fg-3 text-xs ml-1">⌘N</span></button>
-        <select value={mode} onChange={(e) => setMode(e.target.value as PermissionModeId)} className="bg-fill/5 rounded-md text-xs px-2 py-1.5 outline-none">
+        <button className="rounded-lg bg-blue-500/30 hover:bg-blue-500/40 px-4 py-2 text-sm" onClick={() => onStart(cwd, opts())}>{t('chat.newSession', { agent: agentName })} <span className="text-zinc-400 text-xs ml-1">⌘N</span></button>
+        <select value={mode} onChange={(e) => setMode(e.target.value as PermissionModeId)} className="bg-white/5 rounded-md text-xs px-2 py-1.5 outline-none">
           {MODE_IDS.filter((m) => m.id !== 'auto' || agent === 'claude').map((m) => <option key={m.id} value={m.id}>{t(m.key)}</option>)}
         </select>
         <ModelSelect agent={agent} value={model} onChange={setModel} />
       </div>
-      <div className="text-xs text-fg-4 mb-6">{agent === 'codex' ? t('chat.codexHint') : t('chat.claudeHint')}</div>
-      <div className="flex items-center text-xs text-fg-4 mb-2 gap-3">
+      <div className="text-xs text-zinc-500 mb-6">{agent === 'codex' ? t('chat.codexHint') : t('chat.claudeHint')}</div>
+      <div className="flex items-center text-xs text-zinc-500 mb-2 gap-3">
         <span>{scope === 'all' ? t('chat.previousAll', { n: history.length }) : t('chat.previousFolder')}</span>
         <div className="flex-1" />
-        {scope === 'all' && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('common.search')} className="bg-fill/5 rounded px-2 py-1 text-xs outline-none w-40" />}
-        {loadingHistory && <span className="text-fg-5">{t('chat.loading')}</span>}
+        {scope === 'all' && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('common.search')} className="bg-white/5 rounded px-2 py-1 text-xs outline-none w-40" />}
+        {loadingHistory && <span className="text-zinc-600">{t('chat.loading')}</span>}
       </div>
-      {history.length === 0 && !loadingHistory && <div className="text-xs text-fg-5">{t('chat.noSessions')}</div>}
+      {history.length === 0 && !loadingHistory && <div className="text-xs text-zinc-600">{t('chat.noSessions')}</div>}
       <div className="space-y-1">
         {shown.map((h) => (
-          <div key={h.agent + h.sessionId} className="w-full text-left rounded-lg border border-fill/10 hover:bg-fill/5 px-3 py-2 cursor-pointer flex items-center gap-3"
+          <div key={h.agent + h.sessionId} className="w-full text-left rounded-lg border border-white/10 hover:bg-white/5 px-3 py-2 cursor-pointer flex items-center gap-3"
             onClick={() => onStart(h.cwd ?? cwd, opts({ resume: h.sessionId, agent: h.agent, title: h.customTitle || h.summary || undefined }))}
             onContextMenu={(e) => menu.open(e, [
               { label: t('common.resume'), onClick: () => onStart(h.cwd ?? cwd, opts({ resume: h.sessionId, agent: h.agent, title: h.customTitle || h.summary || undefined })) },
@@ -180,7 +179,7 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
                     onKeyDown={(e) => { if (e.key === 'Enter') rename(h); if (e.key === 'Escape') setRenaming(null); }}
                     className="w-full bg-black/40 rounded px-2 py-0.5 text-sm outline-none border border-blue-400/50" />
                 : <div className="text-sm truncate">{titleOf(h)}</div>}
-              <div className="text-[11px] text-fg-4 truncate">{new Date(h.lastModified).toLocaleString()}{h.gitBranch ? ` · ${h.gitBranch}` : ''}{scope === 'all' && h.cwd ? ` · ${h.cwd.replace(/^\/Users\/[^/]+/, '~')}` : ''}</div>
+              <div className="text-[11px] text-zinc-500 truncate">{new Date(h.lastModified).toLocaleString()}{h.gitBranch ? ` · ${h.gitBranch}` : ''}{scope === 'all' && h.cwd ? ` · ${h.cwd.replace(/^\/Users\/[^/]+/, '~')}` : ''}</div>
             </div>
           </div>
         ))}
@@ -242,8 +241,8 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
   if (!session) return <StartScreen cwd={cwd} scope={scope} onStart={onStart} />;
 
   const running = session.status === 'running' || session.status === 'compacting';
-  const close = async () => {
-    if (running && !(await confirmDialog(t('chat.confirmCloseRunning'), { ok: t('common.close') }))) return;
+  const close = () => {
+    if (running && !window.confirm(t('chat.confirmCloseRunning'))) return;
     onClose();
   };
   // Undo file changes from a user message on: preview with a dry run, confirm with the file list, then restore.
@@ -251,17 +250,17 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
   const rewind = async (messageId: string) => {
     if (!onRewind) return;
     const dry = await onRewind(messageId, true);
-    if (!dry.canRewind) { await alertDialog(t('rewind.unavailable', { reason: dry.error ?? '' })); return; }
+    if (!dry.canRewind) { window.alert(t('rewind.unavailable', { reason: dry.error ?? '' })); return; }
     const files = dry.filesChanged ?? [];
-    if (!files.length) { await alertDialog(t('rewind.nothing')); return; }
+    if (!files.length) { window.alert(t('rewind.nothing')); return; }
     // macOS reports /tmp and /var through /private; compare without it so paths show relative to the project.
     const strip = (p: string) => p.replace(/^\/private(?=\/(?:tmp|var)\/)/, '');
     const base = strip(session.cwd).replace(/\/$/, '') + '/';
     const rel = (p: string) => (strip(p).startsWith(base) ? strip(p).slice(base.length) : p);
     const list = files.slice(0, 12).map((f) => `• ${rel(f)}`).join('\n') + (files.length > 12 ? `\n… +${files.length - 12}` : '');
-    if (!(await confirmDialog(t('rewind.confirm', { n: files.length, ins: dry.insertions ?? 0, del: dry.deletions ?? 0, files: list }), { ok: t('common.restore'), danger: true }))) return;
+    if (!window.confirm(t('rewind.confirm', { n: files.length, ins: dry.insertions ?? 0, del: dry.deletions ?? 0, files: list }))) return;
     const done = await onRewind(messageId, false);
-    if (!done.canRewind) await alertDialog(t('rewind.failed', { reason: done.error ?? '' }), 'error');
+    if (!done.canRewind) window.alert(t('rewind.failed', { reason: done.error ?? '' }));
   };
   const jump = () => { stick.current = true; setAtBottom(true); scrollToBottom(); };
   const onScroll = () => {
@@ -302,35 +301,35 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
 
   return (
     <div className="h-full flex flex-col min-w-0">
-      <div data-companion-floor="chat-header" data-companion-edge="bottom" className="h-10 shrink-0 flex items-center gap-3 px-4 border-b border-fill/10 text-xs">
-        <span className={`w-2 h-2 rounded-full ${running ? 'bg-amber-400 animate-pulse' : session.status === 'closed' ? 'bg-fg-5' : 'bg-emerald-400'}`} />
+      <div data-companion-floor="chat-header" data-companion-edge="bottom" className="h-10 shrink-0 flex items-center gap-3 px-4 border-b border-white/10 text-xs">
+        <span className={`w-2 h-2 rounded-full ${running ? 'bg-amber-400 animate-pulse' : session.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
         <AgentIcon agent={session.agent} size={16} />
-        <span className="font-medium text-fg-1">{session.agent === 'codex' ? 'Codex' : 'Claude'}</span>
+        <span className="font-medium text-zinc-200">{session.agent === 'codex' ? 'Codex' : 'Claude'}</span>
         <ModelSelect agent={session.agent} value={session.model ?? null} onChange={onModel} compact />
-        <span className="text-fg-4 truncate" title={session.cwd}>{session.cwd.split('/').slice(-2).join('/')}</span>
+        <span className="text-zinc-500 truncate" title={session.cwd}>{session.cwd.split('/').slice(-2).join('/')}</span>
         {session.status === 'compacting' && <span className="text-amber-300">{t('chat.compacting')}</span>}
         <div className="flex-1" />
-        {session.agentSessionId && <button className="text-fg-5 hover:text-fg-2" title={t('chat.copySessionIdTitle', { id: session.agentSessionId })} onClick={() => navigator.clipboard.writeText(session.agentSessionId!)}>id</button>}
-        {session.agent === 'claude' && <span className="text-fg-4">${session.totalCostUsd.toFixed(3)}</span>}
-        <button className="w-7 h-7 -mr-2 flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-fill/10" onClick={close} title={t('chat.closeSession')}><Icon name="close" /></button>
+        {session.agentSessionId && <button className="text-zinc-600 hover:text-zinc-300" title={t('chat.copySessionIdTitle', { id: session.agentSessionId })} onClick={() => navigator.clipboard.writeText(session.agentSessionId!)}>id</button>}
+        {session.agent === 'claude' && <span className="text-zinc-500">${session.totalCostUsd.toFixed(3)}</span>}
+        <button className="w-7 h-7 -mr-2 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={close} title={t('chat.closeSession')}><Icon name="close" /></button>
       </div>
       <div className="flex-1 min-h-0 relative">
         {searching && <ChatSearch content={content} scroller={scroller} version={session.items} onClose={() => setSearching(false)}
           onJump={() => { stick.current = false; setAtBottom(false); }} />}
         <div ref={scroller} className="absolute inset-0 overflow-y-auto" onScroll={onScroll} onWheel={onWheel}>
           <div ref={content} className="px-5 py-4 space-y-3">
-            {top.length === 0 && <div className="text-center text-fg-5 text-sm py-10">{session.restoring ? t('chat.restoring') : session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}
+            {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.restoring ? t('chat.restoring') : session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}
             {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd, rewind: canRewind ? rewind : undefined }))}
           </div>
         </div>
         {!atBottom && (
-          <button onClick={jump} className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-surface-4 border border-fill/15 px-3 py-1 text-xs text-fg-2 shadow-lg hover:bg-surface-5">{t('chat.jumpLatest')}</button>
+          <button onClick={jump} className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-[#1b1f2a] border border-white/15 px-3 py-1 text-xs text-zinc-300 shadow-lg hover:bg-[#242938]">{t('chat.jumpLatest')}</button>
         )}
       </div>
       {activity && (
-        <div data-companion-floor="chat-activity" className="h-7 shrink-0 flex items-center gap-2 px-4 text-[11px] text-fg-3 border-t border-fill/5 bg-surface-1">
+        <div data-companion-floor="chat-activity" className="h-7 shrink-0 flex items-center gap-2 px-4 text-[11px] text-zinc-400 border-t border-white/5 bg-[#0e1117]">
           <span className="inline-block w-3 h-3 rounded-full border-2 border-amber-400/70 border-t-transparent animate-spin" />
-          <span className="shrink-0 whitespace-nowrap text-fg-5 tabular-nums">{elapsedLabel}</span>
+          <span className="shrink-0 whitespace-nowrap text-zinc-600 tabular-nums">{elapsedLabel}</span>
           <span className="truncate">{activity}</span>
         </div>
       )}

@@ -19,13 +19,13 @@ export default function CommitGraph({ commits, selected, onSelect }: { commits: 
         const current = commit.refs.some((ref) => ref === 'HEAD' || ref.startsWith('HEAD -> '));
         return (
           <div key={commit.hash} data-companion-rung="" onClick={onSelect ? () => onSelect(commit) : undefined}
-            className={`group flex border-b border-fill/[0.035] transition-colors hover:bg-fill/[0.035] ${onSelect ? 'cursor-pointer' : ''} ${selected === commit.hash ? 'bg-blue-500/15' : current ? 'bg-violet-400/[0.045]' : ''}`}
+            className={`group flex border-b border-white/[0.035] transition-colors hover:bg-white/[0.035] ${onSelect ? 'cursor-pointer' : ''} ${selected === commit.hash ? 'bg-blue-500/15' : current ? 'bg-violet-400/[0.045]' : ''}`}
             style={{ height: GRAPH_ROW_HEIGHT, minWidth: graph.width + 180 }}>
             <svg aria-hidden="true" width={graph.width} height={GRAPH_ROW_HEIGHT} className="shrink-0 overflow-visible">
               {row.edges.map((edge, j) => <path key={j} d={edgePath(edge)} fill="none" stroke={GRAPH_COLORS[edge.color]} strokeWidth="1.6" opacity="0.65" />)}
               {current && <circle cx={graphX(row.lane)} cy={GRAPH_ROW_HEIGHT / 2} r="9" fill={GRAPH_COLORS[row.color]} opacity="0.12" />}
               <circle cx={graphX(row.lane)} cy={GRAPH_ROW_HEIGHT / 2} r={commit.parents.length > 1 ? 4.5 : 3.5}
-                fill={current ? GRAPH_COLORS[row.color] : 'var(--surface-0)'} stroke={GRAPH_COLORS[row.color]} strokeWidth="2" />
+                fill={current ? GRAPH_COLORS[row.color] : '#0b0d12'} stroke={GRAPH_COLORS[row.color]} strokeWidth="2" />
             </svg>
             <div className="min-w-0 flex-1 flex flex-col justify-center gap-1 pr-3 pl-1">
               {commit.refs.length > 0 && <div className="flex items-center gap-1 overflow-hidden">
@@ -38,11 +38,11 @@ export default function CommitGraph({ commits, selected, onSelect }: { commits: 
                   </span>;
                 })}
               </div>}
-              <div className="truncate text-[12px] font-medium text-fg-1 group-hover:text-fg" title={commit.subject}>{commit.subject}</div>
-              <div className="flex min-w-0 items-center gap-2 text-[10px] text-fg-4">
+              <div className="truncate text-[12px] font-medium text-zinc-200 group-hover:text-white" title={commit.subject}>{commit.subject}</div>
+              <div className="flex min-w-0 items-center gap-2 text-[10px] text-zinc-500">
                 <span className="shrink-0 font-mono text-violet-300/75" title={commit.hash}>{commit.hash.slice(0, 7)}</span>
                 <span className="truncate" title={commit.author}>{commit.author}</span>
-                <span className="ml-auto shrink-0 tabular-nums text-fg-5">{commit.date}</span>
+                <span className="ml-auto shrink-0 tabular-nums text-zinc-600">{commit.date}</span>
               </div>
             </div>
           </div>

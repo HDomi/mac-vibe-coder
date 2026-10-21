@@ -40,13 +40,6 @@ declare global {
       openNotificationSettings?: () => void;
       keepAwake?: (busy: boolean) => void;
       onPowerResume?: (cb: () => void) => void;
-      /** Sheet with two buttons; resolves true for `ok`. */
-      confirm?: (opts: { message: string; detail?: string; ok: string; cancel: string; danger: boolean }) => Promise<boolean>;
-      alert?: (opts: { message: string; detail?: string; ok: string; kind: 'info' | 'error' }) => Promise<void>;
-      /** Multiply the page zoom factor (pinch); clamped in the main process. */
-      zoomBy?: (scale: number) => void;
-      /** Three-finger trackpad swipe reported by macOS. */
-      onSwipe?: (cb: (dir: 'left' | 'right' | 'up' | 'down') => void) => void;
       /** Native browser view for the Browser panel (Electron only). */
       browser?: NativeBrowser;
     };

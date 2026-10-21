@@ -8,12 +8,12 @@ export default function ProjectIcon({ path, name, size = 20, className = '' }: {
   const letters = (name || path.split('/').pop() || '?').slice(0, 2).toUpperCase();
   if (failed) {
     return (
-      <span className={`inline-flex items-center justify-center rounded-md bg-fill/10 text-fg-2 font-medium shrink-0 ${className}`}
+      <span className={`inline-flex items-center justify-center rounded-md bg-white/10 text-zinc-300 font-medium shrink-0 ${className}`}
         style={{ width: size, height: size, fontSize: Math.max(9, size * 0.42) }}>{letters}</span>
     );
   }
   return (
     <img src={api.projectIconUrl(path)} alt="" draggable={false} onError={() => setFailed(true)}
-      className={`rounded-md object-contain shrink-0 bg-fill/5 ${className}`} style={{ width: size, height: size }} />
+      className={`rounded-md object-contain shrink-0 bg-white/5 ${className}`} style={{ width: size, height: size }} />
   );
 }

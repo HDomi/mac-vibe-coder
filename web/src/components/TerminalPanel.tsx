@@ -39,7 +39,7 @@ function TermView({ tab, visible }: { tab: TerminalTab; visible: boolean }) {
   return (
     <div className={`absolute inset-0 ${visible ? '' : 'invisible'}`}>
       <div ref={container} className="absolute inset-0" />
-      {tab.status !== 'open' && <div className="absolute top-2 right-3 text-[11px] text-fg-4">{tab.status === 'connecting' ? t('terminal.connecting') : tab.status === 'reconnecting' ? t('terminal.reconnecting') : t('terminal.exited')}</div>}
+      {tab.status !== 'open' && <div className="absolute top-2 right-3 text-[11px] text-zinc-500">{tab.status === 'connecting' ? t('terminal.connecting') : tab.status === 'reconnecting' ? t('terminal.reconnecting') : t('terminal.exited')}</div>}
     </div>
   );
 }
@@ -76,23 +76,23 @@ export default function TerminalPanel({ cwd, visible }: Props) {
 
   return (
     <div className="h-full flex flex-col">
-      <div data-companion-floor="terminal-tabs" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-fill/10 text-xs overflow-x-auto">
+      <div data-companion-floor="terminal-tabs" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs overflow-x-auto">
         {tabs.map((tab) => (
-          <div key={tab.id} className={`flex items-center gap-1 rounded-md px-2 py-1 cursor-pointer ${active === tab.id ? 'bg-fill/10 text-fg' : 'text-fg-3 hover:bg-fill/5'}`} onClick={() => activateTerminal(tab.id)}>
+          <div key={tab.id} className={`flex items-center gap-1 rounded-md px-2 py-1 cursor-pointer ${active === tab.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`} onClick={() => activateTerminal(tab.id)}>
             <span className="truncate max-w-[120px]">{tab.title}</span>
-            <button className="w-5 h-5 flex items-center justify-center rounded text-fg-4 hover:text-red-300 hover:bg-fill/10" onClick={(e) => { e.stopPropagation(); closeTerminal(tab.id); }}><Icon name="close" size={11} /></button>
+            <button className="w-5 h-5 flex items-center justify-center rounded text-zinc-500 hover:text-red-300 hover:bg-white/10" onClick={(e) => { e.stopPropagation(); closeTerminal(tab.id); }}><Icon name="close" size={11} /></button>
           </div>
         ))}
-        <button className="w-7 h-7 flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-fill/10" onClick={() => open()} title={t('terminal.newShell')}><Icon name="plus" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => open()} title={t('terminal.newShell')}><Icon name="plus" /></button>
         <div className="flex-1" />
         {note && <span className="text-[11px] text-amber-300 truncate max-w-48" title={note}>{note}</span>}
         <button className="px-2 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 whitespace-nowrap disabled:opacity-40" disabled={!tab} onMouseDown={(e) => e.preventDefault()} onClick={() => send('auto')} title={t('terminal.sendHint')}>→ {t('terminal.toChat')}</button>
-        <button className="px-2 py-1 rounded bg-fill/5 hover:bg-fill/10 text-fg-2" onClick={() => open('claude', 'claude')} title={t('terminal.claudeTui')}>claude</button>
-        <button className="px-2 py-1 rounded bg-fill/5 hover:bg-fill/10 text-fg-2" onClick={() => open('codex', 'codex')} title={t('terminal.codexTui')}>codex</button>
+        <button className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-zinc-300" onClick={() => open('claude', 'claude')} title={t('terminal.claudeTui')}>claude</button>
+        <button className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-zinc-300" onClick={() => open('codex', 'codex')} title={t('terminal.codexTui')}>codex</button>
       </div>
-      <div className="flex-1 relative bg-surface-0" onContextMenu={onMenu}>
+      <div className="flex-1 relative bg-[#0b0d12]" onContextMenu={onMenu}>
         {tabs.map((tab) => <TermView key={tab.id} tab={tab} visible={visible && active === tab.id} />)}
-        {tabs.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-fg-5 text-sm">{t('terminal.pressPlus')}</div>}
+        {tabs.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm">{t('terminal.pressPlus')}</div>}
       </div>
     </div>
   );

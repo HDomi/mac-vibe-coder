@@ -4,8 +4,6 @@ import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing,
 import { agentClient, type Attachment } from './lib/agent';
 import { reconnectTerminals, terminalsBusy } from './lib/terminals';
 import { keepAwakeEnabled, workInProgress } from './lib/power';
-import { alertDialog, confirmDialog } from './lib/dialogs';
-import { installGestures, type SwipeDirection } from './lib/gestures';
 import { requestNotificationPermission, useSessions, setOnScreenSession } from './lib/useSessions';
 import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
@@ -164,21 +162,6 @@ function AppInner() {
     return () => { window.clearInterval(timer); window.removeEventListener('vibe:keep-awake', update); window.vibe!.keepAwake!(false); };
   }, []);
   useEffect(() => { window.dispatchEvent(new Event('vibe:keep-awake')); }, [S.sessions]);
-  // Trackpad swipes step through the session tabs (right = previous, like "back"). While the Browser tab's
-  // native view holds focus, the swipe is its history instead.
-  const swipeRef = useRef<(dir: SwipeDirection) => void>(() => {});
-  swipeRef.current = (dir) => {
-    if (rightTab === 'browser' && !rightCollapsed && !document.hasFocus() && window.vibe?.browser) {
-      void (dir === 'right' ? window.vibe.browser.back() : window.vibe.browser.forward());
-      return;
-    }
-    const list = view === 'agent' ? sortSessions(Object.values(S.sessions)) : projectSessions;
-    const current = view === 'agent' ? agentActive : session?.id;
-    const next = list[list.findIndex((s) => s.id === current) + (dir === 'right' ? -1 : 1)];
-    if (!next) return;
-    if (view === 'agent') setAgentActive(next.id); else setActiveSession(next.id);
-  };
-  useEffect(() => installGestures((dir) => swipeRef.current(dir)), []);
 
   const isFavorite = !!listing && favorites.favorites.some((f) => f.path === listing.path);
   const toggleFavorite = () => {
@@ -189,11 +172,11 @@ function AppInner() {
     if (window.vibe?.pickFolder) { const p = await window.vibe.pickFolder(); if (p) openProject(p); }
     else { const p = window.prompt(t('app.folderPathPrompt'), listing?.path ?? '~'); if (p) openProject(p); }
   };
-  const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActiveSession).catch((e) => alertDialog(e.message, 'error'));
-  const closeSession = async (id: string) => {
+  const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActiveSession).catch((e) => window.alert(e.message));
+  const closeSession = (id: string) => {
     const s = S.sessions[id];
     if (!s) return;
-    if ((s.status === 'running' || s.status === 'compacting') && !(await confirmDialog(t('app.confirmCloseRunning'), { ok: t('common.close') }))) return;
+    if ((s.status === 'running' || s.status === 'compacting') && !window.confirm(t('app.confirmCloseRunning'))) return;
     S.close(id);
     if (activeSession === id) setActiveSession(null);
   };
@@ -226,11 +209,11 @@ function AppInner() {
       else if (k === 'w') {
         e.preventDefault();
         const target = view === 'agent' ? S.sessions[agentActive ?? ''] : session;
-        if (target) void (async () => {
-          if ((target.status === 'running' || target.status === 'compacting') && !(await confirmDialog(t('app.confirmCloseRunning'), { ok: t('common.close') }))) return;
+        if (target) {
+          if ((target.status === 'running' || target.status === 'compacting') && !window.confirm(t('app.confirmCloseRunning'))) return;
           S.close(target.id);
           if (view === 'agent') setAgentActive(null); else setActiveSession(null);
-        })();
+        }
       }
       else if (k === '/') { e.preventDefault(); setShowTools(true); }
       else if (['1', '2', '3', '4', '5'].includes(e.key) && !inText) { e.preventDefault(); setRightTab(rightTabs[Number(e.key) - 1][0]); setRightCollapsed(false); }
@@ -254,24 +237,24 @@ function AppInner() {
               onPickFolder={pickFolder} onOpenSettings={() => setShowTools(true)} onResumeSession={resumeSession} />
           </div>
           {!collapsed && <Splitter onStart={() => setDragging(true)} onEnd={() => setDragging(false)} onDrag={(dx) => sidebar.setWidth(sidebar.width + dx)} />}
-          <main className="flex-1 min-w-0 flex bg-surface-0">
+          <main className="flex-1 min-w-0 flex">
             <div data-companion-zone="prompt" className="flex-1 min-w-0 flex flex-col">
               {project && projectSessions.length > 0 && (
-                <div data-companion-floor="session-tabs" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-fill/10 text-xs overflow-x-auto">
+                <div data-companion-floor="session-tabs" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs overflow-x-auto">
                   {projectSessions.map((s) => (
                     <div key={s.id} onClick={() => setActiveSession(s.id)} onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeSession(s.id); } }}
                       onContextMenu={(e) => menu.open(e, sessionMenu(s, S.setPinned, () => closeSession(s.id)))}
-                      className={`group flex items-center gap-1.5 rounded-md pl-2.5 pr-1 py-1 whitespace-nowrap cursor-pointer ${session?.id === s.id ? 'bg-fill/10 text-fg' : 'text-fg-3 hover:bg-fill/5'}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-fg-5' : 'bg-emerald-400'}`} />
+                      className={`group flex items-center gap-1.5 rounded-md pl-2.5 pr-1 py-1 whitespace-nowrap cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
                       <AgentIcon agent={s.agent} size={14} />
                       {s.pinned && <span className="text-[9px]" title={t('common.pin')}>📌</span>}
-                      <span className="text-fg-4">{displayTitle(s, 18) ?? t('common.new')}</span>
+                      <span className="text-zinc-500">{displayTitle(s, 18) ?? t('common.new')}</span>
                       <AttentionBadge s={s} />
-                      <button className="ml-1 w-5 h-5 flex items-center justify-center rounded text-fg-4 hover:text-fg hover:bg-fill/15 opacity-0 group-hover:opacity-100" title={t('app.closeSession')}
+                      <button className="ml-1 w-5 h-5 flex items-center justify-center rounded text-zinc-500 hover:text-white hover:bg-white/15 opacity-0 group-hover:opacity-100" title={t('app.closeSession')}
                         onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}><Icon name="close" size={11} /></button>
                     </div>
                   ))}
-                  <button className="w-7 h-7 flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-fill/10" onClick={() => setActiveSession('new')} title={t('app.newSession')}><Icon name="plus" /></button>
+                  <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => setActiveSession('new')} title={t('app.newSession')}><Icon name="plus" /></button>
                 </div>
               )}
               <div className="flex-1 min-h-0">
@@ -291,23 +274,23 @@ function AppInner() {
             </div>
             {!rightCollapsed && <Splitter onStart={() => setDragging(true)} onEnd={() => setDragging(false)} onDrag={(dx) => right.setWidth(right.width - dx)} />}
             {rightCollapsed && (
-              <div className="w-9 shrink-0 flex flex-col items-center border-l border-fill/10 bg-surface-1 py-2 gap-1">
-                <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-fill/10 text-fg-3" onClick={() => setRightCollapsed(false)} title={t('app.expandPanel')}><Icon name="chevronsLeft" /></button>
+              <div className="w-9 shrink-0 flex flex-col items-center border-l border-white/10 bg-[#0e1117] py-2 gap-1">
+                <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(false)} title={t('app.expandPanel')}><Icon name="chevronsLeft" /></button>
                 {rightTabs.map(([t, label]) => (
                   <button key={t} title={label} onClick={() => { setRightTab(t); setRightCollapsed(false); }}
-                    className={`w-7 h-7 rounded text-[10px] ${rightTab === t ? 'bg-fill/15 text-fg' : 'text-fg-4 hover:bg-fill/10'}`}>{label.slice(0, 1)}</button>
+                    className={`w-7 h-7 rounded text-[10px] ${rightTab === t ? 'bg-white/15 text-white' : 'text-zinc-500 hover:bg-white/10'}`}>{label.slice(0, 1)}</button>
                 ))}
               </div>
             )}
             <div data-companion-zone="right" data-companion-wall="left" style={{ width: rightCollapsed ? 0 : right.width }} className={`shrink-0 flex flex-col min-w-0 overflow-hidden ${paneTransition}`}>
-              <div data-companion-floor="right-tabs" data-companion-edge="bottom" className="h-10 shrink-0 flex items-stretch border-b border-fill/10 text-xs" style={{ minWidth: right.width }}>
+              <div data-companion-floor="right-tabs" data-companion-edge="bottom" className="h-10 shrink-0 flex items-stretch border-b border-white/10 text-xs" style={{ minWidth: right.width }}>
                 <div className="flex-1 min-w-0 flex items-stretch overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {rightTabs.map(([t, label]) => (
-                    <button key={t} className={`shrink-0 px-3 ${rightTab === t ? 'text-fg border-b-2 border-blue-400' : 'text-fg-4 hover:text-fg-2'}`} onClick={() => setRightTab(t)}>{label}</button>
+                    <button key={t} className={`shrink-0 px-3 ${rightTab === t ? 'text-white border-b-2 border-blue-400' : 'text-zinc-500 hover:text-zinc-300'}`} onClick={() => setRightTab(t)}>{label}</button>
                   ))}
                 </div>
                 {project && (
-                  <button className="shrink-0 self-center mr-1 px-2 py-1 rounded text-fg-3 hover:text-fg hover:bg-fill/5" title={t('app.openProjectIn')}
+                  <button className="shrink-0 self-center mr-1 px-2 py-1 rounded text-zinc-400 hover:text-white hover:bg-white/5" title={t('app.openProjectIn')}
                     onClick={(e) => menu.open(e, [
                       { label: t('common.openInTerminal'), onClick: () => api.open(project, 'terminal').catch(() => {}) },
                       { label: t('common.revealInFinder'), onClick: () => api.open(project, 'finder').catch(() => {}) },
@@ -317,7 +300,7 @@ function AppInner() {
                       { label: t('common.copyPath'), onClick: () => navigator.clipboard.writeText(project) },
                     ])}>{t('app.openMenu')}</button>
                 )}
-                <button className="shrink-0 self-center w-7 h-7 mr-1 flex items-center justify-center rounded-md hover:bg-fill/10 text-fg-3" onClick={() => setRightCollapsed(true)} title={t('app.collapsePanel')}><Icon name="chevronsRight" /></button>
+                <button className="shrink-0 self-center w-7 h-7 mr-1 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={() => setRightCollapsed(true)} title={t('app.collapsePanel')}><Icon name="chevronsRight" /></button>
               </div>
               <div className="flex-1 min-h-0 relative" style={{ minWidth: right.width }}>
                 <div className={`absolute inset-0 ${rightTab === 'files' ? '' : 'invisible'}`}>
@@ -350,37 +333,37 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
   const menu = useContextMenu();
   const live = sortSessions(Object.values(S.sessions));
   const session = active && active !== 'new' ? S.sessions[active] ?? null : null;
-  const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActive).catch((e) => alertDialog(e.message, 'error'));
+  const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActive).catch((e) => window.alert(e.message));
   return (
     <div className="flex-1 flex min-h-0 relative">
-      <aside data-companion-zone="left" data-companion-wall="right" className="w-64 shrink-0 h-full flex flex-col border-r border-fill/10">
-        <div className="h-10 flex items-center px-3 text-xs text-fg-4">
-          <span className="font-medium text-fg-3">{t('app.agent')}</span>
+      <aside data-companion-zone="left" data-companion-wall="right" className="w-64 shrink-0 h-full flex flex-col border-r border-white/10 bg-[#0e1117]">
+        <div className="h-10 flex items-center px-3 text-xs text-zinc-500">
+          <span className="font-medium text-zinc-400">{t('app.agent')}</span>
           <div className="flex-1" />
-          <button className="px-2 py-1 rounded hover:bg-fill/10 text-fg-2" onClick={() => setActive('new')} title={t('app.newConversation')}>{t('app.newBtn')}</button>
+          <button className="px-2 py-1 rounded hover:bg-white/10 text-zinc-300" onClick={() => setActive('new')} title={t('app.newConversation')}>{t('app.newBtn')}</button>
         </div>
         <div className="flex-1 overflow-y-auto px-2 py-1">
-          <div className="px-2 mb-1 text-[11px] uppercase tracking-wider text-fg-4">{t('app.openSessions')}</div>
-          {live.length === 0 && <div className="px-2 text-xs text-fg-5">{t('app.nothingOpen')}</div>}
+          <div className="px-2 mb-1 text-[11px] uppercase tracking-wider text-zinc-500">{t('app.openSessions')}</div>
+          {live.length === 0 && <div className="px-2 text-xs text-zinc-600">{t('app.nothingOpen')}</div>}
           {live.map((s) => (
             <div key={s.id} onClick={() => setActive(s.id)}
-              onContextMenu={(e) => menu.open(e, sessionMenu(s, S.setPinned, async () => {
-                if ((s.status === 'running' || s.status === 'compacting') && !(await confirmDialog(t('app.confirmCloseRunning'), { ok: t('common.close') }))) return;
+              onContextMenu={(e) => menu.open(e, sessionMenu(s, S.setPinned, () => {
+                if ((s.status === 'running' || s.status === 'compacting') && !window.confirm(t('app.confirmCloseRunning'))) return;
                 S.close(s.id); if (session?.id === s.id) setActive(null);
               }))}
-              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer ${session?.id === s.id ? 'bg-fill/10 text-fg' : 'text-fg-2 hover:bg-fill/5'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-fg-5' : 'bg-emerald-400'}`} />
+              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
               <AgentIcon agent={s.agent} size={16} />
               {s.pinned && <span className="text-[10px]" title={t('common.pin')}>📌</span>}
               <span className="truncate flex-1">{displayTitle(s, 40) ?? t('common.new')}</span>
               <AttentionBadge s={s} />
-              <span className="text-[10px] text-fg-5 truncate max-w-[70px]" title={s.cwd}>{s.cwd.split('/').pop()}</span>
+              <span className="text-[10px] text-zinc-600 truncate max-w-[70px]" title={s.cwd}>{s.cwd.split('/').pop()}</span>
             </div>
           ))}
         </div>
-        <div data-companion-floor="agent-list-bottom" className="h-px shrink-0 bg-fill/10 mb-4" />
+        <div data-companion-floor="agent-list-bottom" className="h-px shrink-0 bg-white/10 mb-4" />
       </aside>
-      <div className="flex-1 min-w-0 bg-surface-0">
+      <div className="flex-1 min-w-0">
         <ChatPanel cwd={home} scope="all" session={session}
           onStart={start}
           onSend={(t, a) => session && S.send(session.id, t, a)}

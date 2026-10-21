@@ -87,7 +87,7 @@ export default function ChatSearch({ content, scroller, version, onClose, onJump
   useEffect(() => { if (ranges.length) jump(index); }, [ranges]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="absolute top-2 right-4 z-20 flex items-center gap-1 rounded-lg border border-fill/15 bg-surface-3 shadow-xl px-2 py-1 text-xs">
+    <div className="absolute top-2 right-4 z-20 flex items-center gap-1 rounded-lg border border-white/15 bg-[#171a22] shadow-xl px-2 py-1 text-xs">
       <input ref={input} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('chat.searchPlaceholder')} aria-label={t('chat.searchPlaceholder')}
         onKeyDown={(e) => {
           if (e.nativeEvent.isComposing) return;
@@ -95,10 +95,10 @@ export default function ChatSearch({ content, scroller, version, onClose, onJump
           else if (e.key === 'Escape') { e.preventDefault(); onClose(); }
         }}
         className="w-52 bg-transparent outline-none px-1 py-0.5 text-[13px]" />
-      <span className="tabular-nums text-fg-4 min-w-12 text-right">{query.trim() ? `${ranges.length ? index + 1 : 0}/${ranges.length}` : ''}</span>
-      <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-fill/10 text-fg-3 disabled:opacity-30" disabled={!ranges.length} onClick={() => jump(index - 1)} title={t('chat.searchPrev')}><Icon name="up" size={14} /></button>
-      <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-fill/10 text-fg-3 disabled:opacity-30" disabled={!ranges.length} onClick={() => jump(index + 1)} title={t('chat.searchNext')}><Icon name="up" size={14} className="rotate-180" /></button>
-      <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-fill/10 text-fg-3" onClick={onClose} title="Esc"><Icon name="close" size={14} /></button>
+      <span className="tabular-nums text-zinc-500 min-w-12 text-right">{query.trim() ? `${ranges.length ? index + 1 : 0}/${ranges.length}` : ''}</span>
+      <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 text-zinc-400 disabled:opacity-30" disabled={!ranges.length} onClick={() => jump(index - 1)} title={t('chat.searchPrev')}><Icon name="up" size={14} /></button>
+      <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 text-zinc-400 disabled:opacity-30" disabled={!ranges.length} onClick={() => jump(index + 1)} title={t('chat.searchNext')}><Icon name="up" size={14} className="rotate-180" /></button>
+      <button className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/10 text-zinc-400" onClick={onClose} title="Esc"><Icon name="close" size={14} /></button>
     </div>
   );
 }

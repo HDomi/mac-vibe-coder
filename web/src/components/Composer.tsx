@@ -200,42 +200,42 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
   const modeHint = t(`${MODE_IDS.find((m) => m.id === mode)?.key ?? 'composer.mode.default'}.hint`);
 
   return (
-    <div className={`border-t border-fill/10 p-3 ${dragging ? 'bg-blue-500/10' : ''}`}
+    <div className={`border-t border-white/10 p-3 ${dragging ? 'bg-blue-500/10' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-2">
           {attachments.map((a) => (
             <div key={a.path} className="relative group" title={a.path}>
               {a.kind === 'image'
-                ? <img src={api.rawUrl(a.path)} alt={a.name} className="h-16 w-16 object-cover rounded-md border border-fill/10 cursor-zoom-in" onClick={() => openLightbox(api.rawUrl(a.path), a.name)} />
-                : <div className="h-16 px-3 flex items-center text-xs bg-fill/5 rounded-md border border-fill/10 max-w-50 truncate">📎 {a.name}</div>}
-              <button className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-surface-4 border border-fill/20 text-[10px] opacity-0 group-hover:opacity-100"
+                ? <img src={api.rawUrl(a.path)} alt={a.name} className="h-16 w-16 object-cover rounded-md border border-white/10 cursor-zoom-in" onClick={() => openLightbox(api.rawUrl(a.path), a.name)} />
+                : <div className="h-16 px-3 flex items-center text-xs bg-white/5 rounded-md border border-white/10 max-w-50 truncate">📎 {a.name}</div>}
+              <button className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-zinc-800 border border-white/20 text-[10px] opacity-0 group-hover:opacity-100"
                 onClick={() => setAttachments((l) => l.filter((x) => x.path !== a.path))}>✕</button>
             </div>
           ))}
         </div>
       )}
       {uploadError && <div role="alert" className="text-xs text-red-300 mb-2">{uploadError}</div>}
-      <div data-companion-floor="prompt" data-companion-ground="" className="relative rounded-xl border border-fill/15 bg-surface-2 focus-within:border-fill/30">
+      <div data-companion-floor="prompt" data-companion-ground="" className="relative rounded-xl border border-white/15 bg-[#12151c] focus-within:border-white/30">
         {mention && fileHits.length > 0 && (
-          <div className="absolute bottom-full left-2 mb-1 w-[480px] max-w-[95%] rounded-lg border border-fill/10 bg-surface-3 shadow-xl py-1 text-[13px] z-10">
+          <div className="absolute bottom-full left-2 mb-1 w-[480px] max-w-[95%] rounded-lg border border-white/10 bg-[#171a22] shadow-xl py-1 text-[13px] z-10">
             {fileHits.map((h, i) => (
               <div key={h.path} onMouseEnter={() => setFileIdx(i)} onMouseDown={(e) => { e.preventDefault(); pickMention(h); }}
-                className={`px-3 py-1 flex items-center gap-2 cursor-pointer ${i === fileIdx ? 'bg-blue-500/20 text-fg' : 'text-fg-2'}`}>
+                className={`px-3 py-1 flex items-center gap-2 cursor-pointer ${i === fileIdx ? 'bg-blue-500/20 text-white' : 'text-zinc-300'}`}>
                 <FileIcon name={h.rel.split('/').pop() ?? h.rel} isDir={h.isDir} className="w-3.5 h-3.5" />
                 <span className="font-mono truncate">{h.rel}</span>
               </div>
             ))}
-            <div className="px-3 pt-1 text-[10px] text-fg-5">{t('composer.mentionHint')}</div>
+            <div className="px-3 pt-1 text-[10px] text-zinc-600">{t('composer.mentionHint')}</div>
           </div>
         )}
         {cmdHits.length > 0 && (
-          <div className="absolute bottom-full left-2 mb-1 w-90 max-w-[90%] rounded-lg border border-fill/10 bg-surface-3 shadow-xl py-1 text-[13px] z-10">
+          <div className="absolute bottom-full left-2 mb-1 w-90 max-w-[90%] rounded-lg border border-white/10 bg-[#171a22] shadow-xl py-1 text-[13px] z-10">
             {cmdHits.map((c, i) => (
               <div key={c} onMouseEnter={() => setCmdIdx(i)} onMouseDown={(e) => { e.preventDefault(); setText(c + ' '); }}
-                className={`px-3 py-1 font-mono cursor-pointer ${i === cmdIdx ? 'bg-blue-500/20 text-fg' : 'text-fg-2'}`}>{c}</div>
+                className={`px-3 py-1 font-mono cursor-pointer ${i === cmdIdx ? 'bg-blue-500/20 text-white' : 'text-zinc-300'}`}>{c}</div>
             ))}
-            <div className="px-3 pt-1 text-[10px] text-fg-5">{t('composer.cmdHint')}</div>
+            <div className="px-3 pt-1 text-[10px] text-zinc-600">{t('composer.cmdHint')}</div>
           </div>
         )}
         <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart ?? e.target.value.length); }} onPaste={onPaste}
@@ -245,26 +245,26 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
           className="w-full bg-transparent px-4 pt-3 pb-2 text-[14px] outline-none resize-none min-h-11" rows={1} />
         <div className="flex items-center gap-2 px-2 pb-2">
           <select value={mode} onChange={(e) => onMode(e.target.value as PermissionModeId)} disabled={disabled}
-            className="bg-fill/5 rounded-md text-xs px-2 py-1 outline-none" title={modeHint}>
+            className="bg-white/5 rounded-md text-xs px-2 py-1 outline-none" title={modeHint}>
             {modes.map((m) => <option key={m.id} value={m.id}>{t(m.key)}</option>)}
           </select>
-          <label className="text-xs text-fg-3 hover:text-fg cursor-pointer px-2">
+          <label className="text-xs text-zinc-400 hover:text-white cursor-pointer px-2">
             📎 {t('composer.attach')}
             <input type="file" multiple className="hidden" onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
           </label>
           <PromptMenu draft={text} onInsert={insertText} disabled={disabled} />
-          {uploading && <span className="text-xs text-fg-4">{t('composer.uploading')}</span>}
+          {uploading && <span className="text-xs text-zinc-500">{t('composer.uploading')}</span>}
           {background.length > 0 && (
             <div className="flex items-center gap-1 min-w-0 overflow-hidden" title={t('composer.backgroundTitle', { n: background.length })}>
               {background.slice(0, MAX_BACKGROUND_CHIPS).map((b) => (
                 <button key={b.id} type="button" onClick={() => onFocusSession?.(b.id)}
                   title={`${b.name} · ${t(b.state === 'waiting' ? 'composer.bgWaiting' : 'composer.bgRunning')} · ${t('composer.bgOpen')}`}
-                  className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] max-w-40 hover:bg-fill/10 ${b.state === 'waiting' ? 'text-amber-200 bg-amber-500/10' : 'text-fg-3 bg-fill/5'}`}>
+                  className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] max-w-40 hover:bg-white/10 ${b.state === 'waiting' ? 'text-amber-200 bg-amber-500/10' : 'text-zinc-400 bg-white/5'}`}>
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${b.state === 'waiting' ? 'bg-amber-400' : 'bg-amber-400 animate-pulse'}`} />
                   <span className="truncate">{b.name}</span>
                 </button>
               ))}
-              {background.length > MAX_BACKGROUND_CHIPS && <span className="text-[11px] text-fg-4 shrink-0">+{background.length - MAX_BACKGROUND_CHIPS}</span>}
+              {background.length > MAX_BACKGROUND_CHIPS && <span className="text-[11px] text-zinc-500 shrink-0">+{background.length - MAX_BACKGROUND_CHIPS}</span>}
             </div>
           )}
           <div className="flex-1" />

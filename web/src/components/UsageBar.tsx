@@ -44,19 +44,19 @@ export function Battery({ label, win, error, loading }: { label: string; win: Us
   return (
     <div className="titlebar-nodrag relative flex items-center gap-[5px] cursor-default" aria-label={title} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       {hover && (
-        <div role="tooltip" className="absolute top-full right-0 mt-2 z-50 whitespace-nowrap rounded-md border border-fill/10 bg-surface-3 px-2.5 py-1.5 text-[11px] text-fg-1 shadow-xl pointer-events-none">
-          {win ? <div className="tabular-nums"><span className="text-fg-3">{label}</span> {remain}% · {resetLabel(win.resetsAt)}</div> : !error && <div className="text-fg-3">{t(loading ? 'usage.loading' : 'usage.unavailable', { label, reason: '' })}</div>}
+        <div role="tooltip" className="absolute top-full right-0 mt-2 z-50 whitespace-nowrap rounded-md border border-white/10 bg-[#171a22] px-2.5 py-1.5 text-[11px] text-zinc-200 shadow-xl pointer-events-none">
+          {win ? <div className="tabular-nums"><span className="text-zinc-400">{label}</span> {remain}% · {resetLabel(win.resetsAt)}</div> : !error && <div className="text-zinc-400">{t(loading ? 'usage.loading' : 'usage.unavailable', { label, reason: '' })}</div>}
           {error && <div className="text-amber-300">{error}</div>}
         </div>
       )}
-      <span className="text-[12.5px] text-fg-4 @max-[470px]:hidden">{label}</span>
+      <span className="text-[12.5px] text-zinc-500 @max-[470px]:hidden">{label}</span>
       <span className="relative inline-flex items-center">
-        <span className="w-[23px] h-[11px] rounded-[3px] border border-fg-4/80 p-px flex">
-          <span className={`h-full rounded-[1px] ${remain === null ? 'bg-fg-5' : color(remain)}`} style={{ width: `${remain ?? 0}%` }} />
+        <span className="w-[23px] h-[11px] rounded-[3px] border border-zinc-500/80 p-px flex">
+          <span className={`h-full rounded-[1px] ${remain === null ? 'bg-zinc-600' : color(remain)}`} style={{ width: `${remain ?? 0}%` }} />
         </span>
-        <span className="w-[3px] h-[5px] bg-fg-4/80 rounded-r-[1px] ml-px" />
+        <span className="w-[3px] h-[5px] bg-zinc-500/80 rounded-r-[1px] ml-px" />
       </span>
-      <span className={`text-[12.5px] tabular-nums w-[35px] @max-[660px]:hidden ${error ? 'text-amber-400' : 'text-fg-3'}`}>{remain === null ? '—' : `${remain}%`}</span>
+      <span className={`text-[12.5px] tabular-nums w-[35px] @max-[660px]:hidden ${error ? 'text-amber-400' : 'text-zinc-400'}`}>{remain === null ? '—' : `${remain}%`}</span>
     </div>
   );
 }
@@ -80,14 +80,14 @@ export default function UsageBar({ mode, onMode, companions, onCompanions }: Pro
   }, []);
 
   return (
-    <div className="titlebar-drag h-[45px] shrink-0 grid grid-cols-[1fr_auto_1fr] items-center border-b border-fill/10 text-xs select-none">
+    <div className="titlebar-drag h-[45px] shrink-0 grid grid-cols-[1fr_auto_1fr] items-center border-b border-white/10 bg-[#0e1117] text-xs select-none">
       {/* Left cell: room for the macOS window buttons. Equal side cells keep the switch centered. */}
       <div />
       {/* Mode switch, centered */}
-      <div className="titlebar-nodrag flex items-center rounded-md bg-fill/5 p-0.5 mx-3">
+      <div className="titlebar-nodrag flex items-center rounded-md bg-white/5 p-0.5 mx-3">
         {(['ide', 'agent'] as ViewMode[]).map((m) => (
           <button key={m} onClick={() => onMode(m)}
-            className={`px-3 py-0.5 rounded text-[11px] font-medium transition-colors ${mode === m ? 'bg-fill/15 text-fg' : 'text-fg-4 hover:text-fg-2'}`}>
+            className={`px-3 py-0.5 rounded text-[11px] font-medium transition-colors ${mode === m ? 'bg-white/15 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             {m === 'ide' ? t('usage.ide') : t('usage.agent')}
           </button>
         ))}
@@ -96,25 +96,25 @@ export default function UsageBar({ mode, onMode, companions, onCompanions }: Pro
           instead of running under the switch: percentages, then window labels, then agent names. */}
       <div className="@container min-w-0 h-full flex items-center justify-end">
       <div className="flex items-center gap-[15px] @max-[660px]:gap-3 pr-3 min-w-0">
-        {onCompanions && <button className={`titlebar-nodrag shrink-0 w-7 h-7 flex items-center justify-center rounded-md hover:bg-fill/10 ${companions ? 'text-amber-300' : 'text-fg-4'}`}
+        {onCompanions && <button className={`titlebar-nodrag shrink-0 w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 ${companions ? 'text-amber-300' : 'text-zinc-500'}`}
           aria-pressed={companions} onClick={onCompanions} title={t('usage.companions')} aria-label={t('usage.companions')}>
           <svg width="19" height="22" viewBox="0 0 24 28" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="13" cy="5" r="3" /><path d="m13 8-2 8m1-6-5 4-3-3m8 0 5 3 3-4m-9 6-5 8m5-8 6 4 3 5" />
           </svg>
         </button>}
           <div className="flex items-center gap-2.5">
-            <span className="text-[12.5px] text-fg-3 font-medium @max-[360px]:hidden">Claude</span>
+            <span className="text-[12.5px] text-zinc-400 font-medium @max-[360px]:hidden">Claude</span>
             <Battery label="5h" win={u?.claude?.fiveHour ?? null} error={loadError ?? u?.errors.find((e) => e.startsWith('claude:'))} loading={loading} />
             <Battery label={t('usage.week')} win={u?.claude?.weekly ?? null} error={loadError ?? u?.errors.find((e) => e.startsWith('claude:'))} loading={loading} />
             {u?.claude?.model && <Battery label={u.claude.model.name.slice(0, 5)} win={u.claude.model} loading={loading} />}
           </div>
-        <span className="text-fg-6">|</span>
+        <span className="text-zinc-700">|</span>
           <div className="flex items-center gap-2.5">
-            <span className="text-[12.5px] text-fg-3 font-medium @max-[360px]:hidden">Codex</span>
+            <span className="text-[12.5px] text-zinc-400 font-medium @max-[360px]:hidden">Codex</span>
             <Battery label="5h" win={u?.codex?.fiveHour ?? null} error={loadError ?? u?.errors.find((e) => e.startsWith('codex:'))} loading={loading} />
             <Battery label={t('usage.week')} win={u?.codex?.weekly ?? null} error={loadError ?? u?.errors.find((e) => e.startsWith('codex:'))} loading={loading} />
           </div>
-        <button className={`titlebar-nodrag w-7 h-7 flex items-center justify-center rounded-md text-fg-4 hover:text-fg-1 hover:bg-fill/10 ${loading ? 'animate-spin' : ''}`} onClick={() => load(true)} title={t('usage.refresh')}><Icon name="reload" size={14} /></button>
+        <button className={`titlebar-nodrag w-7 h-7 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-white/10 ${loading ? 'animate-spin' : ''}`} onClick={() => load(true)} title={t('usage.refresh')}><Icon name="reload" size={14} /></button>
       </div>
       </div>
     </div>

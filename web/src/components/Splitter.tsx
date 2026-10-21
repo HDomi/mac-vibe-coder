@@ -33,7 +33,7 @@ export default function Splitter({ onDrag, onStart, onEnd }: Props) {
     document.body.style.userSelect = 'none';
   };
   return (
-    <div onPointerDown={onDown} className={`relative w-px shrink-0 bg-fill/10 cursor-col-resize group ${active ? 'bg-blue-400' : ''}`}>
+    <div onPointerDown={onDown} className={`relative w-px shrink-0 bg-white/10 cursor-col-resize group ${active ? 'bg-blue-400' : ''}`}>
       <div className="absolute inset-y-0 -left-1 -right-1" />
       <div className={`absolute inset-y-0 left-0 w-px ${active ? 'bg-blue-400' : 'group-hover:bg-blue-400/60'}`} />
     </div>

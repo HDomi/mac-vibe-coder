@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type GitBranch, type GitCommit, type GitCommitFile, type GitFile, type GitStatus } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
-import { confirmDialog } from '../lib/dialogs';
 import CommitGraph from './CommitGraph';
 import Icon from './Icon';
 
@@ -12,11 +11,11 @@ const PAGE = 30;
 
 function DiffView({ text }: { text: string }) {
   useLang();
-  if (!text) return <div className="p-3 text-xs text-fg-4">{t('git.noChanges')}</div>;
+  if (!text) return <div className="p-3 text-xs text-zinc-500">{t('git.noChanges')}</div>;
   return (
     <pre className="p-3 text-[12px] font-mono leading-relaxed whitespace-pre overflow-auto">
       {text.split('\n').map((l, i) => (
-        <div key={i} className={l.startsWith('+') && !l.startsWith('+++') ? 'bg-emerald-500/10 text-emerald-200' : l.startsWith('-') && !l.startsWith('---') ? 'bg-red-500/10 text-red-200' : l.startsWith('@@') ? 'text-blue-300' : 'text-fg-3'}>{l || ' '}</div>
+        <div key={i} className={l.startsWith('+') && !l.startsWith('+++') ? 'bg-emerald-500/10 text-emerald-200' : l.startsWith('-') && !l.startsWith('---') ? 'bg-red-500/10 text-red-200' : l.startsWith('@@') ? 'text-blue-300' : 'text-zinc-400'}>{l || ' '}</div>
       ))}
     </pre>
   );
@@ -25,12 +24,12 @@ function DiffView({ text }: { text: string }) {
 /** Sticky section header: colored marker, title, count pill, optional actions on the right. */
 function SectionHeader({ color, title, count, children }: { color: string; title: string; count?: number; children?: ReactNode }) {
   return (
-    <div className="sticky top-0 z-10 flex items-center gap-2 px-3 h-8 bg-surface-2/95 backdrop-blur border-b border-fill/5 text-[11px]">
+    <div className="sticky top-0 z-10 flex items-center gap-2 px-3 h-8 bg-[#12151c]/95 backdrop-blur border-b border-white/5 text-[11px]">
       <span className={`w-1.5 h-1.5 rounded-full ${color}`} />
-      <span className="font-medium tracking-wide text-fg-2">{title}</span>
-      {count !== undefined && <span className="min-w-[18px] px-1.5 py-px rounded-full bg-fill/5 text-[10px] text-fg-3 text-center font-mono">{count}</span>}
+      <span className="font-medium tracking-wide text-zinc-300">{title}</span>
+      {count !== undefined && <span className="min-w-[18px] px-1.5 py-px rounded-full bg-white/5 text-[10px] text-zinc-400 text-center font-mono">{count}</span>}
       <div className="flex-1" />
-      <div className="flex items-center gap-2 text-[10px] text-fg-4">{children}</div>
+      <div className="flex items-center gap-2 text-[10px] text-zinc-500">{children}</div>
     </div>
   );
 }
@@ -150,15 +149,14 @@ export default function GitPanel({ cwd, visible }: Props) {
     return () => io.disconnect();
   }, [hasMore, sel, commitView, loadMore, log.length]);
 
-  if (!cwd) return <div className="h-full flex items-center justify-center text-fg-5 text-sm">{t('git.openProject')}</div>;
-  if (st && !st.repo) return <div className="h-full flex items-center justify-center text-fg-5 text-sm">{t('git.notRepo')}</div>;
+  if (!cwd) return <div className="h-full flex items-center justify-center text-zinc-600 text-sm">{t('git.openProject')}</div>;
+  if (st && !st.repo) return <div className="h-full flex items-center justify-center text-zinc-600 text-sm">{t('git.notRepo')}</div>;
 
   const staged = st?.files.filter((f) => f.staged) ?? [];
   const unstaged = st?.files.filter((f) => !f.staged || f.worktree !== ' ') ?? [];
-  const stage = async (files: GitFile[], action: 'add' | 'reset' | 'discard') => {
+  const stage = (files: GitFile[], action: 'add' | 'reset' | 'discard') => {
     if (!files.length || operationRef.current || remoteBusy) return;
-    if (action === 'discard' && !(await confirmDialog(t('git.confirmDiscard', { n: files.length }), { ok: t('common.discard'), danger: true }))) return;
-    if (operationRef.current) return; // another operation started while the sheet was up
+    if (action === 'discard' && !window.confirm(t('git.confirmDiscard', { n: files.length }))) return;
     operationRef.current = true; setBusy(true);
     api.gitStage(cwd, files.map((f) => f.path), action).then(() => { if (projectRef.current === project) refresh(); }).catch((e) => { if (projectRef.current === project) setNote(e.message); }).finally(() => { if (projectRef.current === project) { operationRef.current = false; setBusy(false); } });
   };
@@ -195,62 +193,62 @@ export default function GitPanel({ cwd, visible }: Props) {
     const tone = f.untracked || code === 'A' ? 'text-emerald-300 bg-emerald-500/10' : code === 'D' ? 'text-red-300 bg-red-500/10' : 'text-amber-300 bg-amber-500/10';
     const active = sel?.path === f.path && sel.staged === isStaged;
     return (
-      <div data-companion-rung="" className={`group flex items-center gap-2 px-3 py-1 text-xs cursor-pointer border-l-2 ${active ? 'bg-blue-500/15 border-blue-400' : 'border-transparent hover:bg-fill/5'}`} onClick={() => setSel({ path: f.path, staged: isStaged })}>
+      <div data-companion-rung="" className={`group flex items-center gap-2 px-3 py-1 text-xs cursor-pointer border-l-2 ${active ? 'bg-blue-500/15 border-blue-400' : 'border-transparent hover:bg-white/5'}`} onClick={() => setSel({ path: f.path, staged: isStaged })}>
         <span className={`w-9 text-center text-[9px] font-mono rounded px-1 py-px ${tone}`}>{CODE[code] ?? ''}</span>
-        <span className="truncate flex-1 font-mono text-fg-2" title={f.path}>{f.path}</span>
-        <button className="opacity-0 group-hover:opacity-100 text-fg-3 hover:text-fg w-5 h-5 rounded hover:bg-fill/10" title={isStaged ? t('git.unstage') : t('git.stage')} onClick={(e) => { e.stopPropagation(); stage([f], isStaged ? 'reset' : 'add'); }}>{isStaged ? '−' : '＋'}</button>
+        <span className="truncate flex-1 font-mono text-zinc-300" title={f.path}>{f.path}</span>
+        <button className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-white w-5 h-5 rounded hover:bg-white/10" title={isStaged ? t('git.unstage') : t('git.stage')} onClick={(e) => { e.stopPropagation(); stage([f], isStaged ? 'reset' : 'add'); }}>{isStaged ? '−' : '＋'}</button>
       </div>
     );
   };
 
   return (
     <div className="h-full flex flex-col text-sm">
-      <div data-companion-floor="git-toolbar" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-2 px-2 border-b border-fill/10 text-xs">
+      <div data-companion-floor="git-toolbar" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-2 px-2 border-b border-white/10 text-xs">
         <select value={st?.branch ?? ''} onChange={(e) => checkout(e.target.value)} disabled={busy || !!remoteBusy} title={t('git.switchBranch')}
-          className="bg-fill/5 rounded-md px-1.5 py-1 outline-none max-w-[45%] font-medium text-fg-1">
+          className="bg-white/5 rounded-md px-1.5 py-1 outline-none max-w-[45%] font-medium text-zinc-200">
           {st?.branch && !branches.some((b) => b.name === st.branch) && <option value={st.branch}>{st.branch}</option>}
           {branches.filter((b) => !b.remote).map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
           {branches.some((b) => b.remote) && <optgroup label={t('git.remote')}>{branches.filter((b) => b.remote).map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}</optgroup>}
           <option value="__new__">{t('git.newBranch')}</option>
         </select>
-        {st && (st.ahead > 0 || st.behind > 0) && <span className="text-fg-4 whitespace-nowrap font-mono">↑{st.ahead} ↓{st.behind}</span>}
+        {st && (st.ahead > 0 || st.behind > 0) && <span className="text-zinc-500 whitespace-nowrap font-mono">↑{st.ahead} ↓{st.behind}</span>}
         <div className="flex-1" />
         {(['fetch', 'pull', 'push'] as const).map((op) => (
           <button key={op} disabled={!!remoteBusy || busy} onClick={() => remote(op)}
-            className={`px-2 py-1 rounded hover:bg-fill/10 disabled:opacity-40 ${remoteBusy === op ? 'text-amber-300 animate-pulse' : 'text-fg-2'}`}>{op}</button>
+            className={`px-2 py-1 rounded hover:bg-white/10 disabled:opacity-40 ${remoteBusy === op ? 'text-amber-300 animate-pulse' : 'text-zinc-300'}`}>{op}</button>
         ))}
-        <button className="w-7 h-7 flex items-center justify-center rounded-md text-fg-3 hover:text-fg hover:bg-fill/10" onClick={refresh} disabled={busy} title={t('common.refresh')}><Icon name="reload" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={refresh} disabled={busy} title={t('common.refresh')}><Icon name="reload" /></button>
       </div>
-      {newBranch !== null && <form className="flex gap-2 px-2 py-2 border-b border-fill/10" onSubmit={(e) => { e.preventDefault(); createBranch(); }}>
-        <input autoFocus aria-label={t('git.newBranch')} placeholder={t('git.newBranchPrompt')} value={newBranch} onChange={(e) => setNewBranch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setNewBranch(null); }} className="min-w-0 flex-1 rounded bg-fill/5 px-2 text-xs outline-none" />
+      {newBranch !== null && <form className="flex gap-2 px-2 py-2 border-b border-white/10" onSubmit={(e) => { e.preventDefault(); createBranch(); }}>
+        <input autoFocus aria-label={t('git.newBranch')} placeholder={t('git.newBranchPrompt')} value={newBranch} onChange={(e) => setNewBranch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setNewBranch(null); }} className="min-w-0 flex-1 rounded bg-white/5 px-2 text-xs outline-none" />
         <button disabled={busy || !!remoteBusy || !newBranch.trim()} className="text-xs text-sky-200 disabled:opacity-40">{t('git.newBranch')}</button>
         <button type="button" onClick={() => setNewBranch(null)} className="text-xs">✕</button>
       </form>}
-      {note && <div className="px-3 py-1 text-[11px] text-amber-200 border-b border-fill/5 truncate" title={note}>{note}</div>}
+      {note && <div className="px-3 py-1 text-[11px] text-amber-200 border-b border-white/5 truncate" title={note}>{note}</div>}
       <div className="flex-1 min-h-0 flex flex-col">
-        <div data-companion-floor="git-changes" data-companion-edge="bottom" className="max-h-[45%] overflow-y-auto border-b border-fill/10">
+        <div data-companion-floor="git-changes" data-companion-edge="bottom" className="max-h-[45%] overflow-y-auto border-b border-white/10">
           <section>
           <SectionHeader color="bg-emerald-400" title={t('git.stagedTitle')} count={staged.length}>
-            {staged.length > 0 && <button className="hover:text-fg" onClick={() => stage(staged, 'reset')}>{t('git.unstageAll')}</button>}
+            {staged.length > 0 && <button className="hover:text-white" onClick={() => stage(staged, 'reset')}>{t('git.unstageAll')}</button>}
           </SectionHeader>
-          {staged.length === 0 ? <div className="px-3 py-2 text-[11px] text-fg-5">{t('git.nothingStaged')}</div> : <div className="py-1">{staged.map((f) => <div key={'s' + f.path}>{row({ f, isStaged: true })}</div>)}</div>}
+          {staged.length === 0 ? <div className="px-3 py-2 text-[11px] text-zinc-600">{t('git.nothingStaged')}</div> : <div className="py-1">{staged.map((f) => <div key={'s' + f.path}>{row({ f, isStaged: true })}</div>)}</div>}
           </section>
           <section>
           <SectionHeader color="bg-amber-400" title={t('git.changesTitle')} count={unstaged.length}>
             {unstaged.length > 0 && <>
-              <button className="hover:text-fg" onClick={() => stage(unstaged, 'add')}>{t('git.stageAll')}</button>
+              <button className="hover:text-white" onClick={() => stage(unstaged, 'add')}>{t('git.stageAll')}</button>
               {unstaged.some((f) => !f.untracked) && <button className="hover:text-red-300" onClick={() => stage(unstaged.filter((f) => !f.untracked), 'discard')}>{t('git.discard')}</button>}
             </>}
           </SectionHeader>
-          {st && unstaged.length === 0 ? <div className="px-3 py-2 text-[11px] text-fg-5">{t('git.clean')}</div> : <div className="py-1">{unstaged.map((f) => <div key={'u' + f.path}>{row({ f, isStaged: false })}</div>)}</div>}
+          {st && unstaged.length === 0 ? <div className="px-3 py-2 text-[11px] text-zinc-600">{t('git.clean')}</div> : <div className="py-1">{unstaged.map((f) => <div key={'u' + f.path}>{row({ f, isStaged: false })}</div>)}</div>}
           </section>
         </div>
         <div className="relative flex-1 min-h-0">
-        <div ref={scrollRef} className="absolute inset-0 overflow-auto bg-surface-0">
+        <div ref={scrollRef} className="absolute inset-0 overflow-auto bg-[#0b0d12]">
           {sel ? (
             <>
               <SectionHeader color="bg-blue-400" title={sel.path}>
-                <button className="hover:text-fg" onClick={() => setSel(null)}>✕ {t('git.closeDiff')}</button>
+                <button className="hover:text-white" onClick={() => setSel(null)}>✕ {t('git.closeDiff')}</button>
               </SectionHeader>
               <DiffView text={diff} />
             </>
@@ -259,10 +257,10 @@ export default function GitPanel({ cwd, visible }: Props) {
               <SectionHeader color="bg-violet-400" title={t('git.recentCommits')} count={log.length}>
                 {!hasMore && log.length > 0 && <span>{t('git.allLoaded')}</span>}
               </SectionHeader>
-              {log.length === 0 && <div className="px-3 py-3 text-[11px] text-fg-5">{t('git.noCommits')}</div>}
+              {log.length === 0 && <div className="px-3 py-3 text-[11px] text-zinc-600">{t('git.noCommits')}</div>}
               <CommitGraph commits={log} selected={commitView?.commit.hash} onSelect={openCommit} />
-              <div ref={sentinelRef} className="px-3 py-2 text-[10px] text-fg-5 text-center">
-                {loadingMore ? <span className="animate-pulse">{t('git.loadingMore')}</span> : hasMore ? <button className="hover:text-fg-2" onClick={loadMore}>{t('git.loadMore')}</button> : null}
+              <div ref={sentinelRef} className="px-3 py-2 text-[10px] text-zinc-600 text-center">
+                {loadingMore ? <span className="animate-pulse">{t('git.loadingMore')}</span> : hasMore ? <button className="hover:text-zinc-300" onClick={loadMore}>{t('git.loadMore')}</button> : null}
               </div>
             </>
           )}
@@ -272,21 +270,21 @@ export default function GitPanel({ cwd, visible }: Props) {
             onFile={setCommitFile} onClose={() => { setCommitView(null); setCommitFile(null); }} />
         )}
         </div>
-        <div data-companion-floor="git-commit" data-companion-ground="" className="shrink-0 border-t border-fill/10 bg-surface-2">
+        <div data-companion-floor="git-commit" data-companion-ground="" className="shrink-0 border-t border-white/10 bg-[#12151c]">
           <div className="flex items-center gap-2 px-3 h-7 text-[11px]">
             <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-            <span className="font-medium tracking-wide text-fg-2">{t('git.commitTitle')}</span>
-            {st?.branch && <span className="font-mono text-[10px] text-fg-4 truncate">· {st.branch}</span>}
+            <span className="font-medium tracking-wide text-zinc-300">{t('git.commitTitle')}</span>
+            {st?.branch && <span className="font-mono text-[10px] text-zinc-500 truncate">· {st.branch}</span>}
           </div>
           <div className="px-2 pb-2 space-y-2">
             <textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={2} placeholder={t('git.commitPlaceholder')}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); commit(); } }}
-              className="w-full bg-surface-0 rounded-md border border-fill/10 focus:border-sky-400/40 px-2 py-1.5 text-xs outline-none resize-none font-mono" />
+              className="w-full bg-[#0b0d12] rounded-md border border-white/10 focus:border-sky-400/40 px-2 py-1.5 text-xs outline-none resize-none font-mono" />
             <div className="flex items-center gap-2">
               <button disabled={busy || !msg.trim() || !staged.length} className="rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-xs px-3 py-1.5 disabled:opacity-40" onClick={() => commit()}>{t('git.commit', { n: staged.length })}</button>
-              <button disabled={busy || !msg.trim() || !staged.length || !!remoteBusy} className="rounded bg-fill/5 hover:bg-fill/10 text-xs px-3 py-1.5 disabled:opacity-40"
+              <button disabled={busy || !msg.trim() || !staged.length || !!remoteBusy} className="rounded bg-white/5 hover:bg-white/10 text-xs px-3 py-1.5 disabled:opacity-40"
                 onClick={() => commit(true)}>{t('git.commitPush')}</button>
-              <span className="ml-auto text-[10px] text-fg-5">⌘↩</span>
+              <span className="ml-auto text-[10px] text-zinc-600">⌘↩</span>
             </div>
           </div>
         </div>
@@ -312,33 +310,33 @@ function CommitDetail({ view, root, file, diff, onFile, onClose }: {
   }, [onClose]);
   const preview = (path: string) => window.dispatchEvent(new CustomEvent('vibe:open-file', { detail: { path: `${root.replace(/\/$/, '')}/${path}` } }));
   return (
-    <div className="absolute inset-0 flex flex-col bg-surface-0 z-20">
+    <div className="absolute inset-0 flex flex-col bg-[#0b0d12] z-20">
       <SectionHeader color="bg-violet-400" title={commit.subject} count={files?.length}>
         <span className="font-mono text-violet-300/75" title={commit.hash}>{commit.hash.slice(0, 7)}</span>
-        <button className="hover:text-fg" onClick={onClose} title="Esc">✕ {t('git.closeCommit')}</button>
+        <button className="hover:text-white" onClick={onClose} title="Esc">✕ {t('git.closeCommit')}</button>
       </SectionHeader>
-      <div className="max-h-[40%] shrink-0 overflow-y-auto border-b border-fill/10 py-1">
-        {files === null && <div className="px-3 py-2 text-[11px] text-fg-4 animate-pulse">{t('git.loadingFiles')}</div>}
+      <div className="max-h-[40%] shrink-0 overflow-y-auto border-b border-white/10 py-1">
+        {files === null && <div className="px-3 py-2 text-[11px] text-zinc-500 animate-pulse">{t('git.loadingFiles')}</div>}
         {error && <div className="px-3 py-2 text-[11px] text-red-300">{error}</div>}
-        {files?.length === 0 && !error && <div className="px-3 py-2 text-[11px] text-fg-5">{t('git.noFilesInCommit')}</div>}
+        {files?.length === 0 && !error && <div className="px-3 py-2 text-[11px] text-zinc-600">{t('git.noFilesInCommit')}</div>}
         {files?.map((f) => {
           const tone = f.status === 'A' ? 'text-emerald-300 bg-emerald-500/10' : f.status === 'D' ? 'text-red-300 bg-red-500/10' : 'text-amber-300 bg-amber-500/10';
           const active = file === f.path;
           return (
             <div key={f.path} data-companion-rung="" onClick={() => onFile(f.path)}
-              className={`group flex items-center gap-2 px-3 py-1 text-xs cursor-pointer border-l-2 ${active ? 'bg-blue-500/15 border-blue-400' : 'border-transparent hover:bg-fill/5'}`}>
+              className={`group flex items-center gap-2 px-3 py-1 text-xs cursor-pointer border-l-2 ${active ? 'bg-blue-500/15 border-blue-400' : 'border-transparent hover:bg-white/5'}`}>
               <span className={`w-9 text-center text-[9px] font-mono rounded px-1 py-px ${tone}`}>{CODE[f.status] ?? f.status}</span>
-              <span className="truncate flex-1 font-mono text-fg-2" title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}>
-                {f.oldPath && <span className="text-fg-4">{f.oldPath} → </span>}{f.path}
+              <span className="truncate flex-1 font-mono text-zinc-300" title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}>
+                {f.oldPath && <span className="text-zinc-500">{f.oldPath} → </span>}{f.path}
               </span>
-              {f.status !== 'D' && <button className="opacity-0 group-hover:opacity-100 text-[10px] text-fg-3 hover:text-fg px-1.5 rounded hover:bg-fill/10" title={t('git.openPreviewHint')}
+              {f.status !== 'D' && <button className="opacity-0 group-hover:opacity-100 text-[10px] text-zinc-400 hover:text-white px-1.5 rounded hover:bg-white/10" title={t('git.openPreviewHint')}
                 onClick={(e) => { e.stopPropagation(); preview(f.path); }}>{t('git.openPreview')}</button>}
             </div>
           );
         })}
       </div>
       <div className="flex-1 min-h-0 overflow-auto">
-        {file ? <DiffView text={diff} /> : files && files.length > 0 && <div className="p-3 text-xs text-fg-4">{t('git.pickFile')}</div>}
+        {file ? <DiffView text={diff} /> : files && files.length > 0 && <div className="p-3 text-xs text-zinc-500">{t('git.pickFile')}</div>}
       </div>
     </div>
   );

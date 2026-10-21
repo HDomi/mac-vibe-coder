@@ -21,12 +21,6 @@ contextBridge.exposeInMainWorld('vibe', {
   // Hold / release the "no idle sleep" assertion while agents or shells are busy; wake-up signal for reconnects.
   keepAwake: (busy) => ipcRenderer.send('keep-awake', busy),
   onPowerResume: (cb) => { ipcRenderer.on('power-resume', () => cb()); },
-  // macOS sheets attached to the window, in place of window.confirm / window.alert.
-  confirm: (opts) => ipcRenderer.invoke('confirm', opts),
-  alert: (opts) => ipcRenderer.invoke('alert', opts),
-  // Trackpad: pinch scales the page zoom; three-finger swipes arrive from AppKit via the window.
-  zoomBy: (scale) => ipcRenderer.send('zoom-by', scale),
-  onSwipe: (cb) => { ipcRenderer.on('swipe', (_e, dir) => cb(dir)); },
   // Browser panel: a native Chromium view laid over the panel (see electron/browserView.cts).
   browser: {
     show: (bounds) => ipcRenderer.invoke('browser:show', bounds),
