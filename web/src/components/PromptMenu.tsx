@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type SavedPrompt } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
+import { confirmDialog } from '../lib/dialogs';
 
 let cache: SavedPrompt[] | null = null;
 
@@ -36,36 +37,36 @@ export default function PromptMenu({ draft, onInsert, disabled }: { draft: strin
 
   return (
     <div ref={box} className="relative">
-      <button type="button" disabled={disabled} onClick={() => setOpen((v) => !v)} className={`text-xs px-2 hover:text-white disabled:opacity-40 ${open ? 'text-white' : 'text-zinc-400'}`} title={t('prompts.title')}>
+      <button type="button" disabled={disabled} onClick={() => setOpen((v) => !v)} className={`text-xs px-2 hover:text-fg disabled:opacity-40 ${open ? 'text-fg' : 'text-fg-3'}`} title={t('prompts.title')}>
         📝 {t('prompts.button')}
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 mb-2 w-96 max-w-[80vw] rounded-lg border border-white/10 bg-[#171a22] shadow-xl py-1 text-[13px] z-30">
+        <div className="absolute bottom-full left-0 mb-2 w-96 max-w-[80vw] rounded-lg border border-fill/10 bg-surface-3 shadow-xl py-1 text-[13px] z-30">
           {error && <div className="px-3 py-1 text-[11px] text-red-300">{error}</div>}
-          {list.length === 0 && <div className="px-3 py-2 text-xs text-zinc-500">{t('prompts.empty')}</div>}
+          {list.length === 0 && <div className="px-3 py-2 text-xs text-fg-4">{t('prompts.empty')}</div>}
           <div className="max-h-72 overflow-y-auto">
             {list.map((p) => (
-              <div key={p.id} className="group flex items-start gap-2 px-3 py-1.5 hover:bg-white/5 cursor-pointer" title={p.text}
+              <div key={p.id} className="group flex items-start gap-2 px-3 py-1.5 hover:bg-fill/5 cursor-pointer" title={p.text}
                 onClick={() => { onInsert(p.text); setOpen(false); }}>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-zinc-200">{p.name}</div>
-                  {p.name !== p.text && <div className="truncate text-[11px] text-zinc-500">{p.text.replace(/\s+/g, ' ')}</div>}
+                  <div className="truncate text-fg-1">{p.name}</div>
+                  {p.name !== p.text && <div className="truncate text-[11px] text-fg-4">{p.text.replace(/\s+/g, ' ')}</div>}
                 </div>
-                <button className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-300 text-xs px-1" title={t('prompts.delete')}
-                  onClick={(e) => { e.stopPropagation(); if (window.confirm(t('prompts.confirmDelete', { name: p.name }))) persist(list.filter((x) => x.id !== p.id)); }}>✕</button>
+                <button className="opacity-0 group-hover:opacity-100 text-fg-4 hover:text-red-300 text-xs px-1" title={t('prompts.delete')}
+                  onClick={async (e) => { e.stopPropagation(); if (await confirmDialog(t('prompts.confirmDelete', { name: p.name }), { ok: t('common.delete'), danger: true })) persist(list.filter((x) => x.id !== p.id)); }}>✕</button>
               </div>
             ))}
           </div>
-          <div className="border-t border-white/10 mt-1 pt-1 px-2">
+          <div className="border-t border-fill/10 mt-1 pt-1 px-2">
             {naming === null ? (
-              <button className="w-full text-left px-1 py-1 text-xs text-sky-300 hover:text-sky-200 disabled:text-zinc-600" disabled={!draft.trim()}
+              <button className="w-full text-left px-1 py-1 text-xs text-sky-300 hover:text-sky-200 disabled:text-fg-5" disabled={!draft.trim()}
                 onClick={() => setNaming(draft.trim().split('\n')[0].slice(0, 40))} title={draft.trim() ? undefined : t('prompts.saveHint')}>
                 ＋ {t('prompts.saveCurrent')}
               </button>
             ) : (
               <form className="flex items-center gap-2 py-1" onSubmit={(e) => { e.preventDefault(); save(); }}>
                 <input autoFocus value={naming} onChange={(e) => setNaming(e.target.value)} placeholder={t('prompts.namePlaceholder')} aria-label={t('prompts.namePlaceholder')}
-                  className="flex-1 min-w-0 rounded bg-white/5 px-2 py-1 text-xs outline-none" />
+                  className="flex-1 min-w-0 rounded bg-fill/5 px-2 py-1 text-xs outline-none" />
                 <button className="text-xs text-sky-300">{t('prompts.save')}</button>
               </form>
             )}

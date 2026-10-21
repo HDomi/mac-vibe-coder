@@ -25,13 +25,13 @@ export function UserItem({ item, onRewind }: { item: Extract<ChatItem, { kind: '
   const [open, setOpen] = useState(false);
   if (item.compact) {
     return (
-      <div className="my-1 rounded-lg border border-dashed border-white/10 bg-white/[0.02] text-xs">
-        <button className="w-full flex items-center gap-2 px-3 py-1.5 text-zinc-400 hover:text-zinc-200" onClick={() => setOpen((v) => !v)}>
+      <div className="my-1 rounded-lg border border-dashed border-fill/10 bg-fill/[0.02] text-xs">
+        <button className="w-full flex items-center gap-2 px-3 py-1.5 text-fg-3 hover:text-fg-1" onClick={() => setOpen((v) => !v)}>
           <span className="text-[10px]">{open ? '▾' : '▸'}</span>
           <span>{t('chat.compactSummary')}</span>
-          <span className="ml-auto text-[10px] text-zinc-600">{t('chat.compactSummaryHint')}</span>
+          <span className="ml-auto text-[10px] text-fg-5">{t('chat.compactSummaryHint')}</span>
         </button>
-        {open && <div className="px-3 pb-2 whitespace-pre-wrap text-zinc-400 max-h-80 overflow-auto">{item.text}</div>}
+        {open && <div className="px-3 pb-2 whitespace-pre-wrap text-fg-3 max-h-80 overflow-auto">{item.text}</div>}
       </div>
     );
   }
@@ -39,14 +39,14 @@ export function UserItem({ item, onRewind }: { item: Extract<ChatItem, { kind: '
     <div className="group/user flex justify-end items-start gap-2">
       {onRewind && !item.pending && (
         <button onClick={onRewind} title={t('rewind.hint')}
-          className="mt-2 shrink-0 opacity-0 group-hover/user:opacity-100 rounded-md px-2 py-1 text-[11px] text-zinc-400 hover:text-amber-200 hover:bg-white/5">⟲ {t('rewind.button')}</button>
+          className="mt-2 shrink-0 opacity-0 group-hover/user:opacity-100 rounded-md px-2 py-1 text-[11px] text-fg-3 hover:text-amber-200 hover:bg-fill/5">⟲ {t('rewind.button')}</button>
       )}
       <div className={`max-w-[80%] rounded-2xl rounded-br-md bg-blue-500/20 px-4 py-2.5 text-[14px] whitespace-pre-wrap ${item.pending ? 'opacity-60' : ''}`}>
         {item.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
             {item.attachments.map((a) => a.kind === 'image'
               ? <img key={a.path} src={api.rawUrl(a.path)} alt={a.name} className="h-20 rounded-md object-cover cursor-zoom-in hover:opacity-90 transition-opacity" title={a.path} onClick={() => openLightbox(api.rawUrl(a.path), a.name)} />
-              : <span key={a.path} className="text-xs bg-white/10 rounded px-2 py-1" title={a.path}>📎 {a.name}</span>)}
+              : <span key={a.path} className="text-xs bg-fill/10 rounded px-2 py-1" title={a.path}>📎 {a.name}</span>)}
           </div>
         )}
         {item.text}
@@ -59,20 +59,20 @@ export const AssistantItem = memo(function AssistantItem({ item, baseDir }: { it
   useLang();
   const [showThinking, setShowThinking] = useState(false);
   return (
-    <div className={`group/msg relative ${item.parent ? 'ml-6 border-l border-white/10 pl-3' : ''}`}>
+    <div className={`group/msg relative ${item.parent ? 'ml-6 border-l border-fill/10 pl-3' : ''}`}>
       {item.text && !item.streaming && <CopyButton text={item.text} className="absolute -top-2 right-0 opacity-0 group-hover/msg:opacity-100" />}
       {item.thinking && (
         <div className="mb-1">
-          <button className="text-[11px] text-zinc-500 hover:text-zinc-300" onClick={() => setShowThinking((v) => !v)}>
+          <button className="text-[11px] text-fg-4 hover:text-fg-2" onClick={() => setShowThinking((v) => !v)}>
             {showThinking ? '▾' : '▸'} {t('items.thinking')}{item.streaming && !item.text ? '…' : ''}
           </button>
-          {showThinking && <div className="mt-1 text-xs text-zinc-500 whitespace-pre-wrap border-l-2 border-white/10 pl-2">{item.thinking}</div>}
+          {showThinking && <div className="mt-1 text-xs text-fg-4 whitespace-pre-wrap border-l-2 border-fill/10 pl-2">{item.thinking}</div>}
         </div>
       )}
       {item.text && (
         <div className="prose-md text-[14px] max-w-none">
           <MarkdownView text={item.text} baseDir={baseDir} />
-          {item.streaming && <span className="inline-block w-1.5 h-4 bg-zinc-400 animate-pulse align-middle ml-0.5" />}
+          {item.streaming && <span className="inline-block w-1.5 h-4 bg-fg-3 animate-pulse align-middle ml-0.5" />}
         </div>
       )}
     </div>
@@ -89,26 +89,26 @@ export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: '
   const isSubagent = SUBAGENT_TOOLS.has(item.name);
   const i = (item.input ?? {}) as Record<string, unknown>;
   return (
-    <div className={`rounded-lg border ${item.isError ? 'border-red-500/30' : isSubagent && !item.done ? 'border-violet-400/40' : 'border-white/10'} ${isSubagent ? 'bg-violet-500/[0.04]' : 'bg-white/[0.03]'} text-[13px] ${item.parent ? 'ml-6' : ''}`}>
+    <div className={`rounded-lg border ${item.isError ? 'border-red-500/30' : isSubagent && !item.done ? 'border-violet-400/40' : 'border-fill/10'} ${isSubagent ? 'bg-violet-500/[0.04]' : 'bg-fill/[0.03]'} text-[13px] ${item.parent ? 'ml-6' : ''}`}>
       <button className="w-full flex items-center gap-2 px-3 py-1.5 text-left" onClick={() => setOpen((v) => !v)}>
         <span className={`w-1.5 h-1.5 rounded-full ${item.done ? (item.isError ? 'bg-red-400' : 'bg-emerald-400') : 'bg-amber-400 animate-pulse'}`} />
         {isSubagent && <span className={`text-[10px] rounded px-1.5 py-0.5 ${item.done ? 'bg-violet-500/15 text-violet-200' : 'bg-violet-500/25 text-violet-100 animate-pulse'}`}>{item.done ? t('items.subagent') : t('items.subagentWorking')}</span>}
-        <span className="font-medium text-zinc-200">{isSubagent ? String(i.subagent_type ?? i.description ?? item.name) : item.name}</span>
-        <span className="truncate text-zinc-400 font-mono text-[12px] flex-1">{summary}</span>
-        {!item.done && item.elapsed > 0 && <span className="text-zinc-500 text-[11px]">{Math.round(item.elapsed)}s</span>}
-        <span className="text-zinc-600">{open ? '▾' : '▸'}</span>
+        <span className="font-medium text-fg-1">{isSubagent ? String(i.subagent_type ?? i.description ?? item.name) : item.name}</span>
+        <span className="truncate text-fg-3 font-mono text-[12px] flex-1">{summary}</span>
+        {!item.done && item.elapsed > 0 && <span className="text-fg-4 text-[11px]">{Math.round(item.elapsed)}s</span>}
+        <span className="text-fg-5">{open ? '▾' : '▸'}</span>
       </button>
       {open && (
-        <div className="border-t border-white/10 px-3 py-2 space-y-2">
-          <pre className="text-[12px] text-zinc-400 whitespace-pre-wrap break-all max-h-48 overflow-auto">{JSON.stringify(item.input, null, 2)}</pre>
+        <div className="border-t border-fill/10 px-3 py-2 space-y-2">
+          <pre className="text-[12px] text-fg-3 whitespace-pre-wrap break-all max-h-48 overflow-auto">{JSON.stringify(item.input, null, 2)}</pre>
           {item.output !== null && (
-            <pre className={`text-[12px] whitespace-pre-wrap break-all max-h-72 overflow-auto rounded bg-black/40 p-2 ${item.isError ? 'text-red-300' : 'text-zinc-300'}`}>{item.output.slice(0, 20000)}{item.output.length > 20000 ? '\n…' : ''}</pre>
+            <pre className={`text-[12px] whitespace-pre-wrap break-all max-h-72 overflow-auto rounded bg-black/40 p-2 ${item.isError ? 'text-red-300' : 'text-fg-2'}`}>{item.output.slice(0, 20000)}{item.output.length > 20000 ? '\n…' : ''}</pre>
           )}
         </div>
       )}
       {children && (
-        <div className="border-t border-white/10">
-          <button className="w-full text-left px-3 py-1 text-[11px] text-zinc-500 hover:text-zinc-300" onClick={() => setShowKids((v) => !v)}>
+        <div className="border-t border-fill/10">
+          <button className="w-full text-left px-3 py-1 text-[11px] text-fg-4 hover:text-fg-2" onClick={() => setShowKids((v) => !v)}>
             {showKids ? '▾' : '▸'} {isSubagent ? t('items.subagentActivity') : t('items.nestedActivity')}
           </button>
           {showKids && <div className="px-2 pb-2 space-y-2 border-l-2 border-violet-400/30 ml-3">{children}</div>}
@@ -125,13 +125,13 @@ export function ApprovalItem({ item, onDecide }: { item: Extract<ChatItem, { kin
   const i = (item.input ?? {}) as Record<string, unknown>;
   const decisionLabel: Record<string, string> = { allow: t('items.allowed'), allow_always: t('items.alwaysAllowed'), deny: t('items.denied'), cancelled: t('items.cancelled') };
   return (
-    <div className={`rounded-lg border ${item.decision ? 'border-white/10 opacity-70' : 'border-amber-400/40 bg-amber-400/5'} p-3 text-[13px]`}>
+    <div className={`rounded-lg border ${item.decision ? 'border-fill/10 opacity-70' : 'border-amber-400/40 bg-amber-400/5'} p-3 text-[13px]`}>
       <div className="flex items-center gap-2 mb-2">
         <span className="text-amber-300">{t('items.approval')}</span>
         <span className="font-medium">{item.toolName}</span>
-        {item.decision && <span className="ml-auto text-xs text-zinc-400">{decisionLabel[item.decision] ?? item.decision}</span>}
+        {item.decision && <span className="ml-auto text-xs text-fg-3">{decisionLabel[item.decision] ?? item.decision}</span>}
       </div>
-      <pre className="font-mono text-[12px] text-zinc-200 whitespace-pre-wrap break-all bg-black/30 rounded p-2 max-h-40 overflow-auto">{summary}</pre>
+      <pre className="font-mono text-[12px] text-fg-1 whitespace-pre-wrap break-all bg-black/30 rounded p-2 max-h-40 overflow-auto">{summary}</pre>
       {item.toolName === 'Edit' && typeof i.old_string === 'string' && (
         <div className="mt-2 grid grid-cols-2 gap-2 text-[12px] font-mono">
           <pre className="bg-red-500/10 text-red-200 rounded p-2 whitespace-pre-wrap max-h-40 overflow-auto">{String(i.old_string)}</pre>
@@ -142,8 +142,8 @@ export function ApprovalItem({ item, onDecide }: { item: Extract<ChatItem, { kin
         <div className="mt-2 space-y-2">
           {(i.changes as Array<{ path: string; diff: string }>).map((c) => (
             <div key={c.path}>
-              <div className="text-[11px] text-zinc-400 font-mono">{c.path}</div>
-              <pre className="text-[12px] font-mono whitespace-pre-wrap max-h-48 overflow-auto rounded bg-black/30 p-2">{c.diff.split('\n').map((l, idx) => <span key={idx} className={l.startsWith('+') ? 'text-emerald-300' : l.startsWith('-') ? 'text-red-300' : 'text-zinc-400'}>{l}{'\n'}</span>)}</pre>
+              <div className="text-[11px] text-fg-3 font-mono">{c.path}</div>
+              <pre className="text-[12px] font-mono whitespace-pre-wrap max-h-48 overflow-auto rounded bg-black/30 p-2">{c.diff.split('\n').map((l, idx) => <span key={idx} className={l.startsWith('+') ? 'text-emerald-300' : l.startsWith('-') ? 'text-red-300' : 'text-fg-3'}>{l}{'\n'}</span>)}</pre>
             </div>
           ))}
         </div>
@@ -184,25 +184,25 @@ export function QuestionItem({ item, onAnswer }: { item: Extract<ChatItem, { kin
   };
   const complete = item.questions.every((q) => (sel[q.question]?.length ?? 0) > 0 || other[q.question]?.trim());
   return (
-    <div className={`rounded-lg border ${item.resolved ? 'border-white/10 opacity-70' : 'border-blue-400/40 bg-blue-400/5'} p-3 text-[13px] space-y-3`}>
+    <div className={`rounded-lg border ${item.resolved ? 'border-fill/10 opacity-70' : 'border-blue-400/40 bg-blue-400/5'} p-3 text-[13px] space-y-3`}>
       <div className="text-blue-300">{t('items.question')}</div>
       {item.questions.map((q) => (
         <div key={q.question}>
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">{q.header}</div>
+          <div className="text-[11px] uppercase tracking-wide text-fg-4">{q.header}</div>
           <div className="font-medium mb-1.5">{q.question}</div>
           <div className="grid gap-1.5">
             {q.options.map((o) => {
               const on = (sel[q.question] ?? []).includes(o.label);
               return (
                 <button key={o.label} disabled={item.resolved} onClick={() => toggle(q.question, o.label, q.multiSelect)}
-                  className={`text-left rounded-md border px-3 py-1.5 ${on ? 'border-blue-400 bg-blue-400/15' : 'border-white/10 hover:bg-white/5'}`}>
+                  className={`text-left rounded-md border px-3 py-1.5 ${on ? 'border-blue-400 bg-blue-400/15' : 'border-fill/10 hover:bg-fill/5'}`}>
                   <div className="font-medium">{o.label}</div>
-                  {o.description && <div className="text-xs text-zinc-400">{o.description}</div>}
+                  {o.description && <div className="text-xs text-fg-3">{o.description}</div>}
                 </button>
               );
             })}
             {!item.resolved && (
-              <input className="bg-black/30 rounded-md px-3 py-1.5 text-xs outline-none border border-white/10" placeholder={t('items.ownAnswer')}
+              <input className="bg-black/30 rounded-md px-3 py-1.5 text-xs outline-none border border-fill/10" placeholder={t('items.ownAnswer')}
                 value={other[q.question] ?? ''} onChange={(e) => setOther((s) => ({ ...s, [q.question]: e.target.value }))} />
             )}
           </div>
@@ -218,7 +218,7 @@ export function QuestionItem({ item, onAnswer }: { item: Extract<ChatItem, { kin
 export function ResultItem({ item }: { item: Extract<ChatItem, { kind: 'result' }> }) {
   useLang();
   return (
-    <div className="text-[11px] text-zinc-500 flex gap-3 justify-end">
+    <div className="text-[11px] text-fg-4 flex gap-3 justify-end">
       <span>{item.ok ? t('items.done') : t('items.error')}</span>
       <span>{(item.durationMs / 1000).toFixed(1)}s</span>
       <span>{t('items.turns', { n: item.numTurns })}</span>

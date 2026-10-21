@@ -1,17 +1,50 @@
 @import "tailwindcss";
+@import "highlight.js/styles/github-dark.css" (prefers-color-scheme: dark);
+@import "highlight.js/styles/github.css" (prefers-color-scheme: light);
 
+/*
+ * Semantic palette. Components use the Tailwind names below (bg-surface-1, text-fg-3, border-fill/10 …)
+ * so the whole UI flips with the macOS appearance; `prefers-color-scheme` follows nativeTheme in Electron.
+ * Dark is the original design; the light values map one-to-one by role.
+ *   surface-0..5  backgrounds, darkest/lightest first (content, panels, popovers, chips)
+ *   fg, fg-1..6   text, strongest first (fg = former text-white, fg-3 = former zinc-400)
+ *   fill          the overlay colour for translucent fills and hairlines (white on dark, black on light)
+ */
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
+  --surface-0: #0b0d12; --surface-1: #0e1117; --surface-2: #12151c; --surface-3: #171a22; --surface-4: #1b1f2a; --surface-5: #242938;
+  --fg: #ffffff; --fg-1: #e4e4e7; --fg-2: #d4d4d8; --fg-3: #a1a1aa; --fg-4: #71717a; --fg-5: #52525b; --fg-6: #3f3f46;
+  --fill: #ffffff;
+  --body: #e6e8ee;
+  --link: #7aa2f7;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --surface-0: #ffffff; --surface-1: #f5f5f7; --surface-2: #eeeef1; --surface-3: #e6e6ea; --surface-4: #dcdce2; --surface-5: #cfd0d8;
+    --fg: #1d1d1f; --fg-1: #2b2b2e; --fg-2: #3d3d42; --fg-3: #67676e; --fg-4: #86868b; --fg-5: #a9a9ae; --fg-6: #c5c5ca;
+    --fill: #000000;
+    --body: #1d1d1f;
+    --link: #2f6fed;
+  }
+}
+@theme inline {
+  --color-surface-0: var(--surface-0); --color-surface-1: var(--surface-1); --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3); --color-surface-4: var(--surface-4); --color-surface-5: var(--surface-5);
+  --color-fg: var(--fg); --color-fg-1: var(--fg-1); --color-fg-2: var(--fg-2); --color-fg-3: var(--fg-3);
+  --color-fg-4: var(--fg-4); --color-fg-5: var(--fg-5); --color-fg-6: var(--fg-6);
+  --color-fill: var(--fill);
 }
 
 html, body, #root {
   height: 100%;
   margin: 0;
-  background: #0b0d12;
-  color: #e6e8ee;
+  background: var(--surface-1);
+  color: var(--body);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+/* Electron: the window carries macOS sidebar vibrancy; whatever is not painted by a panel shows the blur. */
+html.electron, html.electron body, html.electron #root { background: transparent; }
 
 .titlebar-drag { -webkit-app-region: drag; }
 .titlebar-nodrag { -webkit-app-region: no-drag; }
@@ -23,13 +56,13 @@ html, body, #root {
 .prose-md p { margin: .6em 0; line-height: 1.65; }
 .prose-md ul { list-style: disc; padding-left: 1.4em; }
 .prose-md ol { list-style: decimal; padding-left: 1.4em; }
-.prose-md code { background: #1a1e28; padding: .1em .35em; border-radius: 4px; font-size: .9em; }
-.prose-md pre { background: #12151c; padding: .8em 1em; border-radius: 8px; overflow: auto; }
+.prose-md code { background: var(--surface-3); padding: .1em .35em; border-radius: 4px; font-size: .9em; }
+.prose-md pre { background: var(--surface-2); padding: .8em 1em; border-radius: 8px; overflow: auto; }
 .prose-md pre code { background: none; padding: 0; }
 .prose-md table { border-collapse: collapse; margin: .8em 0; }
-.prose-md th, .prose-md td { border: 1px solid #2a2f3b; padding: .3em .6em; }
-.prose-md a { color: #7aa2f7; }
-.prose-md blockquote { border-left: 3px solid #2a2f3b; padding-left: .8em; color: #9aa1b0; }
+.prose-md th, .prose-md td { border: 1px solid color-mix(in srgb, var(--fill) 15%, transparent); padding: .3em .6em; }
+.prose-md a { color: var(--link); }
+.prose-md blockquote { border-left: 3px solid color-mix(in srgb, var(--fill) 15%, transparent); padding-left: .8em; color: var(--fg-3); }
 
 /* In-chat search (CSS Custom Highlight API, see ChatSearch). */
 ::highlight(chat-search) { background-color: rgba(250, 204, 21, 0.3); }

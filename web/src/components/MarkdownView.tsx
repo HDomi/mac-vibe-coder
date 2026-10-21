@@ -26,7 +26,7 @@ function MarkdownImage({ url, label, alt, title }: { url: string; label: string;
   useLang();
   const [loaded, setLoaded] = useState(false);
   // Remote images in agent output may encode conversation data in their URL. Fetch only on click.
-  if (/^(https?:)?\/\//i.test(url) && !loaded) return <button className="text-xs underline text-zinc-400" title={url} onClick={() => setLoaded(true)}>{t('preview.loadRemoteImage')}: {alt || label}</button>;
+  if (/^(https?:)?\/\//i.test(url) && !loaded) return <button className="text-xs underline text-fg-3" title={url} onClick={() => setLoaded(true)}>{t('preview.loadRemoteImage')}: {alt || label}</button>;
   return <img src={url || undefined} alt={alt} title={title} className="max-w-full rounded-md cursor-zoom-in" onClick={() => openLightbox(url, label)} />;
 }
 
@@ -57,7 +57,7 @@ export function CopyButton({ text, className }: { text: string; className?: stri
   useLang();
   const [done, setDone] = useState(false);
   return (
-    <button className={`text-[10px] rounded px-1.5 py-0.5 bg-white/10 hover:bg-white/20 text-zinc-300 ${className ?? ''}`}
+    <button className={`text-[10px] rounded px-1.5 py-0.5 bg-fill/10 hover:bg-fill/20 text-fg-2 ${className ?? ''}`}
       onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1200); }); }}>
       {done ? t('common.copied') : t('common.copy')}
     </button>

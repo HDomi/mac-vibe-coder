@@ -175,11 +175,11 @@ function ScreencastBrowserPanel({ visible, onCapture }: Props) {
 
   const ready = state?.status === 'ready';
   const tabs = state?.targets ?? [];
-  const btn = 'w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent';
+  const btn = 'w-7 h-7 flex items-center justify-center rounded-md hover:bg-fill/10 text-fg-2 disabled:opacity-30 disabled:hover:bg-transparent';
 
   return (
     <div className="h-full flex flex-col" data-own-find>
-      <div data-companion-floor="browser-toolbar" data-companion-edge="bottom" className="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
+      <div data-companion-floor="browser-toolbar" data-companion-edge="bottom" className="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-fill/10 text-xs">
         <button className={btn} disabled={!state?.canBack} onClick={() => send({ type: 'back' })} title={t('browser.back')}><Icon name="back" /></button>
         <button className={btn} disabled={!state?.canForward} onClick={() => send({ type: 'forward' })} title={t('browser.forward')}><Icon name="forward" /></button>
         <button className={btn} disabled={!ready} onClick={() => send({ type: state?.loading ? 'stop' : 'reload' })} title={state?.loading ? t('browser.stop') : t('browser.reload')}><Icon name={state?.loading ? 'close' : 'reload'} /></button>
@@ -187,11 +187,11 @@ function ScreencastBrowserPanel({ visible, onCapture }: Props) {
           <input id="browser-address" value={address} onChange={(e) => { setAddress(e.target.value); setEditing(true); }} onFocus={(e) => { setEditing(true); e.target.select(); }} onBlur={() => setEditing(false)}
             onKeyDown={(e) => { if (e.key === 'Escape') { setEditing(false); (e.target as HTMLInputElement).blur(); } }}
             placeholder={t('browser.addressPlaceholder')} aria-label={t('browser.addressPlaceholder')} spellCheck={false}
-            className="w-full rounded-md bg-white/5 border border-white/10 focus:border-sky-400/40 px-2.5 py-1.5 text-[12px] font-mono outline-none" />
+            className="w-full rounded-md bg-fill/5 border border-fill/10 focus:border-sky-400/40 px-2.5 py-1.5 text-[12px] font-mono outline-none" />
         </form>
         {tabs.length > 1 && (
           <select value={state?.current ?? ''} onChange={(e) => send({ type: 'select', targetId: e.target.value })} title={t('browser.tabs')}
-            className="max-w-28 bg-white/5 rounded-md px-1 py-1 outline-none text-[11px]">
+            className="max-w-28 bg-fill/5 rounded-md px-1 py-1 outline-none text-[11px]">
             {tabs.map((p) => <option key={p.targetId} value={p.targetId}>{p.title || p.url || 'about:blank'}</option>)}
           </select>
         )}
@@ -208,18 +208,18 @@ function ScreencastBrowserPanel({ visible, onCapture }: Props) {
           onCompositionEnd={(e) => { setComposing(''); if (e.data) send({ type: 'insertText', text: e.data }); (e.target as HTMLTextAreaElement).value = ''; }}
           onInput={(e) => { const el = e.target as HTMLTextAreaElement; if (!(e.nativeEvent as InputEvent).isComposing && !composing) el.value = ''; }}
           onPaste={(e) => { e.preventDefault(); const text = e.clipboardData.getData('text/plain'); if (text) send({ type: 'insertText', text }); }} />
-        {composing && <div className="absolute left-3 bottom-3 rounded-md bg-black/80 px-2 py-1 text-xs text-white pointer-events-none">{composing}</div>}
+        {composing && <div className="absolute left-3 bottom-3 rounded-md bg-black/80 px-2 py-1 text-xs text-fg pointer-events-none">{composing}</div>}
         {!hasFrame && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0b0d12] text-sm text-zinc-500 text-center px-6">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-surface-0 text-sm text-fg-4 text-center px-6">
             {state?.status === 'error' ? <>
               <div className="text-red-300">{state.error}</div>
-              <button className="rounded bg-white/10 hover:bg-white/15 px-3 py-1.5 text-xs text-zinc-200" onMouseDown={(e) => e.stopPropagation()} onClick={() => send({ type: 'retry' })}>{t('browser.retry')}</button>
+              <button className="rounded bg-fill/10 hover:bg-fill/15 px-3 py-1.5 text-xs text-fg-1" onMouseDown={(e) => e.stopPropagation()} onClick={() => send({ type: 'retry' })}>{t('browser.retry')}</button>
             </> : <div className="animate-pulse">{state?.status === 'ready' ? t('browser.waitingFrame') : t('browser.connecting', { port: state?.port ?? 9324 })}</div>}
           </div>
         )}
       </div>
-      <div className="h-6 shrink-0 flex items-center gap-2 px-3 text-[10px] text-zinc-600 border-t border-white/5">
-        <span className={`w-1.5 h-1.5 rounded-full ${ready ? 'bg-emerald-400' : state?.status === 'error' ? 'bg-red-400' : 'bg-zinc-600'}`} />
+      <div className="h-6 shrink-0 flex items-center gap-2 px-3 text-[10px] text-fg-5 border-t border-fill/5">
+        <span className={`w-1.5 h-1.5 rounded-full ${ready ? 'bg-emerald-400' : state?.status === 'error' ? 'bg-red-400' : 'bg-fg-5'}`} />
         <span>CDP :{state?.port ?? 9324} · {state?.headless ? t('browser.headless') : t('browser.external')}</span>
         {note && <span className="ml-auto text-amber-300 truncate" title={note}>{note}</span>}
       </div>
@@ -288,11 +288,11 @@ function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: Na
     try { const r = await native.capture(); onCapture({ path: r.path, name: r.name, kind: 'image' }); setNote(t('browser.captured')); }
     catch (e) { setNote((e as Error).message || t('browser.captureFailed')); }
   };
-  const btn = 'w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-300 disabled:opacity-30 disabled:hover:bg-transparent';
+  const btn = 'w-7 h-7 flex items-center justify-center rounded-md hover:bg-fill/10 text-fg-2 disabled:opacity-30 disabled:hover:bg-transparent';
 
   return (
     <div className="h-full flex flex-col" data-own-find>
-      <div data-companion-floor="browser-toolbar" data-companion-edge="bottom" className="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
+      <div data-companion-floor="browser-toolbar" data-companion-edge="bottom" className="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-fill/10 text-xs">
         <button className={btn} disabled={!state?.canBack} onClick={() => void native.back()} title={t('browser.back')}><Icon name="back" /></button>
         <button className={btn} disabled={!state?.canForward} onClick={() => void native.forward()} title={t('browser.forward')}><Icon name="forward" /></button>
         <button className={btn} onClick={() => void (state?.loading ? native.stop() : native.reload())} title={state?.loading ? t('browser.stop') : t('browser.reload')}><Icon name={state?.loading ? 'close' : 'reload'} /></button>
@@ -300,11 +300,11 @@ function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: Na
           <input ref={addressInput} id="browser-address" value={address} onChange={(e) => { setAddress(e.target.value); setEditing(true); }} onFocus={(e) => { setEditing(true); e.target.select(); }} onBlur={() => setEditing(false)}
             onKeyDown={(e) => { if (e.key === 'Escape') { setEditing(false); (e.target as HTMLInputElement).blur(); } }}
             placeholder={t('browser.addressPlaceholder')} aria-label={t('browser.addressPlaceholder')} spellCheck={false}
-            className="w-full rounded-md bg-white/5 border border-white/10 focus:border-sky-400/40 px-2.5 py-1.5 text-[12px] font-mono outline-none" />
+            className="w-full rounded-md bg-fill/5 border border-fill/10 focus:border-sky-400/40 px-2.5 py-1.5 text-[12px] font-mono outline-none" />
         </form>
         <select value={String(nearestZoom(state?.zoom ?? 1))} onChange={(e) => void native.zoom(Number(e.target.value))}
           title={t('browser.zoomHint', { width: Math.round((place.current?.clientWidth ?? 0) / (state?.zoom ?? 1)) })}
-          className="bg-white/5 rounded-md px-1 py-1 outline-none text-[11px] tabular-nums">
+          className="bg-fill/5 rounded-md px-1 py-1 outline-none text-[11px] tabular-nums">
           {ZOOMS.map((z) => <option key={z} value={String(z)}>{Math.round(z * 100)}%</option>)}
         </select>
         <button className={btn} onClick={() => void native.devtools()} title={t('browser.devtools')}><Icon name="devtools" /></button>
@@ -312,8 +312,8 @@ function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: Na
       </div>
       {/* The native view is laid over this box; the box itself only shows while the view is hidden. */}
       <div ref={place} className="relative flex-1 min-h-0 bg-white" />
-      <div className="h-6 shrink-0 flex items-center gap-2 px-3 text-[10px] text-zinc-600 border-t border-white/5">
-        <span className={`w-1.5 h-1.5 rounded-full ${state ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+      <div className="h-6 shrink-0 flex items-center gap-2 px-3 text-[10px] text-fg-5 border-t border-fill/5">
+        <span className={`w-1.5 h-1.5 rounded-full ${state ? 'bg-emerald-400' : 'bg-fg-5'}`} />
         <span>{t('browser.native')}</span>
         {note && <span className="ml-auto text-amber-300 truncate" title={note}>{note}</span>}
       </div>

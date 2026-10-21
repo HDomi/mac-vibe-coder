@@ -42,20 +42,20 @@ export default function QuickOpen({ cwd, onClose, onOpen, onAttach }: Props) {
 
   return (
     <div className="absolute inset-0 z-30 bg-black/50 flex items-start justify-center pt-[12vh]" onClick={onClose}>
-      <div className="w-[640px] max-w-[92vw] rounded-xl bg-[#12151c] border border-white/10 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="w-[640px] max-w-[92vw] rounded-xl bg-surface-2 border border-fill/10 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder={t('quickopen.placeholder')}
-          className="w-full bg-transparent px-4 py-3 text-sm outline-none border-b border-white/10" />
+          className="w-full bg-transparent px-4 py-3 text-sm outline-none border-b border-fill/10" />
         <div ref={listRef} className="max-h-[50vh] overflow-y-auto py-1">
           {hits.map((h, i) => (
             <div key={h.path} onMouseEnter={() => setIdx(i)} onClick={() => { onOpen(h); onClose(); }}
               className={`px-4 py-1.5 text-sm flex items-center gap-2 cursor-pointer ${i === idx ? 'bg-blue-500/20' : ''}`}>
               <FileIcon name={h.rel.split('/').pop() ?? h.rel} isDir={h.isDir} />
               <span className="truncate flex-1 font-mono text-[13px]">{h.rel}</span>
-              {i === idx && !h.isDir && <button className="text-[10px] text-zinc-400 hover:text-white" onClick={(e) => { e.stopPropagation(); onAttach(h); onClose(); }}>{t('quickopen.attach')}</button>}
+              {i === idx && !h.isDir && <button className="text-[10px] text-fg-3 hover:text-fg" onClick={(e) => { e.stopPropagation(); onAttach(h); onClose(); }}>{t('quickopen.attach')}</button>}
             </div>
           ))}
-          {!loading && hits.length === 0 && <div className="px-4 py-3 text-xs text-zinc-500">{t('quickopen.noMatches')}</div>}
-          {loading && hits.length === 0 && <div className="px-4 py-3 text-xs text-zinc-500">{t('quickopen.searching')}</div>}
+          {!loading && hits.length === 0 && <div className="px-4 py-3 text-xs text-fg-4">{t('quickopen.noMatches')}</div>}
+          {loading && hits.length === 0 && <div className="px-4 py-3 text-xs text-fg-4">{t('quickopen.searching')}</div>}
         </div>
       </div>
     </div>

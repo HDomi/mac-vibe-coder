@@ -34,9 +34,9 @@ export default function Lightbox() {
     <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm transition-opacity duration-200 ${shown ? 'opacity-100' : 'opacity-0'}`} onClick={close}>
       <figure className={`max-w-[92vw] max-h-[92vh] flex flex-col items-center gap-2 transition-transform duration-200 ease-out ${shown ? 'scale-100' : 'scale-90'}`} onClick={(e) => e.stopPropagation()}>
         <img src={img.src} alt={img.caption ?? ''} className="max-w-[92vw] max-h-[85vh] object-contain rounded-lg shadow-2xl" />
-        {img.caption && <figcaption className="text-xs text-zinc-400 truncate max-w-[80vw]" title={img.caption}>{img.caption}</figcaption>}
+        {img.caption && <figcaption className="text-xs text-fg-3 truncate max-w-[80vw]" title={img.caption}>{img.caption}</figcaption>}
       </figure>
-      <button className="absolute top-4 right-5 text-zinc-300 hover:text-white text-xl" onClick={close} aria-label="close">✕</button>
+      <button className="absolute top-4 right-5 text-fg-2 hover:text-fg text-xl" onClick={close} aria-label="close">✕</button>
     </div>
   );
 }

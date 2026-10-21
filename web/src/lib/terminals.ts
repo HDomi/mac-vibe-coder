@@ -29,6 +29,19 @@ const CLOSE_EXITED = 4000;
 const retryTimers = new Map<number, number>();
 const retries = new Map<number, number>();
 
+// xterm paints its own colours, so it follows the macOS appearance here rather than through CSS.
+// The light ANSI set is Terminal.app's "Basic" profile; the dark one is xterm's default.
+const lightScheme = window.matchMedia('(prefers-color-scheme: light)');
+function terminalTheme() {
+  if (!lightScheme.matches) return { background: '#0b0d12', foreground: '#e6e8ee', cursor: '#e6e8ee', selectionBackground: '#3b4252' };
+  return {
+    background: '#ffffff', foreground: '#1d1d1f', cursor: '#1d1d1f', selectionBackground: '#b4d5fe',
+    black: '#000000', red: '#c91b00', green: '#00a600', yellow: '#a68a00', blue: '#0225c7', magenta: '#b800b8', cyan: '#0096a8', white: '#bfbfbf',
+    brightBlack: '#676767', brightRed: '#ff6d67', brightGreen: '#5ff967', brightYellow: '#c7b400', brightBlue: '#6871ff', brightMagenta: '#ff76ff', brightCyan: '#5ffdff', brightWhite: '#fffefe',
+  };
+}
+lightScheme.addEventListener('change', () => { for (const tab of state.tabs) if (tab.term) tab.term.options.theme = terminalTheme(); });
+
 export interface TerminalState { tabs: TerminalTab[]; active: number | null }
 
 let state: TerminalState = { tabs: [], active: null };
@@ -76,7 +89,7 @@ export function ensureStarted(id: number) {
   if (!tab || tab.term) return;
   const term = new Terminal({
     fontFamily: 'Menlo, "SF Mono", Monaco, monospace', fontSize: 13, lineHeight: 1.2, cursorBlink: true,
-    theme: { background: '#0b0d12', foreground: '#e6e8ee', cursor: '#e6e8ee', selectionBackground: '#3b4252' },
+    theme: terminalTheme(),
     allowProposedApi: true, scrollback: 5000, macOptionIsMeta: true,
   });
   const fit = new FitAddon();

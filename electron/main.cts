@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, powerMonitor, powerSaveBlocker, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, powerMonitor, powerSaveBlocker, shell } from 'electron';
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -148,7 +148,10 @@ async function createWindow() {
     title: APP_NAME,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 16 }, // centered in the 45px title bar (UsageBar)
-    backgroundColor: '#0b0d12',
+    // Finder-style translucent sidebar: the page keeps its root transparent (index.css) and only the
+    // content panes paint a background, so the blur shows through the sidebar and title bar.
+    vibrancy: 'sidebar',
+    backgroundColor: '#00000000',
     icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -172,7 +175,55 @@ async function createWindow() {
   };
   win.webContents.on('will-navigate', keepInApp);
   win.webContents.on('will-redirect', keepInApp);
+  // Three-finger trackpad swipe (System Settings > Trackpad > "Swipe between pages"); the renderer
+  // detects the two-finger variant itself from wheel deltas.
+  win.on('swipe', (_e, direction) => { if (!win.webContents.isDestroyed()) win.webContents.send('swipe', direction); });
   await win.loadURL(DEV ? URL_DEV : URL_PROD);
+}
+
+// Sheets attached to the window instead of window.confirm / window.alert (which are app-modal and block the renderer).
+const text = (v: unknown, max: number) => String(v ?? '').slice(0, max);
+ipcMain.handle('confirm', async (e, opts: { message?: unknown; detail?: unknown; ok?: unknown; cancel?: unknown; danger?: unknown }) => {
+  if (!fromApp(e) || !opts || typeof opts !== 'object') return false;
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return false;
+  const { response } = await dialog.showMessageBox(win, {
+    type: opts.danger === true ? 'warning' : 'question',
+    message: text(opts.message, 500), detail: text(opts.detail, 4000) || undefined,
+    buttons: [text(opts.ok, 40) || 'OK', text(opts.cancel, 40) || 'Cancel'], defaultId: 0, cancelId: 1, noLink: true,
+  });
+  return response === 0;
+});
+ipcMain.handle('alert', async (e, opts: { message?: unknown; detail?: unknown; ok?: unknown; kind?: unknown }) => {
+  if (!fromApp(e) || !opts || typeof opts !== 'object') return;
+  const win = BrowserWindow.fromWebContents(e.sender);
+  if (!win) return;
+  await dialog.showMessageBox(win, {
+    type: opts.kind === 'error' ? 'error' : 'info',
+    message: text(opts.message, 500), detail: text(opts.detail, 4000) || undefined,
+    buttons: [text(opts.ok, 40) || 'OK'], defaultId: 0, noLink: true,
+  });
+});
+// Pinch-to-zoom scales the page like Cmd+/Cmd-; Cmd+0 (View menu) still resets it.
+ipcMain.on('zoom-by', (e, scale: unknown) => {
+  if (!fromApp(e) || typeof scale !== 'number' || !Number.isFinite(scale)) return;
+  e.sender.setZoomFactor(Math.min(2.5, Math.max(0.6, e.sender.getZoomFactor() * scale)));
+});
+
+// Appearance: follow macOS, or force light/dark. nativeTheme drives both the window vibrancy and the
+// page's prefers-color-scheme, so the renderer needs no message. Persisted in userData/prefs.json.
+type Appearance = 'system' | 'light' | 'dark';
+const APPEARANCES: Appearance[] = ['system', 'light', 'dark'];
+let appearance: Appearance = 'system';
+const prefsPath = () => path.join(app.getPath('userData'), 'prefs.json');
+function readPrefs(): Record<string, unknown> {
+  try { const p = JSON.parse(fs.readFileSync(prefsPath(), 'utf8')); return p && typeof p === 'object' ? p : {}; } catch { return {}; }
+}
+function setAppearance(a: Appearance, persist = true) {
+  appearance = a;
+  nativeTheme.themeSource = a;
+  if (persist) { try { fs.writeFileSync(prefsPath(), JSON.stringify({ ...readPrefs(), appearance: a }, null, 2)); } catch (err) { console.error('[mac-vibe-coder] prefs write failed', (err as Error).message); } }
+  buildMenu();
 }
 
 registerBrowserIpc(fromApp);
@@ -263,11 +314,27 @@ function buildMenu() {
     label: language === 'ko' ? '언어' : 'Language',
     submenu: LANGS.map((l) => ({ label: l.label, type: 'radio' as const, checked: language === l.id, click: () => setLanguage(l.id) })),
   };
+  const ko = language === 'ko';
+  const appearanceLabels: Record<Appearance, string> = ko
+    ? { system: '시스템 설정 따름', light: '라이트', dark: '다크' }
+    : { system: 'System', light: 'Light', dark: 'Dark' };
+  const viewMenu: Electron.MenuItemConstructorOptions = {
+    role: 'viewMenu',
+    submenu: [
+      { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' },
+      { type: 'separator' },
+      { label: ko ? '화면 모드' : 'Appearance', submenu: APPEARANCES.map((a) => ({ label: appearanceLabels[a], type: 'radio' as const, checked: appearance === a, click: () => setAppearance(a) })) },
+      { type: 'separator' },
+      { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
+      { type: 'separator' },
+      { role: 'togglefullscreen' },
+    ],
+  };
   const template: Electron.MenuItemConstructorOptions[] = [
     { role: 'appMenu' },
     { role: 'fileMenu' },
     { role: 'editMenu' },
-    { role: 'viewMenu' },
+    viewMenu,
     languageMenu,
     { role: 'windowMenu' },
     { role: 'help', submenu: [{ label: 'Repository', click: () => { void shell.openExternal('https://github.com/HDomi/mac-vibe-coder'); } }] },
@@ -281,7 +348,8 @@ ipcMain.on('language', (e, lang: Lang) => { if (fromApp(e) && (lang === 'en' || 
 app.whenReady().then(async () => {
   if (!primaryInstance || quitting) return;
   app.dock?.setIcon(APP_ICON);
-  buildMenu();
+  const saved = readPrefs().appearance;
+  setAppearance(APPEARANCES.includes(saved as Appearance) ? saved as Appearance : 'system', false); // also builds the menu
   if (!DEV) {
     await startServer();
     let checking = false;

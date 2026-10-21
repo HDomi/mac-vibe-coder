@@ -200,22 +200,22 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
 
   return (
     <div ref={root} tabIndex={0} onKeyDown={onKey} data-own-find className="flex flex-col h-full min-w-0 outline-none">
-      <div className="h-10 flex items-center gap-2 px-3 border-b border-white/10 text-sm">
-        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-300 disabled:opacity-30" disabled={!listing?.parent} onClick={() => listing?.parent && onNavigate(listing.parent)} title={t('files.parentFolder')}><Icon name="left" /></button>
-        <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap text-zinc-400">
-          <span className="cursor-pointer hover:text-white" onClick={() => onNavigate('/')}>/</span>
+      <div className="h-10 flex items-center gap-2 px-3 border-b border-fill/10 text-sm">
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-fill/10 text-fg-2 disabled:opacity-30" disabled={!listing?.parent} onClick={() => listing?.parent && onNavigate(listing.parent)} title={t('files.parentFolder')}><Icon name="left" /></button>
+        <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap text-fg-3">
+          <span className="cursor-pointer hover:text-fg" onClick={() => onNavigate('/')}>/</span>
           {crumbs.map((c, i) => {
             const p = '/' + crumbs.slice(0, i + 1).join('/');
-            return <span key={p} className="flex items-center gap-1"><span className="text-zinc-600">›</span><span className={`cursor-pointer hover:text-white ${i === crumbs.length - 1 ? 'text-white' : ''}`} onClick={() => onNavigate(p)}>{c}</span></span>;
+            return <span key={p} className="flex items-center gap-1"><span className="text-fg-5">›</span><span className={`cursor-pointer hover:text-fg ${i === crumbs.length - 1 ? 'text-fg' : ''}`} onClick={() => onNavigate(p)}>{c}</span></span>;
           })}
         </div>
         <div className="flex-1" />
         {note && <span className="text-[11px] text-amber-300 truncate max-w-40" title={note}>{note}</span>}
-        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={newFolder} title={t('files.newFolder')}><Icon name="plus" /></button>
-        <button className={`w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 ${isFavorite ? 'text-amber-300' : 'text-zinc-400'}`} onClick={onToggleFavorite} title={isFavorite ? t('sidebar.removeFavorite') : t('sidebar.addFavorite')}><Icon name="star" filled={isFavorite} /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-fill/10 text-fg-3" onClick={newFolder} title={t('files.newFolder')}><Icon name="plus" /></button>
+        <button className={`w-7 h-7 flex items-center justify-center rounded-md hover:bg-fill/10 ${isFavorite ? 'text-amber-300' : 'text-fg-3'}`} onClick={onToggleFavorite} title={isFavorite ? t('sidebar.removeFavorite') : t('sidebar.addFavorite')}><Icon name="star" filled={isFavorite} /></button>
       </div>
-      <div data-companion-floor="files-toolbar" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-2 px-3 border-b border-white/5">
-        <Icon name="search" size={14} className="text-zinc-500" />
+      <div data-companion-floor="files-toolbar" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-2 px-3 border-b border-fill/5">
+        <Icon name="search" size={14} className="text-fg-4" />
         <input ref={searchInput} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('files.searchPlaceholder')} aria-label={t('files.searchPlaceholder')}
           onKeyDown={(e) => {
             e.stopPropagation();
@@ -227,23 +227,23 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
             else if (e.key === 'ArrowUp' && n) { e.preventDefault(); setHitIdx((i) => (i - 1 + n) % n); }
             else if (e.key === 'Enter' && hits?.[hitIdx]) { e.preventDefault(); openHit(hits[hitIdx]); }
           }}
-          className="flex-1 min-w-0 bg-transparent text-[13px] outline-none placeholder:text-zinc-600" />
-        {searching && <span className="text-[10px] text-zinc-500 tabular-nums">{hits === null ? '…' : t('files.searchCount', { n: hits.length })}</span>}
-        {searching && <button className="w-6 h-6 flex items-center justify-center rounded text-zinc-500 hover:text-white hover:bg-white/10" onClick={() => setQuery('')} title="Esc"><Icon name="close" size={12} /></button>}
+          className="flex-1 min-w-0 bg-transparent text-[13px] outline-none placeholder:text-fg-5" />
+        {searching && <span className="text-[10px] text-fg-4 tabular-nums">{hits === null ? '…' : t('files.searchCount', { n: hits.length })}</span>}
+        {searching && <button className="w-6 h-6 flex items-center justify-center rounded text-fg-4 hover:text-fg hover:bg-fill/10" onClick={() => setQuery('')} title="Esc"><Icon name="close" size={12} /></button>}
       </div>
 
       {searching ? (
         <div className="flex-1 overflow-y-auto py-1">
-          {hits?.length === 0 && <div className="p-6 text-center text-sm text-zinc-600">{t('files.searchNone')}</div>}
+          {hits?.length === 0 && <div className="p-6 text-center text-sm text-fg-5">{t('files.searchNone')}</div>}
           {hits?.map((h, i) => {
             const slash = h.rel.lastIndexOf('/');
             return (
               <div key={h.path} data-companion-rung="" onMouseEnter={() => setHitIdx(i)} onClick={() => openHit(h)} onContextMenu={(ev) => menu.open(ev, hitMenu(h))} title={h.path}
                 draggable onDragStart={(ev) => { ev.dataTransfer.setData('text/plain', h.path); ev.dataTransfer.setData('application/x-vibe-path', h.path); }}
-                className={`flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer ${i === hitIdx ? 'bg-blue-500/20' : 'hover:bg-white/5'}`}>
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer ${i === hitIdx ? 'bg-blue-500/20' : 'hover:bg-fill/5'}`}>
                 <FileIcon name={h.rel.slice(slash + 1)} isDir={h.isDir} />
                 <span className="truncate">{h.rel.slice(slash + 1)}</span>
-                {slash > 0 && <span className="truncate text-[11px] text-zinc-500 font-mono">{h.rel.slice(0, slash)}</span>}
+                {slash > 0 && <span className="truncate text-[11px] text-fg-4 font-mono">{h.rel.slice(0, slash)}</span>}
               </div>
             );
           })}
@@ -253,7 +253,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
         {error && (
           <div className="m-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm">
             <div className="font-medium text-red-300">{error.code}</div>
-            <div className="text-zinc-300 mt-1 whitespace-pre-wrap">{error.message}</div>
+            <div className="text-fg-2 mt-1 whitespace-pre-wrap">{error.message}</div>
             {error.code === 'EACCES' && <a className="inline-block mt-3 text-xs underline text-blue-300" href="x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles">{t('files.fullDisk')}</a>}
           </div>
         )}
@@ -266,7 +266,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
               )}
               {entries.map((e) => (
                 <tr key={e.path} data-companion-rung=""
-                  className={`cursor-default border-b border-white/5 ${selected.has(e.path) ? 'bg-blue-500/25' : 'hover:bg-white/5'} ${e.hidden ? 'opacity-50' : ''}`}
+                  className={`cursor-default border-b border-fill/5 ${selected.has(e.path) ? 'bg-blue-500/25' : 'hover:bg-fill/5'} ${e.hidden ? 'opacity-50' : ''}`}
                   onClick={(ev) => select(e, ev)} onDoubleClick={() => open(e)} onContextMenu={(ev) => menu.open(ev, itemMenu(e))}
                   draggable
                   onDragStart={(ev) => { const paths = selected.has(e.path) ? selectedEntries.map((x) => x.path) : [e.path]; ev.dataTransfer.setData('text/plain', paths.join('\n')); ev.dataTransfer.setData('application/x-vibe-path', paths.join('\n')); }}
@@ -279,17 +279,17 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
                           className="w-full bg-black/40 rounded px-2 py-0.5 outline-none border border-blue-400/50" />
                       : e.name}
                   </td>
-                  <td className="py-1.5 pr-3 text-right text-zinc-500 whitespace-nowrap">{e.isDir ? '' : formatSize(e.size)}</td>
-                  <td className="py-1.5 pr-3 text-right text-zinc-600 whitespace-nowrap hidden lg:table-cell">{new Date(e.mtime).toLocaleDateString()}</td>
+                  <td className="py-1.5 pr-3 text-right text-fg-4 whitespace-nowrap">{e.isDir ? '' : formatSize(e.size)}</td>
+                  <td className="py-1.5 pr-3 text-right text-fg-5 whitespace-nowrap hidden lg:table-cell">{new Date(e.mtime).toLocaleDateString()}</td>
                 </tr>
               ))}
-              {entries.length === 0 && !creating && <tr><td className="p-6 text-center text-zinc-600" colSpan={4}>{t('files.empty')}</td></tr>}
+              {entries.length === 0 && !creating && <tr><td className="p-6 text-center text-fg-5" colSpan={4}>{t('files.empty')}</td></tr>}
             </tbody>
           </table>
         )}
       </div>
       )}
-      <div data-companion-floor="files-footer" data-companion-ground="" className="h-6 shrink-0 flex items-center px-3 text-[10px] text-zinc-600 border-t border-white/5">
+      <div data-companion-floor="files-footer" data-companion-ground="" className="h-6 shrink-0 flex items-center px-3 text-[10px] text-fg-5 border-t border-fill/5">
         {selected.size > 0 ? t('files.selected', { n: selected.size }) : t('files.items', { n: entries.length })} · {t('files.footerHint')}
       </div>
     </div>
