@@ -128,6 +128,13 @@ export class AgentClient {
     else this.queue.push(s);
   }
 
+  /** Drop the current socket and reconnect right away (after the Mac wakes a half-open socket would otherwise sit for up to 40s). */
+  reconnectNow() {
+    if (this.closed) return;
+    this.retry = 0;
+    if (this.ws && this.ws.readyState !== WebSocket.CLOSED) this.ws.close();
+    else this.connect();
+  }
   on(l: Listener) { this.listeners.add(l); return () => { this.listeners.delete(l); }; }
   close() { this.closed = true; this.stopHeartbeat(); this.queue = []; this.ws?.close(); }
 }

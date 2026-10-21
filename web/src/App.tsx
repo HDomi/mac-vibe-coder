@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { backgroundState, displayTitle, pendingRequests, sortSessions, type ChatSession } from './lib/chatStore';
 import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing, type RecentSession } from './lib/api';
-import type { Attachment } from './lib/agent';
+import { agentClient, type Attachment } from './lib/agent';
+import { reconnectTerminals, terminalsBusy } from './lib/terminals';
+import { keepAwakeEnabled, workInProgress } from './lib/power';
 import { requestNotificationPermission, useSessions, setOnScreenSession } from './lib/useSessions';
 import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
@@ -140,8 +142,26 @@ function AppInner() {
     window.addEventListener('vibe:notify-click', h);
     window.vibe?.onNotificationClick?.((id) => focusSession.current(id));
     window.vibe?.onNotificationApproval?.(({ sessionId, requestId, decision }) => approveRef.current(sessionId, requestId, decision));
+    // Waking from sleep: reconnect the agent socket (re-attaches every live session) and the shells at once.
+    window.vibe?.onPowerResume?.(() => { agentClient.reconnectNow(); reconnectTerminals(); });
     return () => window.removeEventListener('vibe:notify-click', h);
   }, []);
+  // Keep the Mac awake only while an agent turn or a busy shell is in flight; re-evaluated on session changes and every 10s for shells.
+  const sessionsForPower = useRef(S.sessions);
+  sessionsForPower.current = S.sessions;
+  useEffect(() => {
+    if (!window.vibe?.keepAwake) return;
+    let last: boolean | null = null;
+    const update = () => {
+      const busy = keepAwakeEnabled() && workInProgress(Object.values(sessionsForPower.current), terminalsBusy());
+      if (busy !== last) { last = busy; window.vibe!.keepAwake!(busy); }
+    };
+    update();
+    const timer = window.setInterval(update, 10000);
+    window.addEventListener('vibe:keep-awake', update);
+    return () => { window.clearInterval(timer); window.removeEventListener('vibe:keep-awake', update); window.vibe!.keepAwake!(false); };
+  }, []);
+  useEffect(() => { window.dispatchEvent(new Event('vibe:keep-awake')); }, [S.sessions]);
 
   const isFavorite = !!listing && favorites.favorites.some((f) => f.path === listing.path);
   const toggleFavorite = () => {

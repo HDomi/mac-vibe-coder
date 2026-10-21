@@ -39,7 +39,7 @@ function TermView({ tab, visible }: { tab: TerminalTab; visible: boolean }) {
   return (
     <div className={`absolute inset-0 ${visible ? '' : 'invisible'}`}>
       <div ref={container} className="absolute inset-0" />
-      {tab.status !== 'open' && <div className="absolute top-2 right-3 text-[11px] text-zinc-500">{tab.status === 'connecting' ? t('terminal.connecting') : t('terminal.exited')}</div>}
+      {tab.status !== 'open' && <div className="absolute top-2 right-3 text-[11px] text-zinc-500">{tab.status === 'connecting' ? t('terminal.connecting') : tab.status === 'reconnecting' ? t('terminal.reconnecting') : t('terminal.exited')}</div>}
     </div>
   );
 }

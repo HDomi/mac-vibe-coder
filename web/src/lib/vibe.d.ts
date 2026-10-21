@@ -38,6 +38,8 @@ declare global {
       onNotificationApproval?: (cb: (answer: { sessionId: string; requestId: string; decision: 'allow' | 'allow_always' | 'deny' }) => void) => void;
       closeNotification?: (requestId: string) => void;
       openNotificationSettings?: () => void;
+      keepAwake?: (busy: boolean) => void;
+      onPowerResume?: (cb: () => void) => void;
       /** Native browser view for the Browser panel (Electron only). */
       browser?: NativeBrowser;
     };

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, powerMonitor, powerSaveBlocker, shell } from 'electron';
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -225,6 +225,14 @@ ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?:
   }
   n.show();
 });
+// Keep the Mac from idle-sleeping while an agent turn or a busy shell would otherwise be frozen mid-way.
+// The renderer reports busy/idle transitions; the assertion is dropped as soon as nothing is running.
+let awakeBlocker: number | null = null;
+ipcMain.on('keep-awake', (e, busy: unknown) => {
+  if (!fromApp(e)) return;
+  if (busy === true && awakeBlocker === null) awakeBlocker = powerSaveBlocker.start('prevent-app-suspension');
+  else if (busy !== true && awakeBlocker !== null) { powerSaveBlocker.stop(awakeBlocker); awakeBlocker = null; }
+});
 // macOS remembers the first style it registered for the app, so the "alert" default in Info.plist only helps fresh
 // installs; existing users switch to alerts in System Settings, which this opens straight at the app's page.
 ipcMain.on('open-notification-settings', (e) => {
@@ -284,6 +292,8 @@ app.whenReady().then(async () => {
     }, 5000);
   }
   await createWindow();
+  // After sleep the renderer's sockets may be half-open; tell it to reconnect now rather than wait for the heartbeat.
+  powerMonitor.on('resume', () => { for (const w of BrowserWindow.getAllWindows()) w.webContents.send('power-resume'); });
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();
   });

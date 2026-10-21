@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type ToolsInfo, type ToolStatus } from '../lib/api';
 import { LANGS, setLang, t, useLang, type Lang } from '../lib/i18n';
+import { keepAwakeEnabled, setKeepAwakeEnabled } from '../lib/power';
 import Icon from './Icon';
 
 interface Props { onClose: () => void }
@@ -22,6 +23,7 @@ function methodsFor(tool: ToolStatus, inst: ToolsInfo['installers']): string[] {
 function GeneralSettings() {
   const lang = useLang();
   const [login, setLogin] = useState<boolean | null>(null);
+  const [awake, setAwake] = useState(keepAwakeEnabled);
   useEffect(() => { window.vibe?.loginItem?.(null).then(setLogin).catch(() => {}); }, []);
   return (
     <div className="rounded-lg border border-white/10 p-4 space-y-3">
@@ -38,6 +40,15 @@ function GeneralSettings() {
           {t('settings.openAtLogin')}
         </label>
       ) : <div className="text-xs text-zinc-500">{t('settings.browserNote')}</div>}
+      {window.vibe?.keepAwake && (
+        <div className="flex flex-col gap-1">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={awake} onChange={(e) => { setAwake(e.target.checked); setKeepAwakeEnabled(e.target.checked); }} />
+            {t('settings.keepAwake')}
+          </label>
+          <div className="text-xs text-zinc-500 leading-relaxed pl-6">{t('settings.keepAwakeNote')}</div>
+        </div>
+      )}
       {window.vibe?.openNotificationSettings && (
         <div className="flex items-start gap-3 text-xs">
           <span className="text-zinc-500 leading-relaxed flex-1">{t('settings.notificationStyle')}</span>
