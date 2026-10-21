@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
+import { access } from 'node:fs/promises';
 import { promisify } from 'node:util';
 
 const execFileP = promisify(execFile);
@@ -15,7 +16,7 @@ export async function syncLoginShellPath(): Promise<string> {
   return process.env.PATH ?? '';
 }
 
-export async function which(cmd: string): Promise<string | null> {
+async function lookupCommand(cmd: string): Promise<string | null> {
   try {
     const { stdout } = await execFileP('/bin/zsh', ['-lc', `command -v ${cmd}`], { timeout: 8000 });
     const p = stdout.trim().split('\n').pop() ?? '';
@@ -24,6 +25,27 @@ export async function which(cmd: string): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * Lookups are cached for a few minutes: the sidebar, usage bar and tool checks call this every minute,
+ * and each miss spawns a login shell. A cached path that no longer exists is looked up again.
+ */
+const WHICH_TTL_MS = 5 * 60 * 1000;
+const whichCache = new Map<string, { at: number; path: Promise<string | null> }>();
+
+export async function which(cmd: string): Promise<string | null> {
+  const hit = whichCache.get(cmd);
+  if (hit && Date.now() - hit.at < WHICH_TTL_MS) {
+    const p = await hit.path;
+    if (!p || await access(p).then(() => true, () => false)) return p;
+  }
+  const path = lookupCommand(cmd);
+  whichCache.set(cmd, { at: Date.now(), path });
+  return path;
+}
+
+/** Drop cached lookups, e.g. after an install or update put a CLI somewhere new. */
+export function forgetCommandPaths() { whichCache.clear(); }
 
 export async function run(cmd: string, args: string[], timeout = 15000): Promise<{ stdout: string; stderr: string; ok: boolean }> {
   try {

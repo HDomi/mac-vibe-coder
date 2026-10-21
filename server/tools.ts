@@ -1,4 +1,4 @@
-import { run, which } from './shell.js';
+import { forgetCommandPaths, run, which } from './shell.js';
 
 export type ToolId = 'claude' | 'codex';
 export type InstallMethod = 'official' | 'brew' | 'npm';
@@ -65,9 +65,25 @@ async function codexStatus(): Promise<ToolStatus> {
   };
 }
 
-export async function detectTools(): Promise<{ tools: ToolStatus[]; installers: Installers }> {
+async function probeTools(): Promise<{ tools: ToolStatus[]; installers: Installers }> {
   const [claude, codex, brew, npm, node] = await Promise.all([
     claudeStatus(), codexStatus(), which('brew'), which('npm'), which('node'),
   ]);
   return { tools: [claude, codex], installers: { brew, npm, node } };
+}
+
+/**
+ * The companions ask every minute; each probe starts both CLIs twice (version, auth status).
+ * The settings panel and installs pass `force` so a change shows at once.
+ */
+const TOOLS_TTL_MS = 5 * 60 * 1000;
+let toolsCache: { at: number; result: ReturnType<typeof probeTools> } | null = null;
+
+export function detectTools(force = false): ReturnType<typeof probeTools> {
+  if (force) forgetCommandPaths();
+  if (!force && toolsCache && Date.now() - toolsCache.at < TOOLS_TTL_MS) return toolsCache.result;
+  const entry = { at: Date.now(), result: probeTools() };
+  entry.result.catch(() => { if (toolsCache === entry) toolsCache = null; });
+  toolsCache = entry;
+  return entry.result;
 }

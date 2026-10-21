@@ -67,7 +67,7 @@ export default function ToolsPanel({ onClose }: Props) {
   const [running, setRunning] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
-  const refresh = () => api.tools().then(setInfo).catch((e) => setLog((l) => [...l, { line: e.message, err: true }]));
+  const refresh = () => api.tools(true).then(setInfo).catch((e) => setLog((l) => [...l, { line: e.message, err: true }]));
   useEffect(() => { refresh(); }, []);
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [log]);
 

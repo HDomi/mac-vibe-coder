@@ -6,7 +6,7 @@ import { loadConfig, PORT, saveConfig, withConfigLock } from './config.js';
 import { bodyLimit } from 'hono/body-limit';
 import { streamSSE } from 'hono/streaming';
 import { detectTools, INSTALL_COMMANDS, UPDATE_COMMANDS, type InstallMethod, type ToolId } from './tools.js';
-import { streamShell } from './shell.js';
+import { forgetCommandPaths, streamShell } from './shell.js';
 import { getUsage } from './usage.js';
 import { saveAttachment } from './attachments.js';
 import { listSessions, getSessionMessages, renameSession, deleteSession } from '@anthropic-ai/claude-agent-sdk';
@@ -204,7 +204,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
     return c.json(cfg.recent);
   });
 
-  app.get('/api/tools', async (c) => c.json(await detectTools()));
+  app.get('/api/tools', async (c) => c.json(await detectTools(c.req.query('force') === '1')));
   app.get('/api/tools/install', (c) => {
     const tool = c.req.query('tool') as ToolId;
     const method = c.req.query('method') as InstallMethod | 'update';
@@ -215,6 +215,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
       const code = await streamShell(cmd, (line, src) => {
         void stream.writeSSE({ event: src, data: line });
       });
+      forgetCommandPaths();
       await stream.writeSSE({ event: 'done', data: String(code) });
     });
   });

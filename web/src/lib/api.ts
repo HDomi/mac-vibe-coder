@@ -99,7 +99,7 @@ export const api = {
   recent: () => req<string[]>('/api/recent'),
   pushRecent: (path: string) =>
     req<string[]>('/api/recent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path }) }),
-  tools: () => req<ToolsInfo>('/api/tools'),
+  tools: (force = false) => req<ToolsInfo>(`/api/tools${force ? '?force=1' : ''}`),
   installUrl: (tool: string, method: string) => `/api/tools/install?tool=${q(tool)}&method=${q(method)}`,
   usage: (force = false) => req<UsageSnapshot>(`/api/usage${force ? '?force=1' : ''}`),
   attach: (files: File[]) => {
