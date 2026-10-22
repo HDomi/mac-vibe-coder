@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { liveTasks, reduceEvent, type ChatSession } from '../web/src/lib/chatStore';
-import { layoutTaskTree, NODE_W, ROOT_ID, shortTokens, taskKind } from '../web/src/lib/taskGraph';
+import { layoutTaskTree, NODE_H, NODE_W, ROOT_ID, shortTokens, taskKind } from '../web/src/lib/taskGraph';
 import type { TaskInfo } from '../web/src/lib/agent';
 
 const base: ChatSession = { id: 's', agent: 'claude', cwd: '/p', permissionMode: 'default', status: 'running', totalCostUsd: 0, lastSeq: 0, items: [] };
@@ -21,16 +21,20 @@ test('task events upsert by id, the chips list only running non-ambient tasks, a
   assert.equal(reduceEvent(s, { kind: 'task.reset' }, 6).tasks, undefined);
 });
 
-test('the relation graph hangs tasks off the session, nests by parent and centres a parent over its children', () => {
+test('the relation graph runs left to right: tasks hang off the session, nest by parent, and a parent is centred beside its children', () => {
   const list = [task('p'), task('p1', { parentId: 'p', startedAt: 2 }), task('p2', { parentId: 'p', startedAt: 3 }), task('q', { startedAt: 4 }), task('orphan', { parentId: 'gone', startedAt: 5 })];
   const g = layoutTaskTree(list);
   const at = (id: string) => g.nodes.find((n) => n.id === id)!;
   assert.deepEqual(g.edges, [{ from: ROOT_ID, to: 'p' }, { from: 'p', to: 'p1' }, { from: 'p', to: 'p2' }, { from: ROOT_ID, to: 'q' }, { from: ROOT_ID, to: 'orphan' }]);
   assert.equal(at('p1').depth, 2);
   assert.equal(at('orphan').depth, 1, 'an unknown parent falls back to the session root');
-  assert.equal(at('p').x, (at('p1').x + at('p2').x) / 2);
-  assert.equal(at(ROOT_ID).depth, 0);
-  assert.ok(g.width >= 4 * NODE_W, 'four leaves wide');
+  assert.equal(at('p').y, (at('p1').y + at('p2').y) / 2, 'parent centred vertically beside its children');
+  assert.ok(at('p1').x > at('p').x && at('p').x > at(ROOT_ID).x, 'depth grows to the right');
+  assert.equal(at('p1').x, at('p2').x, 'siblings share a column');
+  assert.ok(at('p1').y < at('p2').y && at('p2').y < at('q').y, 'leaves stack downward in start order');
+  assert.equal(at(ROOT_ID).x, 0);
+  assert.ok(g.width >= 3 * NODE_W && g.width < 4 * NODE_W, 'three columns wide');
+  assert.ok(g.height >= 4 * NODE_H, 'four leaf rows tall');
   // A self-parented task must not recurse forever.
   assert.equal(layoutTaskTree([task('loop', { parentId: 'loop' })]).nodes.length, 2);
   assert.deepEqual(layoutTaskTree([]).nodes.map((n) => n.id), [ROOT_ID]);

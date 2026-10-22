@@ -15,17 +15,21 @@ export interface GraphEdge { from: string; to: string }
 
 export interface GraphLayout { nodes: GraphNode[]; edges: GraphEdge[]; width: number; height: number }
 
-export const NODE_W = 150;
+export const NODE_W = 172;
 export const NODE_H = 46;
-const GAP_X = 14;
-const GAP_Y = 42;
+/** Horizontal distance between depth columns (edge length). */
+const GAP_X = 40;
+/** Vertical distance between sibling rows. */
+const GAP_Y = 10;
 
 export const ROOT_ID = '__session__';
 
 /**
- * Tidy top-down tree (what `graph TD` in mermaid draws): leaves take one column each in start
- * order, a parent sits centred over its children. A task whose parent is unknown (ended before
- * we saw it, or launched by a teammate) hangs off the session root so nothing is lost.
+ * Tidy left-to-right tree (what `graph LR` in mermaid draws): the session sits at the left, each
+ * depth is one column to the right, leaves take one row each in start order and a parent is
+ * centred beside its children. Breadth grows down (scrolls), depth grows right (rarely past 3),
+ * which fits the wide, short popover above the composer. A task whose parent is unknown (ended
+ * before we saw it, or launched by a teammate) hangs off the session root so nothing is lost.
  */
 export function layoutTaskTree(tasks: TaskInfo[]): GraphLayout {
   const known = new Set(tasks.map((t) => t.id));
@@ -41,26 +45,26 @@ export function layoutTaskTree(tasks: TaskInfo[]): GraphLayout {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   let maxDepth = 0;
-  // Leaf columns are handed out left to right; a parent's column is the middle of its children's span.
-  let nextCol = 0;
+  // Leaf rows are handed out top to bottom; a parent's row is the middle of its children's span.
+  let nextRow = 0;
   const seen = new Set<string>();
   const place = (id: string, task: TaskInfo | null, depth: number): number => {
     seen.add(id);
     maxDepth = Math.max(maxDepth, depth);
     const kids = (children.get(id) ?? []).filter((k) => !seen.has(k.id));
-    let col: number;
-    if (!kids.length) col = nextCol++;
+    let row: number;
+    if (!kids.length) row = nextRow++;
     else {
-      const cols = kids.map((k) => { edges.push({ from: id, to: k.id }); return place(k.id, k, depth + 1); });
-      col = (cols[0] + cols[cols.length - 1]) / 2;
+      const rows = kids.map((k) => { edges.push({ from: id, to: k.id }); return place(k.id, k, depth + 1); });
+      row = (rows[0] + rows[rows.length - 1]) / 2;
     }
-    nodes.push({ id, task, depth, x: col * (NODE_W + GAP_X), y: depth * (NODE_H + GAP_Y) });
-    return col;
+    nodes.push({ id, task, depth, x: depth * (NODE_W + GAP_X), y: row * (NODE_H + GAP_Y) });
+    return row;
   };
   place(ROOT_ID, null, 0);
   // Keep parents before children for a natural tab / paint order.
-  nodes.sort((a, b) => a.depth - b.depth || a.x - b.x);
-  return { nodes, edges, width: Math.max(nextCol, 1) * (NODE_W + GAP_X) - GAP_X, height: (maxDepth + 1) * (NODE_H + GAP_Y) - GAP_Y };
+  nodes.sort((a, b) => a.depth - b.depth || a.y - b.y);
+  return { nodes, edges, width: (maxDepth + 1) * (NODE_W + GAP_X) - GAP_X, height: Math.max(nextRow, 1) * (NODE_H + GAP_Y) - GAP_Y };
 }
 
 /** Short label for a chip or node: the agent type for subagents, else what kind of task it is. */

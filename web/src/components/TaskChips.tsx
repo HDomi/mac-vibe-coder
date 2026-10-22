@@ -13,11 +13,11 @@ interface Props {
   onShowCard?: (toolUseId: string) => void;
 }
 
-const STATUS_RING: Record<TaskStatus, string> = {
-  running: 'stroke-violet-400',
-  completed: 'stroke-emerald-400/70',
-  failed: 'stroke-red-400/80',
-  stopped: 'stroke-zinc-500',
+const STATUS_BORDER: Record<TaskStatus, string> = {
+  running: 'border-violet-400/60',
+  completed: 'border-emerald-400/50',
+  failed: 'border-red-400/60',
+  stopped: 'border-zinc-500/50',
 };
 const STATUS_TEXT: Record<TaskStatus, string> = {
   running: 'text-violet-200',
@@ -97,36 +97,43 @@ function TaskGraphPopover({ tasks, selected, onSelect, onClose, rootLabel, rootS
         <button className="text-zinc-500 hover:text-zinc-200 px-1" onClick={onClose} aria-label={t('tasks.close')}>✕</button>
       </div>
       <div className="overflow-auto max-h-[40vh] p-2">
-        <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="block mx-auto select-none">
-          <g transform={`translate(${PAD} ${PAD})`}>
-            {layout.edges.map((e) => {
-              const a = layout.nodes.find((n) => n.id === e.from)!; const b = layout.nodes.find((n) => n.id === e.to)!;
-              const x1 = a.x + NODE_W / 2, y1 = a.y + NODE_H, x2 = b.x + NODE_W / 2, y2 = b.y;
-              const my = (y1 + y2) / 2;
-              const hot = b.task?.status === 'running';
-              return <path key={`${e.from}-${e.to}`} d={`M${x1} ${y1} C${x1} ${my} ${x2} ${my} ${x2} ${y2}`} fill="none" strokeWidth={hot ? 1.5 : 1} className={hot ? 'stroke-violet-400/70' : 'stroke-zinc-600'} />;
-            })}
-            {layout.nodes.map((n) => {
-              const task = n.task;
-              const isSel = n.id === selected;
-              const ring = task ? STATUS_RING[task.status] : 'stroke-blue-400/70';
-              const fill = task ? (task.status === 'running' ? 'fill-violet-500/15' : 'fill-white/[0.03]') : 'fill-blue-500/15';
-              const title = task ? taskKind(task) : rootLabel;
-              const sub = task ? (task.description || statusLabel(task.status)) : (rootSub ?? t('tasks.session'));
-              return (
-                <g key={n.id} transform={`translate(${n.x} ${n.y})`} className="cursor-pointer" onClick={() => onSelect(n.id)}>
-                  <rect width={NODE_W} height={NODE_H} rx={8} strokeWidth={isSel ? 2 : 1} className={`${fill} ${ring} ${isSel ? 'drop-shadow-[0_0_6px_rgba(167,139,250,0.5)]' : ''}`} />
-                  {task?.status === 'running' && <circle cx={12} cy={15} r={3} className="fill-violet-400 animate-pulse" />}
-                  {task && task.status !== 'running' && <circle cx={12} cy={15} r={3} className={task.status === 'completed' ? 'fill-emerald-400' : task.status === 'failed' ? 'fill-red-400' : 'fill-zinc-500'} />}
-                  {!task && <circle cx={12} cy={15} r={3} className="fill-blue-400" />}
-                  <text x={22} y={19} className="fill-zinc-100 text-[12px] font-medium" style={{ fontSize: 12 }}>{clip(title, 17)}</text>
-                  <text x={12} y={36} className="fill-zinc-400" style={{ fontSize: 10.5 }}>{clip(sub, 24)}</text>
-                  <title>{task ? `${taskKind(task)} · ${task.description}\n${statusLabel(task.status)} · ${elapsed(task)}` : `${rootLabel}${rootSub ? ` · ${rootSub}` : ''}`}</title>
-                </g>
-              );
-            })}
-          </g>
-        </svg>
+        {/* Node boxes are plain HTML (real CSS ellipsis for long/Korean labels, reliable in capturePage);
+            the SVG underneath draws only the connector lines. */}
+        <div className="relative" style={{ width: w, height: h }}>
+          <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="absolute inset-0 pointer-events-none select-none">
+            <g transform={`translate(${PAD} ${PAD})`}>
+              {layout.edges.map((e) => {
+                const a = layout.nodes.find((n) => n.id === e.from)!; const b = layout.nodes.find((n) => n.id === e.to)!;
+                // Parent's right edge to child's left edge, bending halfway across the gap.
+                const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2, x2 = b.x, y2 = b.y + NODE_H / 2;
+                const mx = (x1 + x2) / 2;
+                const hot = b.task?.status === 'running';
+                return <path key={`${e.from}-${e.to}`} d={`M${x1} ${y1} C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`} fill="none" strokeWidth={hot ? 1.5 : 1} className={hot ? 'stroke-violet-400/70' : 'stroke-zinc-600'} />;
+              })}
+            </g>
+          </svg>
+          {layout.nodes.map((n) => {
+            const task = n.task;
+            const isSel = n.id === selected;
+            const border = task ? STATUS_BORDER[task.status] : 'border-blue-400/70';
+            const bg = task ? (task.status === 'running' ? 'bg-violet-500/15' : 'bg-white/[0.03]') : 'bg-blue-500/15';
+            const dot = !task ? 'bg-blue-400' : task.status === 'running' ? 'bg-violet-400 animate-pulse' : task.status === 'completed' ? 'bg-emerald-400' : task.status === 'failed' ? 'bg-red-400' : 'bg-zinc-500';
+            const title = task ? taskKind(task) : rootLabel;
+            const sub = task ? (task.description.split('\n')[0] || statusLabel(task.status)) : (rootSub ?? t('tasks.session'));
+            return (
+              <button key={n.id} type="button" onClick={() => onSelect(n.id)}
+                title={task ? `${taskKind(task)} · ${task.description}\n${statusLabel(task.status)} · ${elapsed(task)}` : `${rootLabel}${rootSub ? ` · ${rootSub}` : ''}`}
+                className={`absolute flex flex-col justify-center text-left px-2.5 rounded-lg border ${bg} ${border} ${isSel ? 'ring-2 ring-violet-400/60 border-violet-400' : ''}`}
+                style={{ left: n.x + PAD, top: n.y + PAD, width: NODE_W, height: NODE_H }}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+                  <span className="truncate text-[12px] font-medium text-zinc-100">{title}</span>
+                </div>
+                <div className="truncate text-[10.5px] text-zinc-400 mt-0.5 w-full">{sub}</div>
+              </button>
+            );
+          })}
+        </div>
       </div>
       {sel && (
         <div className="border-t border-white/10 px-3 py-2 space-y-1">
@@ -152,9 +159,4 @@ function TaskGraphPopover({ tasks, selected, onSelect, onClose, rootLabel, rootS
       )}
     </div>
   );
-}
-
-function clip(s: string, n: number): string {
-  const line = s.split('\n')[0];
-  return line.length > n ? line.slice(0, n - 1) + '…' : line;
 }
