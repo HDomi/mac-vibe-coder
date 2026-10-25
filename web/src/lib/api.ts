@@ -11,6 +11,8 @@ export interface Entry {
   kind: PreviewKind;
 }
 
+export interface TextFile { content: string; truncated: boolean; size: number; mtime: number; binary: boolean; lossy: boolean; bom: boolean }
+
 export interface Listing { path: string; parent: string | null; entries: Entry[] }
 export interface Favorite { path: string; name: string; group?: string }
 export interface FavoriteGroup { id: string; name: string; collapsed?: boolean }
@@ -72,7 +74,10 @@ export const api = {
   home: () => req<HomeInfo>('/api/home'),
   list: (path: string) => req<Listing>(`/api/fs/list?path=${q(path)}`),
   stat: (path: string) => req<Entry>(`/api/fs/stat?path=${q(path)}`),
-  text: (path: string) => req<{ content: string; truncated: boolean; size: number }>(`/api/fs/text?path=${q(path)}`),
+  text: (path: string) => req<TextFile>(`/api/fs/text?path=${q(path)}`),
+  saveText: (path: string, content: string, opts: { baseMtime: number | null; bom: boolean; force?: boolean }) =>
+    req<{ mtime: number; size: number }>('/api/fs/text', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, content, ...opts }) }),
+  fsCreate: (dir: string, name: string) => post<{ path: string }>('/api/fs/create', { dir, name }),
   rawUrl: (path: string) => `/api/fs/raw?path=${q(path)}`,
   projectIconUrl: (path: string) => `/api/project-icon?path=${q(path)}`,
   favorites: () => req<Favorites>('/api/favorites'),
@@ -92,6 +97,8 @@ export const api = {
   fsDuplicate: (path: string) => post<{ path: string }>('/api/fs/duplicate', { path }),
   fsTrash: (paths: string[]) => post<{ ok: true }>('/api/fs/trash', { paths }),
   fsWatchUrl: (path: string) => `/api/fs/watch?path=${q(path)}`,
+  /** One stream for a recursive root plus the folders of open files outside it. */
+  fsWatchManyUrl: (deep: string[], flat: string[]) => `/api/fs/watch?${[...deep.map((p) => `rpath=${q(p)}`), ...flat.map((p) => `path=${q(p)}`)].join('&')}`,
   clipboardFiles: () => req<{ change: number; paths: string[] }>('/api/clipboard/files'),
   setClipboardFiles: (paths: string[]) => post<{ change: number }>('/api/clipboard/files', { paths }),
   historyAll: (limit = 20) => req<RecentSession[]>(`/api/history-all?limit=${limit}`),

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { backgroundState, displayTitle, pendingRequests, sortSessions, type ChatSession } from './lib/chatStore';
 import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing, type RecentSession } from './lib/api';
 import { agentClient, type Attachment } from './lib/agent';
@@ -8,6 +8,7 @@ import { requestNotificationPermission, useSessions, setOnScreenSession } from '
 import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
 import Preview from './components/Preview';
+import { editor } from './lib/editor/store';
 import ToolsPanel from './components/ToolsPanel';
 import UsageBar, { type ViewMode } from './components/UsageBar';
 import ChatPanel, { type StartOptions } from './components/ChatPanel';
@@ -24,11 +25,16 @@ import Lightbox from './components/Lightbox';
 import Icon from './components/Icon';
 import SessionCompanions from './components/SessionCompanions';
 
+// CodeMirror and the explorer load the first time IDE mode is shown.
+const EditorPanel = lazy(() => import('./components/editor/EditorPanel'));
+
 const LS_CWD = 'vibe.cwd';
 const LS_PROJECT = 'vibe.project';
 const LS_SIDEBAR = 'vibe.sidebar.collapsed';
 const LS_RIGHT = 'vibe.right.collapsed';
-const LS_MODE = 'vibe.mode.view';
+// v2: the old 'ide' value meant today's VIBE mode; IDE is now the editor.
+const LS_MODE = 'vibe.mode.view.v2';
+const LS_MODE_V1 = 'vibe.mode.view';
 const LS_ACTIVE_SESSION = 'vibe.active.session';
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
@@ -64,7 +70,10 @@ function AppInner() {
   const [quickOpen, setQuickOpen] = useState(false);
   const [companions, setCompanions] = useState(() => { try { return localStorage.getItem('vibe.companions') !== '0'; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem('vibe.companions', companions ? '1' : '0'); } catch { /* ignore */ } }, [companions]);
-  const [view, setView] = useState<ViewMode>(() => { try { return (localStorage.getItem(LS_MODE) as ViewMode) || 'ide'; } catch { return 'ide'; } });
+  const [view, setView] = useState<ViewMode>(() => {
+    try { return (localStorage.getItem(LS_MODE) as ViewMode) || (localStorage.getItem(LS_MODE_V1) === 'agent' ? 'agent' : 'vibe'); } catch { return 'vibe'; }
+  });
+  useEffect(() => { editor.setRoot(project); }, [project]);
   const [agentActive, setAgentActive] = useState<string | 'new' | null>(null);
   useEffect(() => { try { localStorage.setItem(LS_MODE, view); } catch { /* ignore */ } }, [view]);
   useEffect(() => { try { activeSession ? localStorage.setItem(LS_ACTIVE_SESSION, activeSession) : localStorage.removeItem(LS_ACTIVE_SESSION); } catch { /* ignore */ } }, [activeSession]);
@@ -116,11 +125,15 @@ function AppInner() {
     const h = (ev: Event) => {
       const path = (ev as CustomEvent<{ path: string }>).detail?.path;
       if (!path) return;
-      api.stat(path).then((e) => { if (e.isDir) navigate(e.path); else { setSelected(e); setRightTab('preview'); } }).catch(() => {});
+      api.stat(path).then((e) => {
+        if (e.isDir) navigate(e.path);
+        else if (view === 'ide') editor.open(e.path, { kind: e.kind });
+        else { setSelected(e); setRightTab('preview'); }
+      }).catch(() => {});
     };
     window.addEventListener('vibe:open-file', h);
     return () => window.removeEventListener('vibe:open-file', h);
-  }, [navigate]);
+  }, [navigate, view]);
   const openProject = useCallback((p: string) => {
     setProject(p); navigate(p); setActiveSession(null);
     api.pushRecent(p).then(setRecent).catch(() => {});
@@ -200,6 +213,16 @@ function AppInner() {
       if (!mod) return;
       const k = e.key.toLowerCase();
       const inText = (e.target as HTMLElement)?.closest?.('input, textarea, [contenteditable]');
+      // The editor owns ⌘W (close tab), ⌘/ (toggle comment), ⌘S and ⇧⌘K (delete line) while it has focus.
+      const inEditor = !!(e.target as HTMLElement)?.closest?.('[data-editor-scope]');
+      if (inEditor && (k === 'w' || k === '/' || k === 's' || k === 'k')) return;
+      if (view === 'ide') {
+        // No chat or right panel on screen: ⌘W closes an editor tab (never a hidden session), ⌘B the explorer.
+        if (k === 'w') { e.preventDefault(); if (editor.active) editor.close(editor.active); return; }
+        if (k === 's') { e.preventDefault(); if (editor.active) void editor.save(editor.active); return; }
+        if (k === 'b') { e.preventDefault(); window.dispatchEvent(new Event('vibe:toggle-tree')); return; }
+        if (k === 'n' || k === 'j' || k === 'k' || ['1', '2', '3', '4', '5'].includes(e.key)) return;
+      }
       if (k === 'p' && !e.shiftKey) { e.preventDefault(); if (project) setQuickOpen((v) => !v); }
       else if (k === 'b') { e.preventDefault(); setCollapsed((v) => !v); }
       else if (k === 'j') { e.preventDefault(); setRightCollapsed((v) => !v); }
@@ -229,6 +252,17 @@ function AppInner() {
         {companions && <SessionCompanions sessions={Object.values(S.sessions)} scene={`${view}:${rightTab}:${rightCollapsed}`} />}
         {view === 'agent' ? (
           <AgentView home={home?.home ?? '~'} S={S} active={agentActive} setActive={setAgentActive} />
+        ) : view === 'ide' ? (
+          <div className="flex-1 flex min-h-0 relative">
+            {project
+              ? <Suspense fallback={null}><EditorPanel root={project} visible onAttach={attach} /></Suspense>
+              : <div className="flex-1 flex items-center justify-center text-sm text-zinc-500">{t('editor.noProject')}</div>}
+            {quickOpen && project && (
+              <QuickOpen cwd={project} onClose={() => setQuickOpen(false)}
+                onOpen={(h) => { if (!h.isDir) editor.open(h.path); }}
+                onAttach={(h) => { if (!h.isDir) attach([{ path: h.path, name: h.rel.split('/').pop() ?? h.rel, isDir: false, size: 0, mtime: 0, ext: '', hidden: false, kind: 'binary' }]); }} />
+            )}
+          </div>
         ) : (
         <div className="flex-1 flex min-h-0 relative">
           <div data-companion-zone="left" data-companion-wall="right" style={{ width: collapsed ? 40 : sidebar.width }} className={`shrink-0 h-full overflow-hidden ${paneTransition}`}>
@@ -306,7 +340,8 @@ function AppInner() {
                 <div className={`absolute inset-0 ${rightTab === 'files' ? '' : 'invisible'}`}>
                   <FileList listing={listing} error={error} isFavorite={isFavorite}
                     onNavigate={navigate} onPreview={(e) => { setSelected(e); setRightTab('preview'); }} onToggleFavorite={toggleFavorite}
-                    onRefresh={() => setRefreshTick((t) => t + 1)} onAttach={project ? attach : undefined} />
+                    onRefresh={() => setRefreshTick((t) => t + 1)} onAttach={project ? attach : undefined}
+                    onOpenInIde={(e) => { editor.open(e.path, { kind: e.kind }); setView('ide'); }} />
                 </div>
                 <div className={`absolute inset-0 ${rightTab === 'preview' ? '' : 'invisible'}`}><Preview entry={selected} /></div>
                 <div className={`absolute inset-0 ${rightTab === 'browser' ? '' : 'invisible'}`}><BrowserPanel visible={rightTab === 'browser' && !rightCollapsed} onCapture={(a) => setPendingAttachments((prev) => [...prev, a])} /></div>

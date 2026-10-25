@@ -4,6 +4,7 @@ import { useContextMenu, type MenuItem } from './ContextMenu';
 import { t, useLang } from '../lib/i18n';
 import FileIcon from './FileIcon';
 import Icon from './Icon';
+import { editor } from '../lib/editor/store';
 
 interface Props {
   listing: Listing | null;
@@ -14,6 +15,7 @@ interface Props {
   onToggleFavorite: () => void;
   onRefresh: () => void;
   onAttach?: (entries: Entry[]) => void;
+  onOpenInIde?: (entry: Entry) => void;
 }
 
 // `change` is the macOS pasteboard changeCount right after we put these files there; if it has moved
@@ -22,7 +24,7 @@ interface Clipboard { paths: string[]; cut: boolean; change?: number }
 interface SearchHit { path: string; rel: string; isDir: boolean }
 let clipboard: Clipboard | null = null; // module-level so it survives re-renders and folder changes
 
-export default function FileList({ listing, error, isFavorite, onNavigate, onPreview, onToggleFavorite, onRefresh, onAttach }: Props) {
+export default function FileList({ listing, error, isFavorite, onNavigate, onPreview, onToggleFavorite, onRefresh, onAttach, onOpenInIde }: Props) {
   useLang();
   const menu = useContextMenu();
   const [showHidden, setShowHidden] = useState(false);
@@ -30,7 +32,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
   const [anchor, setAnchor] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<false | 'folder' | 'file'>(false);
   const [note, setNote] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
   // Name search under the folder on screen (recursive, same matcher as "@" mentions).
@@ -111,14 +113,15 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
     else paths = sys?.paths ?? [];
     if (!paths.length) { setNote(t('files.nothingToPaste')); return; }
     (cut ? api.fsMove(paths, dest) : api.fsCopy(paths, dest)).then((r) => {
-      if (cut) clipboard = null;
+      if (cut) { clipboard = null; paths.forEach((p, i) => { if (r.paths[i] && r.paths[i] !== p) editor.renamed(p, r.paths[i]); }); }
       setSelected(new Set(r.paths)); setAnchor(r.paths[0] ?? null);
       onRefresh();
     }).catch(fail);
   };
   const trash = () => {
     if (!selectedEntries.length) return;
-    api.fsTrash(selectedEntries.map((e) => e.path)).then(() => { setSelected(new Set()); onRefresh(); }).catch(fail);
+    const paths = selectedEntries.map((e) => e.path);
+    api.fsTrash(paths).then(() => { editor.removed(paths); setSelected(new Set()); onRefresh(); }).catch(fail);
   };
   const startRename = () => { const e = selectedEntries[0]; if (e) { setRenaming(e.path); setDraft(e.name); } };
   const commitRename = () => {
@@ -126,15 +129,18 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
     if (!target) return;
     const cur = entries.find((e) => e.path === target);
     if (!cur || draft === cur.name || !draft.trim()) return;
-    api.fsRename(target, draft.trim()).then(onRefresh).catch(fail);
+    api.fsRename(target, draft.trim()).then((r) => { editor.renamed(target, r.path); onRefresh(); }).catch(fail);
   };
-  const createFolder = () => {
+  const createEntry = () => {
+    const kind = creating;
     setCreating(false);
-    if (!listing || !draft.trim()) return;
-    api.fsMkdir(listing.path, draft.trim()).then(onRefresh).catch(fail);
+    if (!listing || !kind || !draft.trim()) return;
+    if (kind === 'folder') api.fsMkdir(listing.path, draft.trim()).then(onRefresh).catch(fail);
+    else api.fsCreate(listing.path, draft.trim()).then((r) => { onRefresh(); return api.stat(r.path).then(onPreview); }).catch(fail);
   };
   const duplicate = () => { const e = selectedEntries[0]; if (e) api.fsDuplicate(e.path).then(onRefresh).catch(fail); };
-  const newFolder = () => { setDraft(t('files.untitledFolder')); setCreating(true); };
+  const newFolder = () => { setDraft(t('files.untitledFolder')); setCreating('folder'); };
+  const newFile = () => { setDraft(''); setCreating('file'); };
 
   const onKey = useCallback((ev: React.KeyboardEvent) => {
     if (onFind(ev)) return;
@@ -166,6 +172,7 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
     const many = sel.length > 1;
     return [
       { label: e.isDir ? t('common.open') : t('files.preview'), onClick: () => open(e) },
+      ...(onOpenInIde && !e.isDir && !many ? [{ label: t('files.openInIde'), onClick: () => onOpenInIde(e) }] : []),
       ...(onAttach ? [{ label: many ? t('files.attachNToChat', { n: sel.length }) : t('files.attachToChat'), onClick: () => onAttach(sel) }] : []),
       { separator: true },
       { label: t('common.revealInFinder'), onClick: () => api.open(e.path, 'finder').catch(fail) },
@@ -180,10 +187,11 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
       { label: t('files.duplicate'), shortcut: '⌘D', disabled: many, onClick: () => api.fsDuplicate(e.path).then(onRefresh).catch(fail) },
       { label: t('files.renameItem'), shortcut: '⏎', disabled: many, onClick: () => { setRenaming(e.path); setDraft(e.name); } },
       { separator: true },
-      { label: t('files.moveToTrash'), shortcut: '⌘⌫', danger: true, onClick: () => api.fsTrash(sel.map((x) => x.path)).then(() => { setSelected(new Set()); onRefresh(); }).catch(fail) },
+      { label: t('files.moveToTrash'), shortcut: '⌘⌫', danger: true, onClick: () => api.fsTrash(sel.map((x) => x.path)).then(() => { editor.removed(sel.map((x) => x.path)); setSelected(new Set()); onRefresh(); }).catch(fail) },
     ];
   };
   const bgMenu = (): MenuItem[] => [
+    { label: t('tree.newFile'), onClick: newFile },
     { label: t('files.newFolderMenu'), shortcut: '⇧⌘N', onClick: newFolder },
     { label: t('common.paste'), shortcut: '⌘V', onClick: () => void paste() },
     { separator: true },
@@ -211,7 +219,8 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
         </div>
         <div className="flex-1" />
         {note && <span className="text-[11px] text-amber-300 truncate max-w-40" title={note}>{note}</span>}
-        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={newFolder} title={t('files.newFolder')}><Icon name="plus" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={newFile} title={t('files.newFile')}><Icon name="filePlus" /></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={newFolder} title={t('files.newFolder')}><Icon name="folderPlus" /></button>
         <button className={`w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 ${isFavorite ? 'text-amber-300' : 'text-zinc-400'}`} onClick={onToggleFavorite} title={isFavorite ? t('sidebar.removeFavorite') : t('sidebar.addFavorite')}><Icon name="star" filled={isFavorite} /></button>
       </div>
       <div data-companion-floor="files-toolbar" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-2 px-3 border-b border-white/5">
@@ -261,8 +270,8 @@ export default function FileList({ listing, error, isFavorite, onNavigate, onPre
           <table className="w-full text-sm">
             <tbody>
               {creating && (
-                <tr className="bg-blue-500/10"><td className="w-9 pl-3 pr-2 py-1.5"><FileIcon name={draft} isDir /></td>
-                  <td colSpan={3} className="py-1 pr-3"><input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={createFolder} onKeyDown={(e) => { if (e.key === 'Enter') createFolder(); if (e.key === 'Escape') setCreating(false); }} className="w-full bg-black/40 rounded px-2 py-0.5 outline-none border border-blue-400/50" /></td></tr>
+                <tr className="bg-blue-500/10"><td className="w-9 pl-3 pr-2 py-1.5"><FileIcon name={draft || 'file'} isDir={creating === 'folder'} /></td>
+                  <td colSpan={3} className="py-1 pr-3"><input autoFocus value={draft} placeholder={creating === 'file' ? t('tree.newFilePlaceholder') : undefined} onChange={(e) => setDraft(e.target.value)} onBlur={createEntry} onKeyDown={(e) => { e.stopPropagation(); if (e.nativeEvent.isComposing) return; if (e.key === 'Enter') createEntry(); if (e.key === 'Escape') setCreating(false); }} className="w-full bg-black/40 rounded px-2 py-0.5 outline-none border border-blue-400/50" /></td></tr>
               )}
               {entries.map((e) => (
                 <tr key={e.path} data-companion-rung=""

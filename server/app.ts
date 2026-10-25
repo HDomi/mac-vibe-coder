@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import path from 'node:path';
-import { duplicate, FsError, homeInfo, listDir, mkdir, rawFile, readText, rename, resolvePath, searchFiles, statPath, transfer, trash } from './fs.js';
+import { createFile, duplicate, FsError, homeInfo, listDir, mkdir, rawFile, readText, rename, resolvePath, searchFiles, statPath, transfer, trash, writeText } from './fs.js';
 import { loadConfig, PORT, saveConfig, withConfigLock } from './config.js';
 import { bodyLimit } from 'hono/body-limit';
 import { streamSSE } from 'hono/streaming';
@@ -44,6 +44,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
     if (c.res.headers.get('content-type')?.includes('text/html') && !c.res.headers.has('content-security-policy')) c.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
   });
   app.use('/api/attach', bodyLimit({ maxSize: 32 * 1024 * 1024 }));
+  app.use('/api/fs/text', bodyLimit({ maxSize: 16 * 1024 * 1024 }));
   app.use('*', async (c, next) => {
     if (c.req.method !== 'GET' && /^(\/api\/favorites(?:\/|$)|\/api\/recent$|\/api\/prompts$|\/api\/history\/pin$|\/api\/history\/[^/]+$)/.test(c.req.path)) return withConfigLock(next);
     await next();
@@ -75,6 +76,12 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
     return new Response(res.body, { status: res.status, headers: res.headers });
   });
 
+  app.put('/api/fs/text', async (c) => {
+    const b = await c.req.json<{ path: string; content: string; baseMtime?: number | null; bom?: boolean; force?: boolean }>();
+    if (!b.path) return c.json({ error: 'path required', code: 'BAD_REQUEST' }, 400);
+    return c.json(await writeText(b.path, b.content, { baseMtime: b.baseMtime, bom: !!b.bom, force: !!b.force }));
+  });
+  app.post('/api/fs/create', async (c) => { const b = await c.req.json<{ dir: string; name: string }>(); return c.json({ path: await createFile(b.dir, b.name) }); });
   app.post('/api/fs/mkdir', async (c) => { const b = await c.req.json<{ dir: string; name: string }>(); return c.json({ path: await mkdir(b.dir, b.name) }); });
   app.post('/api/fs/rename', async (c) => { const b = await c.req.json<{ path: string; name: string }>(); return c.json({ path: await rename(b.path, b.name) }); });
   app.post('/api/fs/copy', async (c) => { const b = await c.req.json<{ paths: string[]; dest: string }>(); return c.json({ paths: await transfer(b.paths, b.dest, false) }); });
@@ -83,23 +90,51 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   app.post('/api/fs/trash', async (c) => { const b = await c.req.json<{ paths: string[] }>(); await trash(b.paths); return c.json({ ok: true }); });
   app.get('/api/clipboard/files', async (c) => c.json(await readPasteboardFiles()));
   app.post('/api/clipboard/files', async (c) => { const b = await c.req.json<{ paths: string[] }>(); return c.json(await writePasteboardFiles(b.paths)); });
-  // Pushes a "change" event whenever the folder's direct children change (agent edits, Finder,
+  // Pushes a "change" event whenever a watched folder's contents change (agent edits, Finder,
   // a terminal), so the file browser stays current without ⌘R. Throttled: a burst of writes
-  // (npm install, git checkout) becomes one refetch every 300ms instead of hundreds.
+  // (npm install, git checkout) becomes one event every 300ms instead of hundreds. The data is a
+  // JSON list of the changed paths, or "*" when the burst was too big to list.
+  // `path` (repeatable) watches a folder's direct children; `rpath` (repeatable) a whole tree
+  // (FSEvents on macOS, one handle however deep), where .git internals are dropped because they
+  // churn on every git command. One stream carries them all: browsers allow only six connections
+  // per host, and each open SSE holds one. A folder that cannot be watched (deleted, no access)
+  // is skipped and the stream stays open, so the client does not reconnect in a loop.
   app.get('/api/fs/watch', (c) => {
-    const dir = resolvePath(c.req.query('path') ?? '~');
+    const flat = (c.req.queries('path') ?? []).map((p) => resolvePath(p));
+    const deep = (c.req.queries('rpath') ?? []).map((p) => resolvePath(p));
+    if (!flat.length && !deep.length) flat.push(resolvePath('~'));
     return streamSSE(c, async (stream) => {
       let timer: NodeJS.Timeout | null = null;
-      const fire = () => { timer = null; void stream.writeSSE({ event: 'change', data: '' }).catch(() => {}); };
-      let watcher: ReturnType<typeof watch>;
-      try { watcher = watch(dir, () => { timer ??= setTimeout(fire, 300); }); } catch { return; }
-      watcher.on('error', () => {});
+      let changed = new Set<string>();
+      let overflow = false;
+      const fire = () => {
+        timer = null;
+        const data = overflow ? '"*"' : JSON.stringify([...changed]);
+        changed = new Set(); overflow = false;
+        void stream.writeSSE({ event: 'change', data }).catch(() => {});
+      };
+      const watchers: ReturnType<typeof watch>[] = [];
+      const add = (dir: string, recursive: boolean) => {
+        try {
+          const w = watch(dir, { recursive }, (_event, name) => {
+            const rel = name ? String(name) : '';
+            if (recursive && /(^|\/)\.git(\/|$)/.test(rel)) return;
+            if (!rel) overflow = true;
+            else if (!overflow) { changed.add(path.join(dir, rel)); if (changed.size > 500) overflow = true; }
+            timer ??= setTimeout(fire, 300);
+          });
+          w.on('error', () => {});
+          watchers.push(w);
+        } catch { /* skipped */ }
+      };
+      for (const d of new Set(deep)) add(d, true);
+      for (const d of new Set(flat)) if (!deep.some((r) => d === r || d.startsWith(r + '/'))) add(d, false);
       // Comment pings keep idle connections from being reaped and surface a dead client as an abort.
       const ping = setInterval(() => { void stream.write(': ping\n\n').catch(() => {}); }, 30000);
       await new Promise<void>((resolve) => stream.onAbort(resolve));
       clearInterval(ping);
       if (timer) clearTimeout(timer);
-      watcher.close();
+      for (const w of watchers) w.close();
     });
   });
 

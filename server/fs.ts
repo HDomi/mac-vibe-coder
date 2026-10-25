@@ -66,7 +66,7 @@ export async function listDir(dir: string): Promise<{ path: string; parent: stri
       }),
     );
     const list = entries.filter((e): e is Entry => e !== null);
-    list.sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1));
+    list.sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name, undefined, { numeric: true }) : a.isDir ? -1 : 1));
     const parent = path.dirname(abs);
     return { path: abs, parent: parent === abs ? null : parent, entries: list };
   } catch (err) {
@@ -92,8 +92,23 @@ export async function statPath(p: string): Promise<Entry> {
 }
 
 const TEXT_LIMIT = 2 * 1024 * 1024;
+const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+const utf8 = new TextDecoder('utf-8', { fatal: true });
 
-export async function readText(p: string): Promise<{ content: string; truncated: boolean; size: number }> {
+export interface TextFile {
+  content: string;
+  truncated: boolean;
+  size: number;
+  mtime: number;
+  /** NUL bytes in the first 8 KB: shown as binary, never edited. */
+  binary: boolean;
+  /** Bytes that are not valid UTF-8 were replaced with U+FFFD; saving would corrupt them. */
+  lossy: boolean;
+  /** A UTF-8 byte-order mark was stripped from `content`; writeText puts it back. */
+  bom: boolean;
+}
+
+export async function readText(p: string): Promise<TextFile> {
   const abs = resolvePath(p);
   try {
     const st = await fs.stat(abs);
@@ -104,11 +119,52 @@ export async function readText(p: string): Promise<{ content: string; truncated:
     try {
       const len = Math.min(st.size, TEXT_LIMIT);
       const buf = Buffer.alloc(len);
-      await fh.read(buf, 0, len, 0);
-      return { content: buf.toString('utf8'), truncated: st.size > TEXT_LIMIT, size: st.size };
+      const { bytesRead } = await fh.read(buf, 0, len, 0);
+      let data = buf.subarray(0, bytesRead);
+      const truncated = st.size > TEXT_LIMIT;
+      const binary = data.subarray(0, 8192).includes(0);
+      const bom = data.subarray(0, 3).equals(BOM);
+      if (bom) data = data.subarray(3);
+      let content: string; let lossy = false;
+      // A cut at TEXT_LIMIT can split a multi-byte character; only a whole file must decode cleanly.
+      try { content = truncated ? data.toString('utf8') : utf8.decode(data); } catch { content = data.toString('utf8'); lossy = true; }
+      return { content: binary ? '' : content, truncated, size: st.size, mtime: st.mtimeMs, binary, lossy, bom };
     } finally {
       await fh.close();
     }
+  } catch (err) {
+    if (err instanceof FsError) throw err;
+    wrap(err, abs);
+  }
+}
+
+/**
+ * Save an editor buffer. `baseMtime` is the mtime the editor loaded; when the file changed on disk
+ * since (an agent, git, another editor), this refuses with 409 unless `force` is set, so a stale
+ * buffer never silently overwrites newer work. Writes in place: symlinks, hard links, permissions
+ * and extended attributes stay as they were.
+ */
+export async function writeText(p: string, content: string, opts: { baseMtime?: number | null; bom?: boolean; force?: boolean } = {}): Promise<{ mtime: number; size: number }> {
+  const abs = resolvePath(p);
+  if (typeof content !== 'string') throw new FsError('EINVAL', 'content must be a string', 400);
+  try {
+    let exists = true;
+    try {
+      const st = await fs.stat(abs);
+      if (!st.isFile()) throw new FsError('ENOTFILE', `Not a regular file: ${abs}`, 400);
+      if (!opts.force && opts.baseMtime != null && Math.abs(st.mtimeMs - opts.baseMtime) > 1) {
+        throw new FsError('ECONFLICT', `Changed on disk since it was opened: ${abs}`, 409);
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      exists = false;
+    }
+    // A deleted file is only recreated on purpose (force), never by a save racing an agent's delete.
+    if (!exists && !opts.force && opts.baseMtime != null) throw new FsError('ECONFLICT', `Deleted on disk since it was opened: ${abs}`, 409);
+    const body = Buffer.from(content, 'utf8');
+    await fs.writeFile(abs, opts.bom ? Buffer.concat([BOM, body]) : body);
+    const st = await fs.stat(abs);
+    return { mtime: st.mtimeMs, size: st.size };
   } catch (err) {
     if (err instanceof FsError) throw err;
     wrap(err, abs);
@@ -222,6 +278,12 @@ export async function mkdir(dir: string, name: string): Promise<string> {
   if (typeof name !== 'string' || name.includes('/') || !name.trim() || name === '.' || name === '..') throw new FsError('EINVAL', 'Invalid name', 400);
   const abs = path.join(resolvePath(dir), name);
   try { await fs.mkdir(abs); return abs; } catch (err) { wrap(err, abs); }
+}
+
+export async function createFile(dir: string, name: string): Promise<string> {
+  if (typeof name !== 'string' || name.includes('/') || !name.trim() || name === '.' || name === '..') throw new FsError('EINVAL', 'Invalid name', 400);
+  const abs = path.join(resolvePath(dir), name);
+  try { await fs.writeFile(abs, '', { flag: 'wx' }); return abs; } catch (err) { wrap(err, abs); }
 }
 
 export async function rename(p: string, newName: string): Promise<string> {

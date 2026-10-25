@@ -33,6 +33,7 @@ Mac Vibe Coder 는 그걸 한 창에 모은다. 폴더를 고르면 그 폴더�
 | **입력** | `/` 슬래시 커맨드 · 스킬 자동완성, `@` 파일 멘션(프로젝트 루트 기준 퍼지 검색 + 자동 첨부), Finder 드롭 · 파일 트리 드롭 · 클립보드 이미지 붙여넣기, 저장한 프롬프트 넣기, 보내기 전 초안은 탭 전환·재시작 뒤에도 세션별로 유지 |
 | **파일** | 탐색기(싱글클릭 선택 · 더블클릭 열기, 확장자·파일명·폴더명별 [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) 아이콘), ⌘C/⌘X/⌘V 복사·이동, 복제, 이름 변경, 새 폴더, 휴지통(Finder 경유 · 복원 가능), 우클릭 메뉴, 현재 폴더 안 파일 이름 검색, 퀵오픈 ⌘P |
 | **미리보기** | Markdown(상대 경로 이미지 · 로컬 링크 해석 · 코드 하이라이트), 이미지, 영상(탐색 가능), 오디오, PDF, 텍스트 |
+| **IDE 모드** | 상단 `VIBE · IDE · 에이전트` 전환의 IDE. 현재 프로젝트를 CodeMirror 6 로 편집(js/ts/json/yaml/css/html/md/py/sh 등 하이라이트, ⌘F 찾기·바꾸기, 다중 커서, 접기), 탭(한 번 클릭은 미리보기 탭 · 편집하면 고정), 접히는 프로젝트 트리(가상 스크롤 · 새 파일/폴더 · 이름 변경 · 휴지통), 저장 ⌘S · 전체 저장 ⌥⌘S, 디스크 변경 자동 반영(편집 중이면 충돌 배너), 저장 안 한 내용은 재시작 뒤에도 복원, 줄바꿈(LF/CRLF)·BOM 유지, 2 MB 초과·UTF-8 아닌 파일은 읽기 전용. 테마는 Community Material Theme Darker High Contrast. Markdown 렌더 보기 · 이미지 · 영상 · 오디오 · PDF 도 같은 탭에서 |
 | **브라우저** | 잠깐 확인할 때 쓰는 패널 안의 Chromium 뷰(주소창 · 뒤로/앞으로 · 새로고침 · 배율 · 개발자 도구), 캡처 → 채팅 첨부. 에이전트 실측은 지금처럼 `debugweb`(9222) Chrome 에서 한다 |
 | **터미널** | xterm.js + node-pty 로그인 셸, `claude` / `codex` TUI 원클릭, 선택 영역 · 최근 출력 채팅으로 보내기, Terminal.app · Finder · VS Code · Cursor 로 열기 |
 | **Git** | 브랜치 전환 · 생성, fetch / pull / push, 상태 · diff · 스테이지 · 커밋 · Commit & Push, 커밋 그래프(커밋을 누르면 바뀐 파일 · diff) |
@@ -74,7 +75,7 @@ cd mac-vibe-coder
 2. 가운데 시작 화면에서 **Claude Code / Codex**, 권한 모드, 모델을 고르고 **New session**. 아래엔 이 폴더에서 했던 이전 세션들이 두 에이전트 모두 뜬다. 클릭하면 이어서.
 3. 입력창에 메시지. `/` 로 커맨드, `@` 로 파일 첨부, 이미지는 드롭하거나 붙여넣기.
 4. 에이전트가 승인을 원하면 카드가 뜬다. 허용 / 항상 허용 / 거부(사유 적으면 에이전트가 읽음).
-5. 오른쪽 패널에서 파일 · 미리보기 · 터미널 · Git. 상단 **Open ▾** 로 Terminal.app · Finder · VS Code · Cursor 에서 열기.
+5. 오른쪽 패널에서 파일 · 미리보기 · 터미널 · Git. 파일을 고치려면 상단 **IDE** 로 전환하거나 파일 우클릭 › IDE에서 열기. 상단 **Open ▾** 로 Terminal.app · Finder · VS Code · Cursor 에서 열기.
 
 ### 권한 모드
 
@@ -99,6 +100,7 @@ cd mac-vibe-coder
 | ⌘/ | 설정 · 단축키 안내 |
 | Enter / Shift+Enter | 전송 / 줄바꿈 |
 | 파일 목록 | ⌘C ⌘X ⌘V, ⌘D 복제, ⏎ 이름 변경, ⌘⌫ 휴지통, ⇧⌘N 새 폴더, ⌫ 상위 폴더, Space 미리보기 |
+| IDE 모드 | ⌘S 저장, ⌥⌘S 전체 저장, ⌘W 탭 닫기, ⌘B 탐색기, ⇧⌘[ ⇧⌘] 탭 이동, ⌘F 찾기, ⌘/ 주석, ⌘D 다음 일치 선택. 트리: ↑↓ 이동, ←→ 접기·펼치기, ⏎ 이름 변경, Space 열기, ⌘⌫ 휴지통 |
 
 ## 동작 원리
 
