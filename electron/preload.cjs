@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('vibe', {
   isElectron: true,
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
+  // Native Save As sheet: { defaultPath, ext, label } -> chosen path or null.
+  saveDialog: (opts) => ipcRenderer.invoke('save-dialog', opts),
   // Absolute path of a File dropped from Finder (browser mode cannot read this).
   getPathForFile: (file) => webUtils.getPathForFile(file),
   // Read or set "open at login". Pass null to only read.

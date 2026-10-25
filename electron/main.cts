@@ -183,6 +183,20 @@ ipcMain.handle('pick-folder', async (e) => {
   return res.canceled ? null : res.filePaths[0];
 });
 
+// Native "Save As" sheet; resolves to the chosen path or null. The renderer writes through the server.
+ipcMain.handle('save-dialog', async (e, opts: { defaultPath?: string; ext?: string; label?: string } | undefined) => {
+  if (!fromApp(e)) return null;
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const ext = typeof opts?.ext === 'string' ? opts.ext.replace(/^\./, '') : '';
+  const options: Electron.SaveDialogOptions = {
+    defaultPath: typeof opts?.defaultPath === 'string' ? opts.defaultPath : undefined,
+    filters: ext ? [{ name: typeof opts?.label === 'string' ? opts.label : ext.toUpperCase(), extensions: [ext] }] : undefined,
+    properties: ['createDirectory', 'showOverwriteConfirmation'],
+  };
+  const res = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options);
+  return res.canceled || !res.filePath ? null : res.filePath;
+});
+
 ipcMain.handle('login-item', (e, enable: boolean | null) => {
   if (!fromApp(e)) return false;
   if (typeof enable === 'boolean') app.setLoginItemSettings({ openAtLogin: enable });

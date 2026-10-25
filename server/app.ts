@@ -25,6 +25,7 @@ import { watch } from 'node:fs';
 import { requestShutdown } from './lifecycle.js';
 import { gitBranches, gitCheckout, gitCommit, gitCommitDiff, gitCommitFiles, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
 import { displayableIcon, findProjectIcon } from './icons.js';
+import { convertImage, imageInfo, renderPng, writeImageBytes } from './image.js';
 
 const WEB_DIST = path.join(REPO_ROOT, 'web', 'dist');
 
@@ -45,6 +46,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   });
   app.use('/api/attach', bodyLimit({ maxSize: 32 * 1024 * 1024 }));
   app.use('/api/fs/text', bodyLimit({ maxSize: 16 * 1024 * 1024 }));
+  app.use('/api/image/write', bodyLimit({ maxSize: 128 * 1024 * 1024 }));
   app.use('*', async (c, next) => {
     if (c.req.method !== 'GET' && /^(\/api\/favorites(?:\/|$)|\/api\/recent$|\/api\/prompts$|\/api\/history\/pin$|\/api\/history\/[^/]+$)/.test(c.req.path)) return withConfigLock(next);
     await next();
@@ -80,6 +82,20 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
     const b = await c.req.json<{ path: string; content: string; baseMtime?: number | null; bom?: boolean; force?: boolean }>();
     if (!b.path) return c.json({ error: 'path required', code: 'BAD_REQUEST' }, 400);
     return c.json(await writeText(b.path, b.content, { baseMtime: b.baseMtime, bom: !!b.bom, force: !!b.force }));
+  });
+  app.get('/api/image/info', async (c) => c.json(await imageInfo(c.req.query('path') ?? '')));
+  app.get('/api/image/png', async (c) => {
+    const n = (k: string) => { const v = Number(c.req.query(k)); return Number.isInteger(v) && v > 0 && v <= 30000 ? v : undefined; };
+    const png = await renderPng(c.req.query('path') ?? '', { width: n('width'), height: n('height'), fit: n('fit') });
+    return new Response(new Uint8Array(png), { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' } });
+  });
+  app.post('/api/image/convert', async (c) => {
+    const b = await c.req.json<{ path: string; dest: string; format: string; width?: number; height?: number; quality?: number; overwrite?: boolean }>();
+    return c.json({ path: await convertImage(b) });
+  });
+  app.post('/api/image/write', async (c) => {
+    const b = await c.req.json<{ dest: string; data: string; overwrite?: boolean }>();
+    return c.json({ path: await writeImageBytes(b.dest, Buffer.from(String(b.data ?? ''), 'base64'), !!b.overwrite) });
   });
   app.post('/api/fs/create', async (c) => { const b = await c.req.json<{ dir: string; name: string }>(); return c.json({ path: await createFile(b.dir, b.name) }); });
   app.post('/api/fs/mkdir', async (c) => { const b = await c.req.json<{ dir: string; name: string }>(); return c.json({ path: await mkdir(b.dir, b.name) }); });

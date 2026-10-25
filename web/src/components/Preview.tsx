@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import ImageConvertDialog from './ImageConvertDialog';
 import { highlight, highlightedLines, LANGUAGES, languageFor, rememberLanguage } from '../lib/highlight';
 import { CopyButton } from './MarkdownView';
 import MarkdownView from './MarkdownView';
-import { api, formatSize, type Entry } from '../lib/api';
+import { api, formatSize, imageSrc, type Entry } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
 
 interface Props { entry: Entry | null }
@@ -70,6 +71,9 @@ function TextView({ path, markdown, name, ext }: { path: string; markdown: boole
 
 export default function Preview({ entry }: Props) {
   useLang();
+  const [converting, setConverting] = useState(false);
+  // Bumped after saving over the file on screen, so the <img> refetches.
+  const [rev, setRev] = useState(0);
   if (!entry) {
     return <div className="h-full flex items-center justify-center text-zinc-600 text-sm">{t('preview.hint')}</div>;
   }
@@ -80,14 +84,21 @@ export default function Preview({ entry }: Props) {
         <span className="truncate font-medium">{entry.name}</span>
         <span className="text-zinc-500 text-xs">{formatSize(entry.size)}</span>
         <div className="flex-1" />
+        {entry.kind === 'image' && (
+          <button className="text-xs px-2 py-1 rounded-md border border-white/10 text-zinc-300 hover:text-white hover:bg-white/10" onClick={() => setConverting(true)}>{t('image.convertButton')}</button>
+        )}
         <button className="text-xs text-zinc-400 hover:text-white" onClick={() => navigator.clipboard.writeText(entry.path)} title={entry.path}>{t('preview.copyPath')}</button>
       </div>
+      {converting && (
+        <ImageConvertDialog entry={entry} onClose={() => setConverting(false)}
+          onSaved={(p) => { if (p === entry.path) setRev((r) => r + 1); else window.dispatchEvent(new CustomEvent('vibe:open-file', { detail: { path: p } })); }} />
+      )}
       <div className="flex-1 overflow-auto bg-[#0b0d12]">
         {entry.kind === 'markdown' && <TextView path={entry.path} markdown name={entry.name} ext={entry.ext} />}
         {entry.kind === 'text' && <TextView path={entry.path} markdown={false} name={entry.name} ext={entry.ext} />}
         {entry.kind === 'image' && (
           <div className="h-full flex items-center justify-center p-4">
-            <img src={url} alt={entry.name} className="max-w-full max-h-full object-contain rounded" />
+            <img src={imageSrc(entry.path, entry.ext, rev)} alt={entry.name} className="max-w-full max-h-full object-contain rounded" />
           </div>
         )}
         {entry.kind === 'video' && (

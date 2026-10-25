@@ -1,4 +1,4 @@
-import { api, type PreviewKind } from '../../lib/api';
+import { api, imageSrc, type PreviewKind } from '../../lib/api';
 import { t, useLang } from '../../lib/i18n';
 
 interface Props { path: string; name: string; kind: PreviewKind; rev?: number }
@@ -13,7 +13,7 @@ export default function MediaView({ path, name, kind, rev = 0 }: Props) {
     <div className="h-full overflow-auto">
       {kind === 'image' && (
         <div className="h-full flex items-center justify-center p-4">
-          <img src={url} alt={name} className="max-w-full max-h-full object-contain rounded" />
+          <img src={imageSrc(path, dot > 0 ? name.slice(dot) : '', rev)} alt={name} className="max-w-full max-h-full object-contain rounded" />
         </div>
       )}
       {kind === 'video' && (

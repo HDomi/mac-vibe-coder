@@ -25,6 +25,7 @@ declare global {
     vibe?: {
       isElectron: boolean;
       pickFolder: () => Promise<string | null>;
+      saveDialog?: (opts: { defaultPath?: string; ext?: string; label?: string }) => Promise<string | null>;
       getPathForFile: (file: File) => string;
       loginItem: (enable: boolean | null) => Promise<boolean>;
       /** Tell the main process the current UI language (updates the Language menu checkmark). */

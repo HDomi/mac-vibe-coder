@@ -79,6 +79,11 @@ export const api = {
     req<{ mtime: number; size: number }>('/api/fs/text', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, content, ...opts }) }),
   fsCreate: (dir: string, name: string) => post<{ path: string }>('/api/fs/create', { dir, name }),
   rawUrl: (path: string) => `/api/fs/raw?path=${q(path)}`,
+  imageInfo: (path: string) => req<{ width: number; height: number; format: string; hasAlpha: boolean }>(`/api/image/info?path=${q(path)}`),
+  imagePngUrl: (path: string, opts: { width?: number; height?: number; fit?: number } = {}) =>
+    `/api/image/png?path=${q(path)}${opts.width ? `&width=${opts.width}` : ''}${opts.height ? `&height=${opts.height}` : ''}${opts.fit ? `&fit=${opts.fit}` : ''}`,
+  imageConvert: (body: { path: string; dest: string; format: string; width?: number; height?: number; quality?: number; overwrite?: boolean }) => post<{ path: string }>('/api/image/convert', body),
+  imageWrite: (dest: string, data: string, overwrite: boolean) => post<{ path: string }>('/api/image/write', { dest, data, overwrite }),
   projectIconUrl: (path: string) => `/api/project-icon?path=${q(path)}`,
   favorites: () => req<Favorites>('/api/favorites'),
   addFavorite: (path: string, name?: string) => post<Favorites>('/api/favorites', { path, name }),
@@ -141,6 +146,13 @@ export const api = {
   // Bounded: a request that never settles would leave a remembered session blank until the next reload.
   historyMessages: (cwd: string, id: string) => req<HistoryMessage[]>(`/api/history/${q(id)}?cwd=${q(cwd)}`, { signal: AbortSignal.timeout(30000) }),
 };
+
+// Formats Chromium decodes itself; anything else (HEIC, TIFF, PSD, RAW, …) is shown as a PNG rendered by ImageIO.
+const BROWSER_IMAGE = new Set(['.png', '.apng', '.jpg', '.jpeg', '.jfif', '.gif', '.webp', '.svg', '.avif', '.bmp', '.ico']);
+export function imageSrc(path: string, ext: string, rev = 0): string {
+  const v = rev ? `&v=${rev}` : '';
+  return BROWSER_IMAGE.has(ext.toLowerCase()) ? api.rawUrl(path) + v : api.imagePngUrl(path, { fit: 2048 }) + v;
+}
 
 export function formatSize(n: number): string {
   if (n < 1024) return `${n} B`;

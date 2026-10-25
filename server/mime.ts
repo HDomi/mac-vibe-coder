@@ -22,8 +22,16 @@ const TEXT_EXT = new Set([
   '.csv', '.tsv', '.log', '.gitignore', '.editorconfig', '.prettierrc', '.lock', '.mjs', '.cjs',
 ]);
 
+/** Images the browser cannot decode but macOS ImageIO can; previewed as PNG via /api/image/png. */
+export const IMAGEIO_EXT = new Set([
+  '.heic', '.heif', '.heics', '.avci', '.tif', '.tiff', '.psd', '.jp2', '.j2k', '.tga', '.exr', '.icns', '.jxl', '.pict', '.pct',
+  '.sgi', '.pbm', '.pgm', '.ppm', '.astc', '.ktx', '.pvr', '.hdr', '.dds', '.mpo', '.dcm',
+  '.dng', '.cr2', '.cr3', '.crw', '.nef', '.nrw', '.arw', '.srf', '.sr2', '.raf', '.orf', '.rw2', '.pef', '.srw', '.erf', '.3fr', '.iiq', '.rwl', '.mos', '.mrw', '.dcr',
+]);
+
 export function previewKind(ext: string, name: string): PreviewKind {
   const e = ext.toLowerCase();
+  if (IMAGEIO_EXT.has(e)) return 'image';
   if (e === '.md' || e === '.mdx' || e === '.markdown') return 'markdown';
   const mime = mimeOf(e);
   if (mime.startsWith('image/')) return 'image';
