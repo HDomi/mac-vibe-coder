@@ -13,6 +13,7 @@ const TOOLS: { id: string; group: Group; badge: string; Comp: ComponentType }[] 
   { id: 'regex', group: 'data', badge: '.*', Comp: lazy(() => import('./RegexTool')) },
   { id: 'diff', group: 'data', badge: '±', Comp: lazy(() => import('./DiffTool')) },
   { id: 'text', group: 'data', badge: 'Aa', Comp: lazy(() => import('./TextTool')) },
+  { id: 'http', group: 'web', badge: 'HTTP', Comp: lazy(() => import('./HttpTool')) },
   { id: 'curl', group: 'web', badge: 'cURL', Comp: lazy(() => import('./CurlTool')) },
   { id: 'jwt', group: 'web', badge: 'JWT', Comp: lazy(() => import('./JwtTool')) },
   { id: 'encode', group: 'web', badge: 'b64', Comp: lazy(() => import('./EncodeTool')) },
@@ -22,6 +23,7 @@ const TOOLS: { id: string; group: Group; badge: string; Comp: ComponentType }[] 
   { id: 'time', group: 'time', badge: 'UTC', Comp: lazy(() => import('./TimeTool')) },
   { id: 'cron', group: 'time', badge: '* * *', Comp: lazy(() => import('./CronTool')) },
   { id: 'color', group: 'image', badge: 'RGB', Comp: lazy(() => import('./ColorTool')) },
+  { id: 'net', group: 'system', badge: 'IP', Comp: lazy(() => import('./NetTool')) },
   { id: 'chmod', group: 'system', badge: '755', Comp: lazy(() => import('./ChmodTool')) },
   { id: 'calc', group: 'system', badge: '=', Comp: lazy(() => import('./CalcTool')) },
 ];
@@ -89,7 +91,7 @@ export default function ToolboxView() {
           <span className="font-medium text-zinc-200">{t(`tb.${tool.id}.name`)}</span>
           <span className="text-zinc-500 truncate">{t(`tb.${tool.id}.desc`)}</span>
           <div className="flex-1" />
-          <span className="text-[10.5px] text-zinc-600">{t('tb.offline')}</span>
+          <span className="text-[10.5px] text-zinc-600">{t(tool.id === 'http' || tool.id === 'net' ? 'tb.viaServer' : 'tb.offline')}</span>
         </div>
         <div className="flex-1 min-h-0 p-4">
           <Suspense fallback={<div className="text-sm text-zinc-500">{t('common.loading')}</div>}>

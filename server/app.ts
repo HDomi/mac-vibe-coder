@@ -26,6 +26,7 @@ import { requestShutdown } from './lifecycle.js';
 import { gitBranches, gitCheckout, gitCommit, gitCommitDiff, gitCommitFiles, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
 import { displayableIcon, findProjectIcon } from './icons.js';
 import { convertImage, imageInfo, renderPng, writeImageBytes } from './image.js';
+import { killProcess, listeningPorts, netInfo, proxyHttp, type ProxyRequest } from './net.js';
 
 const WEB_DIST = path.join(REPO_ROOT, 'web', 'dist');
 
@@ -47,6 +48,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   app.use('/api/attach', bodyLimit({ maxSize: 32 * 1024 * 1024 }));
   app.use('/api/fs/text', bodyLimit({ maxSize: 16 * 1024 * 1024 }));
   app.use('/api/image/write', bodyLimit({ maxSize: 128 * 1024 * 1024 }));
+  app.use('/api/net/http', bodyLimit({ maxSize: 64 * 1024 * 1024 }));
   app.use('*', async (c, next) => {
     if (c.req.method !== 'GET' && /^(\/api\/favorites(?:\/|$)|\/api\/recent$|\/api\/prompts$|\/api\/history\/pin$|\/api\/history\/[^/]+$)/.test(c.req.path)) return withConfigLock(next);
     await next();
@@ -96,6 +98,19 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   app.post('/api/image/write', async (c) => {
     const b = await c.req.json<{ dest: string; data: string; overwrite?: boolean }>();
     return c.json({ path: await writeImageBytes(b.dest, Buffer.from(String(b.data ?? ''), 'base64'), !!b.overwrite) });
+  });
+  // Tools > HTTP and Network. The renderer's CSP only allows its own origin, so outside requests go through here.
+  app.post('/api/net/http', async (c) => c.json(await proxyHttp(await c.req.json<ProxyRequest>())));
+  app.get('/api/net/info', (c) => c.json(netInfo()));
+  app.get('/api/net/ports', async (c) => c.json(await listeningPorts()));
+  app.post('/api/net/kill', async (c) => {
+    const b = await c.req.json<{ pid: number; force?: boolean }>();
+    try { killProcess(Number(b.pid), !!b.force); return c.json({ ok: true }); }
+    catch (err) {
+      const e = err as NodeJS.ErrnoException & { status?: number };
+      const status = e.status ?? (e.code === 'ESRCH' ? 404 : e.code === 'EPERM' ? 403 : 500);
+      return c.json({ error: e.code === 'EPERM' ? 'Not permitted (process belongs to another user)' : e.code === 'ESRCH' ? 'No such process' : e.message, code: e.code ?? 'ERR' }, status as 400);
+    }
   });
   app.post('/api/fs/create', async (c) => { const b = await c.req.json<{ dir: string; name: string }>(); return c.json({ path: await createFile(b.dir, b.name) }); });
   app.post('/api/fs/mkdir', async (c) => { const b = await c.req.json<{ dir: string; name: string }>(); return c.json({ path: await mkdir(b.dir, b.name) }); });

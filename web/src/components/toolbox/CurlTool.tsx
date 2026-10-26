@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { parseRequest, toAxios, toCurl, toFetch, toPython } from '../../lib/toolbox/curl';
 import { t } from '../../lib/i18n';
 import { Area, Code, Rows, Seg, btn, errText, usePersisted } from './ui';
+import { openTool } from './bus';
 
 type Target = 'fetch' | 'axios' | 'python' | 'curl';
 const SAMPLE = `curl 'https://httpbin.org/post?debug=1' \\
@@ -44,7 +45,8 @@ export default function CurlTool() {
         )}
       </div>
       <Code className="min-h-0" code={out} lang={target === 'python' ? 'python' : target === 'curl' ? 'bash' : 'javascript'}
-        label={<Seg value={target} onChange={setTarget} options={[{ value: 'fetch', label: 'fetch' }, { value: 'axios', label: 'axios' }, { value: 'python', label: 'Python requests' }, { value: 'curl', label: 'cURL' }]} />} />
+        label={<Seg value={target} onChange={setTarget} options={[{ value: 'fetch', label: 'fetch' }, { value: 'axios', label: 'axios' }, { value: 'python', label: 'Python requests' }, { value: 'curl', label: 'cURL' }]} />}
+        actions={req ? <button className={btn} onClick={() => openTool('http', { request: req })}>{t('tb.curl.openHttp')}</button> : null} />
     </div>
   );
 }

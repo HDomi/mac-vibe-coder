@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { countNodes, errorPosition, jsAccessor, jsonPath, parseLenient, searchJson, sortKeys, toTypeScript, type JsonValue } from '../../lib/toolbox/json';
 import { t } from '../../lib/i18n';
 import { Area, CopyButton, Seg, btn, errText, input, mono, usePersisted } from './ui';
+import { takePayload } from './bus';
 
 interface Ctx { gen: number; forceOpen: boolean; openKeys: Set<string>; matchKeys: Set<string>; copyPath: (p: (string | number)[], js: boolean) => void; copyValue: (v: JsonValue) => void }
 
@@ -9,6 +10,8 @@ const SAMPLE = '{"user":{"id":42,"name":"Ada","tags":["admin","ops"],"active":tr
 
 export default function JsonTool() {
   const [text, setText] = usePersisted('json.text', '');
+  // Another tool (HTTP response) can hand a body over.
+  useEffect(() => { const p = takePayload<{ text: string }>('json'); if (p) setText(p.text); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [view, setView] = usePersisted<'tree' | 'text' | 'ts'>('json.view', 'tree');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');

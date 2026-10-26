@@ -53,6 +53,13 @@ export interface GitStatus { repo: boolean; root: string | null; branch: string 
 export interface RecentSession { agent: 'claude' | 'codex'; sessionId: string; title: string; cwd: string | null; lastModified: number; pinned?: boolean }
 export interface ModelInfo { id: string; name: string; description?: string; isDefault?: boolean }
 
+export interface ProxyRequest { method: string; url: string; headers?: [string, string][]; body?: string; bodyBase64?: string; timeoutMs?: number; followRedirects?: boolean; insecure?: boolean }
+export type ProxyResult =
+  | { ok: true; status: number; statusText: string; httpVersion: string; url: string; headers: [string, string][]; body: string; encoding: 'utf8' | 'base64'; size: number; wireSize: number; truncated: boolean; timing: { ttfb: number; total: number }; redirects: { status: number; url: string }[] }
+  | { ok: false; error: string; code?: string; timing: { total: number } };
+export interface NetInfo { hostname: string; lan: string | null; interfaces: { name: string; address: string; family: 'IPv4' | 'IPv6'; internal: boolean; mac: string; cidr: string | null }[] }
+export interface ListeningPort { pid: number; command: string; user: string; address: string; port: number; cwd: string | null; self: boolean }
+
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status: number) { super(message); }
 }
@@ -84,6 +91,10 @@ export const api = {
     `/api/image/png?path=${q(path)}${opts.width ? `&width=${opts.width}` : ''}${opts.height ? `&height=${opts.height}` : ''}${opts.fit ? `&fit=${opts.fit}` : ''}`,
   imageConvert: (body: { path: string; dest: string; format: string; width?: number; height?: number; quality?: number; overwrite?: boolean }) => post<{ path: string }>('/api/image/convert', body),
   imageWrite: (dest: string, data: string, overwrite: boolean) => post<{ path: string }>('/api/image/write', { dest, data, overwrite }),
+  netHttp: (r: ProxyRequest) => post<ProxyResult>('/api/net/http', r),
+  netInfo: () => req<NetInfo>('/api/net/info'),
+  netPorts: () => req<ListeningPort[]>('/api/net/ports'),
+  netKill: (pid: number, force: boolean) => post<{ ok: true }>('/api/net/kill', { pid, force }),
   projectIconUrl: (path: string) => `/api/project-icon?path=${q(path)}`,
   favorites: () => req<Favorites>('/api/favorites'),
   addFavorite: (path: string, name?: string) => post<Favorites>('/api/favorites', { path, name }),
