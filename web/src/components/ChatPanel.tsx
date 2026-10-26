@@ -24,6 +24,8 @@ interface Props {
   onApprove: (requestId: string, decision: 'allow' | 'allow_always' | 'deny', message?: string) => void;
   onAnswer: (requestId: string, answers: Record<string, string>) => void;
   onInterrupt: () => void;
+  /** Stop one subagent / background task (Claude). */
+  onStopTask?: (taskId: string) => void;
   onMode: (m: PermissionModeId) => void;
   onModel: (m: string | null) => void;
   onClose: () => void;
@@ -188,7 +190,7 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
   );
 }
 
-export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onSend, onApprove, onAnswer, onInterrupt, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind }: Props) {
+export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onSend, onApprove, onAnswer, onInterrupt, onStopTask, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind }: Props) {
   useLang();
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -347,7 +349,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         onSend={(text, atts) => { stick.current = true; setAtBottom(true); onSend(text, atts); requestAnimationFrame(scrollToBottom); }}
         onStop={onInterrupt} onMode={onMode} pendingAttachments={pendingAttachments} onConsumeAttachments={onConsumeAttachments}
         background={background} onFocusSession={onFocusSession}
-        tasks={session.tasks} taskRootLabel={displayTitle(session, 24) ?? (session.agent === 'codex' ? 'Codex' : 'Claude')} taskRootSub={session.agentSessionId?.slice(0, 8)} onShowTaskCard={showToolCard} />
+        tasks={session.tasks} taskRootLabel={displayTitle(session, 24) ?? (session.agent === 'codex' ? 'Codex' : 'Claude')} taskRootSub={session.agentSessionId?.slice(0, 8)} onShowTaskCard={showToolCard} onStopTask={session.agent === 'claude' ? onStopTask : undefined} />
     </div>
   );
 }

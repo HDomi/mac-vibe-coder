@@ -35,6 +35,7 @@ interface Props {
   taskRootLabel?: string;
   taskRootSub?: string;
   onShowTaskCard?: (toolUseId: string) => void;
+  onStopTask?: (taskId: string) => void;
 }
 
 export interface BackgroundSession { id: string; name: string; state: 'running' | 'waiting' }
@@ -54,7 +55,7 @@ function toAttachment(path: string, name?: string): Attachment {
   return { path, name: n, kind: IMAGE_RE.test(n) ? 'image' : 'file' };
 }
 
-export default function Composer({ cwd, agent, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments, background = [], onFocusSession, draftKey, tasks, taskRootLabel, taskRootSub, onShowTaskCard }: Props) {
+export default function Composer({ cwd, agent, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments, background = [], onFocusSession, draftKey, tasks, taskRootLabel, taskRootSub, onShowTaskCard, onStopTask }: Props) {
   useLang();
   const storageKey = draftKey ? draftStorageKey(draftKey) : null;
   const [draft] = useState(() => readDraft(storageKey));
@@ -262,7 +263,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
           </label>
           <PromptMenu draft={text} onInsert={insertText} disabled={disabled} />
           {uploading && <span className="text-xs text-zinc-500">{t('composer.uploading')}</span>}
-          {tasks && <TaskChips tasks={tasks} rootLabel={taskRootLabel ?? (agent === 'codex' ? 'Codex' : 'Claude')} rootSub={taskRootSub} onShowCard={onShowTaskCard} />}
+          {tasks && <TaskChips tasks={tasks} rootLabel={taskRootLabel ?? (agent === 'codex' ? 'Codex' : 'Claude')} rootSub={taskRootSub} onShowCard={onShowTaskCard} onStopTask={onStopTask} />}
           {background.length > 0 && (
             <div className="flex items-center gap-1 min-w-0 overflow-hidden" title={t('composer.backgroundTitle', { n: background.length })}>
               {background.slice(0, MAX_BACKGROUND_CHIPS).map((b) => (

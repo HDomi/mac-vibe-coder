@@ -227,6 +227,8 @@ export function useSessions() {
     agentClient.send({ type: 'session.answer', sessionId, requestId, answers, response });
   }, []);
   const interrupt = useCallback((sessionId: string) => agentClient.send({ type: 'session.interrupt', sessionId }), []);
+  /** Stop one subagent / background task; the turn keeps going. Claude sessions only. */
+  const stopTask = useCallback((sessionId: string, taskId: string) => agentClient.send({ type: 'session.stopTask', sessionId, taskId }), []);
   const setMode = useCallback((sessionId: string, mode: PermissionModeId) => agentClient.send({ type: 'session.mode', sessionId, mode }), []);
   const setModel = useCallback((sessionId: string, model: string | null) => agentClient.send({ type: 'session.model', sessionId, model }), []);
   /** Preview (dryRun) or undo the file changes made since a user message. Claude sessions only. */
@@ -253,5 +255,5 @@ export function useSessions() {
     setSessions((prev) => { const n = { ...prev }; delete n[sessionId]; return n; });
   }, []);
 
-  return { sessions, replaced, start, send, approve, answer, interrupt, setMode, setModel, setPinned, rewind, close };
+  return { sessions, replaced, start, send, approve, answer, interrupt, stopTask, setMode, setModel, setPinned, rewind, close };
 }

@@ -83,6 +83,8 @@ export type ClientCommand =
   | { type: 'session.approve'; sessionId: string; requestId: string; decision: 'allow' | 'allow_always' | 'deny'; message?: string }
   | { type: 'session.answer'; sessionId: string; requestId: string; answers: Record<string, string>; response?: string }
   | { type: 'session.interrupt'; sessionId: string }
+  /** Stop one subagent / background task without interrupting the turn (Claude only). */
+  | { type: 'session.stopTask'; sessionId: string; taskId: string }
   | { type: 'session.mode'; sessionId: string; mode: PermissionModeId }
   | { type: 'session.model'; sessionId: string; model: string | null }
   | { type: 'session.close'; sessionId: string };
@@ -101,6 +103,8 @@ export interface AgentSession {
   approve(requestId: string, decision: 'allow' | 'allow_always' | 'deny', message?: string): void;
   answer(requestId: string, answers: Record<string, string>, response?: string): void;
   interrupt(): Promise<void>;
+  /** Claude only: stop one subagent / background task; the CLI then emits a task_notification with status 'stopped'. */
+  stopTask?(taskId: string): Promise<void>;
   setPermissionMode(mode: PermissionModeId): Promise<void>;
   setModel(model: string | null): Promise<void>;
   close(): Promise<void>;

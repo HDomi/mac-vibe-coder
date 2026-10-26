@@ -389,6 +389,12 @@ export class ClaudeSession implements AgentSession {
     try { await this.q?.interrupt(); } catch (err) { this.emit({ kind: 'log', text: `interrupt failed: ${(err as Error).message}` }); }
   }
 
+  async stopTask(taskId: string) {
+    await this.relaunching;
+    if (!this.q || this.closed) throw new Error('Session closed');
+    await this.q.stopTask(taskId);
+  }
+
   async setModel(model: string | null) {
     await this.q?.setModel(model ?? undefined);
     this.emit({ kind: 'session.init', sessionId: this.id, agent: 'claude', cwd: this.cwd, model: model ?? undefined, agentSessionId: this.agentSessionId });

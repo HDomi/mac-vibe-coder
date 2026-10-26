@@ -182,6 +182,12 @@ async function handle(cmd: ClientCommand, ws: WebSocket, registry: SessionRegist
     case 'session.interrupt':
       await must(registry, cmd.sessionId).interrupt();
       return;
+    case 'session.stopTask': {
+      const s = must(registry, cmd.sessionId);
+      if (!s.stopTask) throw new Error('This agent cannot stop tasks.');
+      await s.stopTask(cmd.taskId);
+      return;
+    }
     case 'session.mode':
       await must(registry, cmd.sessionId).setPermissionMode(cmd.mode);
       return;

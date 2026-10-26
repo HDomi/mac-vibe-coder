@@ -303,6 +303,7 @@ function AppInner() {
                   onApprove={(r, d, m) => session && S.approve(session.id, r, d, m)}
                   onAnswer={(r, a) => session && S.answer(session.id, r, a)}
                   onInterrupt={() => session && S.interrupt(session.id)}
+                  onStopTask={(id) => session && S.stopTask(session.id, id)}
                   onMode={(m) => session && S.setMode(session.id, m)}
                   onModel={(m) => session && S.setModel(session.id, m)}
                   onClose={() => { if (session) { S.close(session.id); setActiveSession(null); } }}
@@ -410,6 +411,7 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
           onApprove={(r, d, m) => session && S.approve(session.id, r, d, m)}
           onAnswer={(r, a) => session && S.answer(session.id, r, a)}
           onInterrupt={() => session && S.interrupt(session.id)}
+          onStopTask={(id) => session && S.stopTask(session.id, id)}
           onMode={(m) => session && S.setMode(session.id, m)}
           onModel={(m) => session && S.setModel(session.id, m)}
           onClose={() => { if (session) { S.close(session.id); setActive(null); } }}

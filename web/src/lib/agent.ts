@@ -86,6 +86,8 @@ export type ClientCommand =
   | { type: 'session.approve'; sessionId: string; requestId: string; decision: 'allow' | 'allow_always' | 'deny'; message?: string }
   | { type: 'session.answer'; sessionId: string; requestId: string; answers: Record<string, string>; response?: string }
   | { type: 'session.interrupt'; sessionId: string }
+  /** Stop one subagent / background task without interrupting the turn (Claude only). */
+  | { type: 'session.stopTask'; sessionId: string; taskId: string }
   | { type: 'session.mode'; sessionId: string; mode: PermissionModeId }
   | { type: 'session.model'; sessionId: string; model: string | null }
   | { type: 'session.close'; sessionId: string };

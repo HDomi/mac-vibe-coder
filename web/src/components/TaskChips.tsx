@@ -11,6 +11,8 @@ interface Props {
   rootSub?: string;
   /** Scroll the transcript to the tool card that started a task. */
   onShowCard?: (toolUseId: string) => void;
+  /** Kill one running task; the CLI reports it back as 'stopped'. Absent for agents that cannot. */
+  onStopTask?: (taskId: string) => void;
 }
 
 const STATUS_BORDER: Record<TaskStatus, string> = {
@@ -38,7 +40,7 @@ function elapsedLabel(ms: number): string {
  * task of this session is working. Clicking it opens the relation graph: this session at the top,
  * every task it spawned below (nested when a subagent spawned its own); a node shows its details.
  */
-export default function TaskChips({ tasks, rootLabel, rootSub, onShowCard }: Props) {
+export default function TaskChips({ tasks, rootLabel, rootSub, onShowCard, onStopTask }: Props) {
   useLang();
   const live = useMemo(() => liveTasks({ tasks }), [tasks]);
   const [open, setOpen] = useState<string | null>(null); // selected node id while the graph is open
@@ -54,17 +56,30 @@ export default function TaskChips({ tasks, rootLabel, rootSub, onShowCard }: Pro
         <span className="truncate">{t('tasks.chip')}</span>
         <span className="shrink-0 text-violet-300/80 tabular-nums">{live.length}</span>
       </button>
-      {open && <TaskGraphPopover tasks={tasks ?? {}} selected={open} onSelect={setOpen} onClose={() => setOpen(null)} rootLabel={rootLabel} rootSub={rootSub} onShowCard={onShowCard} />}
+      {open && <TaskGraphPopover tasks={tasks ?? {}} selected={open} onSelect={setOpen} onClose={() => setOpen(null)} rootLabel={rootLabel} rootSub={rootSub} onShowCard={onShowCard} onStopTask={onStopTask} />}
     </div>
   );
 }
 
-function TaskGraphPopover({ tasks, selected, onSelect, onClose, rootLabel, rootSub, onShowCard }: { tasks: Record<string, TaskInfo>; selected: string; onSelect: (id: string) => void; onClose: () => void; rootLabel: string; rootSub?: string; onShowCard?: (id: string) => void }) {
+function TaskGraphPopover({ tasks, selected, onSelect, onClose, rootLabel, rootSub, onShowCard, onStopTask }: { tasks: Record<string, TaskInfo>; selected: string; onSelect: (id: string) => void; onClose: () => void; rootLabel: string; rootSub?: string; onShowCard?: (id: string) => void; onStopTask?: (id: string) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(Date.now());
   const list = useMemo(() => Object.values(tasks).filter((x) => !x.ambient), [tasks]);
   const layout = useMemo(() => layoutTaskTree(list), [list]);
-  const running = list.filter((x) => x.status === 'running').length;
+  const runningList = list.filter((x) => x.status === 'running');
+  const running = runningList.length;
+  // Ids we asked to stop; shown as "stopping" until the CLI reports them stopped.
+  const [stopping, setStopping] = useState<Set<string>>(() => new Set());
+  const stopOne = (task: TaskInfo) => {
+    if (!onStopTask || !window.confirm(t('tasks.stopConfirm', { desc: task.description.split('\n')[0].slice(0, 80) || taskKind(task) }))) return;
+    setStopping((s) => new Set(s).add(task.id));
+    onStopTask(task.id);
+  };
+  const stopAll = () => {
+    if (!onStopTask || !running || !window.confirm(t('tasks.stopAllConfirm', { n: running }))) return;
+    setStopping((s) => { const n = new Set(s); for (const x of runningList) n.add(x.id); return n; });
+    for (const x of runningList) onStopTask(x.id);
+  };
   // Close on a click outside or Escape; tick once a second for the elapsed times while anything runs.
   useEffect(() => {
     const down = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('[data-task-chips]')) onClose(); };
@@ -94,6 +109,9 @@ function TaskGraphPopover({ tasks, selected, onSelect, onClose, rootLabel, rootS
         <span className="font-medium text-zinc-200">{t('tasks.title')}</span>
         <span className="text-zinc-500">{t('tasks.summaryLive', { running, total: list.length })}</span>
         <div className="flex-1" />
+        {onStopTask && running > 1 && (
+          <button className="rounded-md px-2 py-0.5 text-[11px] bg-red-500/15 text-red-200 hover:bg-red-500/25 disabled:opacity-40" disabled={runningList.every((x) => stopping.has(x.id))} onClick={stopAll}>{t('tasks.stopAll', { n: running })}</button>
+        )}
         <button className="text-zinc-500 hover:text-zinc-200 px-1" onClick={onClose} aria-label={t('tasks.close')}>✕</button>
       </div>
       <div className="overflow-auto max-h-[40vh] p-2">
@@ -142,6 +160,11 @@ function TaskGraphPopover({ tasks, selected, onSelect, onClose, rootLabel, rootS
             <span className="font-medium text-zinc-200 shrink-0">{taskKind(sel)}</span>
             {sel.background && <span className="text-[10px] text-zinc-500">{t('tasks.background')}</span>}
             <span className="text-zinc-500 tabular-nums ml-auto shrink-0">{elapsed(sel)}</span>
+            {onStopTask && sel.status === 'running' && (
+              <button className="shrink-0 rounded-md px-2 py-0.5 text-[11px] bg-red-500/15 text-red-200 hover:bg-red-500/25 disabled:opacity-40 disabled:cursor-default" disabled={stopping.has(sel.id)} onClick={() => stopOne(sel)}>
+                {stopping.has(sel.id) ? t('tasks.stopping') : `■ ${t('tasks.stop')}`}
+              </button>
+            )}
           </div>
           <div className="text-zinc-300 whitespace-pre-wrap break-words max-h-20 overflow-auto">{sel.description}</div>
           {sel.summary && <div className="text-zinc-400 italic whitespace-pre-wrap break-words max-h-16 overflow-auto">{sel.summary}</div>}
