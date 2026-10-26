@@ -20,6 +20,23 @@ export interface NativeBrowser {
   onShortcut: (cb: (k: { key: string; shift: boolean; alt: boolean }) => void) => () => void;
 }
 
+export interface LockSettings { mainDisplay: string | null; mainBg: string; subBg: string; heartbeat: boolean }
+export interface LockDisplay { key: string; label: string; internal: boolean; primary: boolean; main: boolean; bounds: ViewBounds }
+export interface LockSessionSummary { agent: string; total: number; running: number; waiting: number }
+export interface LockInit { role: 'main' | 'sub'; self: ViewBounds; displays: LockDisplay[]; settings: LockSettings; sessions: LockSessionSummary[]; retryIn: number }
+export interface LockBridge {
+  get: () => Promise<{ settings: LockSettings; hasPassword: boolean; displays: LockDisplay[] } | null>;
+  set: (patch: Partial<LockSettings>) => Promise<LockSettings | null>;
+  setPassword: (req: { current?: string; next: string }) => Promise<{ ok: boolean; error?: 'invalid' | 'short' | 'wrong' | 'wait'; retryIn?: number; hasPassword?: boolean }>;
+  now: () => void;
+  reportSessions: (list: LockSessionSummary[]) => void;
+  onOpenSettings: (cb: () => void) => () => void;
+  onDisplays: (cb: () => void) => () => void;
+  init: () => Promise<LockInit | null>;
+  unlock: (password: string) => Promise<{ ok: boolean; retryIn?: number }>;
+  onUpdate: (cb: (u: { sessions?: LockSessionSummary[]; settings?: LockSettings }) => void) => () => void;
+}
+
 declare global {
   interface Window {
     vibe?: {
@@ -41,6 +58,8 @@ declare global {
       openNotificationSettings?: () => void;
       keepAwake?: (busy: boolean) => void;
       onPowerResume?: (cb: () => void) => void;
+      /** Lock screen bridge (Electron only). */
+      lock?: LockBridge;
       /** Native browser view for the Browser panel (Electron only). */
       browser?: NativeBrowser;
     };

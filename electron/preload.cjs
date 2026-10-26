@@ -23,6 +23,20 @@ contextBridge.exposeInMainWorld('vibe', {
   // Hold / release the "no idle sleep" assertion while agents or shells are busy; wake-up signal for reconnects.
   keepAwake: (busy) => ipcRenderer.send('keep-awake', busy),
   onPowerResume: (cb) => { ipcRenderer.on('power-resume', () => cb()); },
+  // Lock screen (see electron/lockScreen.cts). App window: settings, password, session counts, lock now.
+  // Cover windows: init / unlock / live updates.
+  lock: {
+    get: () => ipcRenderer.invoke('lock:get'),
+    set: (patch) => ipcRenderer.invoke('lock:set', patch),
+    setPassword: (req) => ipcRenderer.invoke('lock:password', req),
+    now: () => ipcRenderer.send('lock:now'),
+    reportSessions: (list) => ipcRenderer.send('lock:sessions', list),
+    onOpenSettings: (cb) => { const h = () => cb(); ipcRenderer.on('lock:open-settings', h); return () => ipcRenderer.removeListener('lock:open-settings', h); },
+    onDisplays: (cb) => { const h = () => cb(); ipcRenderer.on('lock:displays', h); return () => ipcRenderer.removeListener('lock:displays', h); },
+    init: () => ipcRenderer.invoke('lock:init'),
+    unlock: (password) => ipcRenderer.invoke('lock:unlock', password),
+    onUpdate: (cb) => { const h = (_e, u) => cb(u); ipcRenderer.on('lock:update', h); return () => ipcRenderer.removeListener('lock:update', h); },
+  },
   // Browser panel: a native Chromium view laid over the panel (see electron/browserView.cts).
   browser: {
     show: (bounds) => ipcRenderer.invoke('browser:show', bounds),

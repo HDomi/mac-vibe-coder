@@ -1,0 +1,146 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { t, useLang } from '../lib/i18n';
+import type { LockDisplay, LockSettings as Settings } from '../lib/vibe';
+
+const DEFAULT_BG = '#0b0d11';
+
+/** The macOS display arrangement scaled down; clicking a display makes it the lock screen's main display. */
+function DisplayMap({ displays, onPick }: { displays: LockDisplay[]; onPick: (key: string) => void }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(600);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  if (!displays.length) return null;
+  const minX = Math.min(...displays.map((d) => d.bounds.x));
+  const minY = Math.min(...displays.map((d) => d.bounds.y));
+  const maxX = Math.max(...displays.map((d) => d.bounds.x + d.bounds.width));
+  const maxY = Math.max(...displays.map((d) => d.bounds.y + d.bounds.height));
+  const scale = Math.min((width - 8) / (maxX - minX), 170 / (maxY - minY));
+  const left = (width - (maxX - minX) * scale) / 2;
+  return (
+    <div ref={box} className="relative w-full" style={{ height: (maxY - minY) * scale + 8 }}>
+      {displays.map((d) => (
+        <button key={`${d.key}-${d.bounds.x}`} title={d.label} onClick={() => onPick(d.key)}
+          className={`absolute rounded-md border-2 flex flex-col items-center justify-center gap-0.5 overflow-hidden px-1 transition-colors ${d.main ? 'border-emerald-400/80 bg-emerald-400/10' : 'border-white/15 bg-white/[0.03] hover:border-white/35'}`}
+          style={{ left: left + (d.bounds.x - minX) * scale + 2, top: (d.bounds.y - minY) * scale + 4, width: d.bounds.width * scale - 4, height: d.bounds.height * scale - 4 }}>
+          <span className="text-[11px] text-zinc-200 truncate max-w-full">{d.internal ? t('lockSettings.builtin') : d.label}</span>
+          <span className="text-[10px] text-zinc-500">{d.bounds.width}×{d.bounds.height}</span>
+          {d.main && <span className="text-[10px] font-medium text-emerald-300">{t('lockSettings.mainBadge')}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="flex items-center gap-3 text-sm">
+      <span className="w-28 text-zinc-400">{label}</span>
+      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="w-9 h-7 rounded bg-transparent border border-white/10 cursor-pointer" />
+      <span className="text-xs text-zinc-500 font-mono">{value}</span>
+      {value.toLowerCase() !== DEFAULT_BG && <button className="text-xs text-zinc-400 hover:text-white" onClick={() => onChange(DEFAULT_BG)}>{t('lockSettings.reset')}</button>}
+    </label>
+  );
+}
+
+export default function LockSettings({ focus }: { focus?: boolean }) {
+  useLang();
+  const lock = window.vibe?.lock;
+  const ref = useRef<HTMLDivElement>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [hasPassword, setHasPassword] = useState(false);
+  const [displays, setDisplays] = useState<LockDisplay[]>([]);
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const refresh = useCallback(() => {
+    void lock?.get().then((r) => { if (!r) return; setSettings(r.settings); setHasPassword(r.hasPassword); setDisplays(r.displays); });
+  }, [lock]);
+  useEffect(() => {
+    refresh();
+    const off = lock?.onDisplays(refresh);
+    window.addEventListener('focus', refresh);
+    return () => { off?.(); window.removeEventListener('focus', refresh); };
+  }, [lock, refresh]);
+  useEffect(() => { if (focus) ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, [focus, settings === null]);
+
+  if (!lock) return null;
+  const patch = (p: Partial<Settings>) => {
+    if (settings) setSettings({ ...settings, ...p });
+    void lock.set(p).then(() => { if ('mainDisplay' in p) refresh(); });
+  };
+  const errorText = (r: { error?: string; retryIn?: number }) =>
+    r.error === 'short' ? t('lockSettings.errShort') : r.error === 'wrong' ? (r.retryIn ? t('lockSettings.errWait', { s: r.retryIn }) : t('lockSettings.errWrong'))
+      : r.error === 'wait' ? t('lockSettings.errWait', { s: r.retryIn ?? 0 }) : t('lockSettings.errWrong');
+  const savePassword = async () => {
+    if (next.length < 4) { setMsg({ text: t('lockSettings.errShort'), ok: false }); return; }
+    if (next !== confirm) { setMsg({ text: t('lockSettings.errMismatch'), ok: false }); return; }
+    const r = await lock.setPassword({ current, next });
+    if (!r.ok) { setMsg({ text: errorText(r), ok: false }); return; }
+    setHasPassword(true); setCurrent(''); setNext(''); setConfirm('');
+    setMsg({ text: t('lockSettings.saved'), ok: true });
+  };
+  const removePassword = async () => {
+    const r = await lock.setPassword({ current, next: '' });
+    if (!r.ok) { setMsg({ text: errorText(r), ok: false }); return; }
+    setHasPassword(false); setCurrent(''); setNext(''); setConfirm('');
+    setMsg({ text: t('lockSettings.removed'), ok: true });
+  };
+  const field = 'bg-white/5 rounded-md text-xs px-2 py-1.5 outline-none w-44 placeholder:text-zinc-600';
+
+  return (
+    <div ref={ref} id="lock-settings" className="rounded-lg border border-white/10 p-4 space-y-4 scroll-mt-4">
+      <div className="flex items-center">
+        <div className="font-medium">{t('lockSettings.title')}</div>
+        <div className="flex-1" />
+        <button disabled={!hasPassword} onClick={() => lock.now()}
+          className="text-xs rounded-md bg-white/10 hover:bg-white/15 px-2.5 py-1.5 text-zinc-200 disabled:opacity-40">{t('lockSettings.lockNow')}</button>
+      </div>
+      <div className="text-xs text-zinc-500 leading-relaxed">{t('lockSettings.note')}</div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-3 text-sm">
+          <span className="w-28 text-zinc-400">{t('lockSettings.password')}</span>
+          <span className={`text-xs ${hasPassword ? 'text-emerald-300' : 'text-amber-300'}`}>{hasPassword ? t('lockSettings.passwordSet') : t('lockSettings.passwordNone')}</span>
+        </div>
+        <form className="flex flex-wrap items-center gap-2 pl-[124px]" onSubmit={(e) => { e.preventDefault(); void savePassword(); }}>
+          {hasPassword && <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder={t('lockSettings.current')} className={field} autoComplete="off" />}
+          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder={t('lockSettings.new')} className={field} autoComplete="new-password" />
+          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={t('lockSettings.confirm')} className={field} autoComplete="new-password" />
+          <button type="submit" disabled={!next} className="text-xs rounded-md bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 px-3 py-1.5 disabled:opacity-40">{t('lockSettings.save')}</button>
+          {hasPassword && <button type="button" disabled={!current} onClick={() => void removePassword()} className="text-xs text-zinc-400 hover:text-red-300 disabled:opacity-40 px-1">{t('lockSettings.remove')}</button>}
+        </form>
+        {msg && <div className={`text-xs pl-[124px] ${msg.ok ? 'text-emerald-300' : 'text-red-300'}`}>{msg.text}</div>}
+      </div>
+
+      {settings && (
+        <>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="w-28 text-zinc-400">{t('lockSettings.displays')}</span>
+              <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                <input type="checkbox" checked={settings.mainDisplay === null} onChange={(e) => patch({ mainDisplay: e.target.checked ? null : (displays.find((d) => d.main)?.key ?? null) })} />
+                {t('lockSettings.auto')}
+              </label>
+            </div>
+            <DisplayMap displays={displays} onPick={(key) => patch({ mainDisplay: key })} />
+            <div className="text-xs text-zinc-500">{t('lockSettings.displaysNote')}</div>
+          </div>
+          <ColorField label={t('lockSettings.mainBg')} value={settings.mainBg} onChange={(v) => patch({ mainBg: v })} />
+          <ColorField label={t('lockSettings.subBg')} value={settings.subBg} onChange={(v) => patch({ subBg: v })} />
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={settings.heartbeat} onChange={(e) => patch({ heartbeat: e.target.checked })} />
+            {t('lockSettings.heartbeat')}
+          </label>
+        </>
+      )}
+    </div>
+  );
+}

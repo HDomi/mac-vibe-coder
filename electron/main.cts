@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';
 import { registerBrowserIpc, stopOldHeadlessChrome } from './browserView.cjs';
+import { blocksQuit, initLockScreen, isLocked, isLockShortcut, lockNow, openLockSettings, rememberLockForRelaunch } from './lockScreen.cjs';
 
 /*
  * Electron shell. The Node server (dist/server/index.js) runs as a child process.
@@ -56,6 +57,7 @@ if (!primaryInstance) {
 } else {
   stopOldHeadlessChrome();
   app.on('second-instance', () => {
+    if (isLocked()) return; // the lock cover keeps focus; never surface the app window under it
     const w = BrowserWindow.getAllWindows()[0];
     if (w) { if (w.isMinimized()) w.restore(); w.focus(); }
   });
@@ -125,6 +127,7 @@ async function startServer(): Promise<void> {
     if (quitting) return;
     if (code === RESTART_EXIT_CODE) {
       // Self-update finished: relaunch the whole app so new Electron/main code is picked up too.
+      rememberLockForRelaunch();
       app.relaunch();
       app.exit(0);
       return;
@@ -170,6 +173,9 @@ async function createWindow() {
     e.preventDefault();
     openExternalSafe(url);
   };
+  // Option+L locks the screen (see lockScreen.cts). Handled here rather than as a menu accelerator so it
+  // fires from any focused field; the menu item only displays it.
+  win.webContents.on('before-input-event', (e, input) => { if (isLockShortcut(input)) { e.preventDefault(); lockNow(); } });
   win.webContents.on('will-navigate', keepInApp);
   win.webContents.on('will-redirect', keepInApp);
   await win.loadURL(DEV ? URL_DEV : URL_PROD);
@@ -209,7 +215,8 @@ ipcMain.handle('login-item', (e, enable: boolean | null) => {
 type ApprovalDecision = 'allow' | 'allow_always' | 'deny';
 const approvalNotes = new Map<string, Notification>();
 ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?: unknown; approval?: unknown }) => {
-  if (!fromApp(e) || !Notification.isSupported() || !payload || typeof payload !== 'object') return;
+  // While locked nothing is shown: banners would leak session names and their buttons could approve tool use.
+  if (!fromApp(e) || isLocked() || !Notification.isSupported() || !payload || typeof payload !== 'object') return;
   const title = String(payload.title ?? '').slice(0, 200);
   const body = String(payload.body ?? '').slice(0, 500);
   const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
@@ -223,6 +230,7 @@ ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?:
     : [];
   const n = new Notification({ title, body, silent: false, actions: choices.map((c) => ({ type: 'button', text: c.text })) });
   n.on('click', () => {
+    if (isLocked()) return;
     const win = BrowserWindow.fromWebContents(sender);
     if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
     app.focus({ steal: true });
@@ -232,6 +240,7 @@ ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?:
     approvalNotes.get(requestId)?.close();
     approvalNotes.set(requestId, n);
     n.on('action', (_ev, index) => {
+      if (isLocked()) return;
       const choice = choices[index];
       if (choice && !sender.isDestroyed()) sender.send('notify-approval', { sessionId, requestId, decision: choice.decision });
     });
@@ -277,12 +286,23 @@ function buildMenu() {
     label: language === 'ko' ? '언어' : 'Language',
     submenu: LANGS.map((l) => ({ label: l.label, type: 'radio' as const, checked: language === l.id, click: () => setLanguage(l.id) })),
   };
+  const ko = language === 'ko';
+  const lockMenu: Electron.MenuItemConstructorOptions = {
+    label: ko ? '잠금화면' : 'Lock Screen',
+    submenu: [
+      // registerAccelerator false: Option+L is caught in before-input-event (works inside text fields and the browser panel).
+      { label: ko ? '지금 잠그기' : 'Lock Now', accelerator: 'Alt+L', registerAccelerator: false, click: () => lockNow() },
+      { type: 'separator' },
+      { label: ko ? '잠금화면 설정…' : 'Lock Screen Settings…', click: () => openLockSettings() },
+    ],
+  };
   const template: Electron.MenuItemConstructorOptions[] = [
     { role: 'appMenu' },
     { role: 'fileMenu' },
     { role: 'editMenu' },
     { role: 'viewMenu' },
     languageMenu,
+    lockMenu,
     { role: 'windowMenu' },
     { role: 'help', submenu: [{ label: 'Repository', click: () => { void shell.openExternal('https://github.com/HDomi/mac-vibe-coder'); } }] },
   ];
@@ -296,6 +316,7 @@ app.whenReady().then(async () => {
   if (!primaryInstance || quitting) return;
   app.dock?.setIcon(APP_ICON);
   buildMenu();
+  const lock = initLockScreen({ appUrl: DEV ? URL_DEV : URL_PROD, preload: path.join(__dirname, 'preload.cjs'), fromApp });
   if (!DEV) {
     await startServer();
     let checking = false;
@@ -306,6 +327,7 @@ app.whenReady().then(async () => {
     }, 5000);
   }
   await createWindow();
+  if (lock.resumeLocked) lockNow();
   // After sleep the renderer's sockets may be half-open; tell it to reconnect now rather than wait for the heartbeat.
   powerMonitor.on('resume', () => { for (const w of BrowserWindow.getAllWindows()) w.webContents.send('power-resume'); });
   app.on('activate', () => {
@@ -313,7 +335,9 @@ app.whenReady().then(async () => {
   });
 }).catch((err) => { dialog.showErrorBox(APP_NAME, (err as Error).message); app.quit(); });
 
-app.on('before-quit', () => {
+app.on('before-quit', (e) => {
+  // Cmd+Q is already swallowed on the cover; this also refuses Dock / AppleScript quits while locked.
+  if (blocksQuit()) { e.preventDefault(); return; }
   quitting = true;
   if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
   if (respawnTimer) { clearTimeout(respawnTimer); respawnTimer = null; }

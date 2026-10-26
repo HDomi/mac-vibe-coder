@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain, session, WebContentsView } from 'electron';
+import { isLockShortcut, lockNow } from './lockScreen.cjs';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
@@ -96,6 +97,7 @@ function ensureView(win: BrowserWindow): WebContentsView {
   });
   // Shortcuts pressed inside the page: page-level ones here, app-level ones forwarded to the app UI.
   wc.on('before-input-event', (e, input) => {
+    if (isLockShortcut(input)) { e.preventDefault(); lockNow(); return; }
     if (input.type !== 'keyDown' || !input.meta) return;
     const k = input.key.toLowerCase();
     if (k === 'r') { e.preventDefault(); if (input.shift) wc.reloadIgnoringCache(); else wc.reload(); return; }

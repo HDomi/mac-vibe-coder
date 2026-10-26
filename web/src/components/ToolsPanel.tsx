@@ -3,8 +3,9 @@ import { api, type ToolsInfo, type ToolStatus } from '../lib/api';
 import { LANGS, setLang, t, useLang, type Lang } from '../lib/i18n';
 import { keepAwakeEnabled, setKeepAwakeEnabled } from '../lib/power';
 import Icon from './Icon';
+import LockSettings from './LockSettings';
 
-interface Props { onClose: () => void }
+interface Props { onClose: () => void; /** Scroll to the lock screen section (opened from the menu bar). */ focusLock?: boolean }
 
 function methodLabel(m: string): string {
   if (m === 'official') return t('settings.method.official');
@@ -60,7 +61,7 @@ function GeneralSettings() {
   );
 }
 
-export default function ToolsPanel({ onClose }: Props) {
+export default function ToolsPanel({ onClose, focusLock }: Props) {
   useLang();
   const [info, setInfo] = useState<ToolsInfo | null>(null);
   const [log, setLog] = useState<{ line: string; err: boolean }[]>([]);
@@ -97,6 +98,7 @@ export default function ToolsPanel({ onClose }: Props) {
         </div>
         <div className="p-5 space-y-4 overflow-y-auto">
           <GeneralSettings />
+          <LockSettings focus={focusLock} />
           {!info && <div className="text-sm text-zinc-500">{t('settings.detecting')}</div>}
           {info?.tools.map((tool) => (
             <div key={tool.id} className="rounded-lg border border-white/10 p-4">

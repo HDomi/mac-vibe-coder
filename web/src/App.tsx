@@ -4,6 +4,7 @@ import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing,
 import { agentClient, type Attachment } from './lib/agent';
 import { reconnectTerminals, terminalsBusy } from './lib/terminals';
 import { keepAwakeEnabled, workInProgress } from './lib/power';
+import { lockSummary } from './lib/lockScreen';
 import { requestNotificationPermission, useSessions, setOnScreenSession } from './lib/useSessions';
 import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
@@ -60,6 +61,7 @@ function AppInner() {
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [selected, setSelected] = useState<Entry | null>(null);
   const [showTools, setShowTools] = useState(false);
+  const [toolsFocusLock, setToolsFocusLock] = useState(false);
   const [rightTab, setRightTab] = useState<'files' | 'preview' | 'browser' | 'terminal' | 'git'>('files');
   // Remembered so an update/relaunch comes back to the tab that was on screen, not the new-session view.
   const [activeSession, setActiveSession] = useState<string | 'new' | null>(() => { try { return localStorage.getItem(LS_ACTIVE_SESSION); } catch { return null; } });
@@ -176,6 +178,15 @@ function AppInner() {
     return () => { window.clearInterval(timer); window.removeEventListener('vibe:keep-awake', update); window.vibe!.keepAwake!(false); };
   }, []);
   useEffect(() => { window.dispatchEvent(new Event('vibe:keep-awake')); }, [S.sessions]);
+  // Lock screen: per-agent session counts for the cover windows (no titles), and the menu's "Lock Screen Settings…".
+  const lastLockSummary = useRef('');
+  useEffect(() => {
+    if (!window.vibe?.lock) return;
+    const list = lockSummary(Object.values(S.sessions));
+    const key = JSON.stringify(list);
+    if (key !== lastLockSummary.current) { lastLockSummary.current = key; window.vibe.lock.reportSessions(list); }
+  }, [S.sessions]);
+  useEffect(() => window.vibe?.lock?.onOpenSettings(() => { setToolsFocusLock(true); setShowTools(true); }), []);
 
   const isFavorite = !!listing && favorites.favorites.some((f) => f.path === listing.path);
   const toggleFavorite = () => {
@@ -356,7 +367,7 @@ function AppInner() {
               </div>
             </div>
           </main>
-          {showTools && <ToolsPanel onClose={() => setShowTools(false)} />}
+          {showTools && <ToolsPanel focusLock={toolsFocusLock} onClose={() => { setShowTools(false); setToolsFocusLock(false); }} />}
           {quickOpen && project && (
             <QuickOpen cwd={project} onClose={() => setQuickOpen(false)}
               onOpen={(h) => { if (h.isDir) navigate(h.path); else api.stat(h.path).then((e) => { setSelected(e); setRightTab('preview'); setRightCollapsed(false); }).catch(() => {}); }}
