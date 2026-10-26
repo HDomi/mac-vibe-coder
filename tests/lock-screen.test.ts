@@ -69,3 +69,17 @@ test('every cover computes the same head position from the clock and the sweep w
   assert.equal(headX(1000, l), l.minX + SPEED);
   assert.ok(Math.abs(headX((span / SPEED) * 1000, l) - l.minX) < 1e-6);
 });
+
+test('seven-segment digits light the right segments and lay out HH:MM:SS', async () => {
+  const { DIGIT_SEGMENTS, SEG, segmentLayout, segmentPolygons } = await import('../web/src/lib/lockScreen');
+  assert.equal(Object.keys(DIGIT_SEGMENTS).length, 10);
+  assert.equal(DIGIT_SEGMENTS['8'], 'abcdefg');
+  assert.ok(!DIGIT_SEGMENTS['0'].includes('g'));
+  assert.equal(DIGIT_SEGMENTS['1'], 'bc');
+  const { offsets, width } = segmentLayout('16:07:30');
+  assert.equal(offsets.length, 8);
+  assert.equal(width, 6 * SEG.w + 2 * SEG.colonW + 7 * SEG.space);
+  // every segment of a cell stays inside it
+  const xs = Object.values(segmentPolygons(offsets[7])).flatMap((p) => p.split(' ').map((q) => Number(q.split(',')[0])));
+  assert.ok(Math.min(...xs) >= offsets[7] && Math.max(...xs) <= offsets[7] + SEG.w);
+});

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { t, useLang } from '../../lib/i18n';
 import { headX, heartLayout, localBaseline, signal, TAIL, type HeartLayout, type Rect } from '../../lib/lockScreen';
 import type { LockInit, LockSessionSummary, LockSettings } from '../../lib/vibe';
+import SegmentClock from './SegmentClock';
 
 /*
  * Cover page loaded in every lock window (`/?lock=main|sub`, see electron/lockScreen.cts). It does not
@@ -102,10 +103,8 @@ function Clock({ now, size }: { now: number; size: string }) {
   const date = new Intl.DateTimeFormat(lang === 'ko' ? 'ko-KR' : 'en-US', { month: 'long', day: 'numeric', weekday: 'long' }).format(d);
   return (
     <div className="flex flex-col items-center">
-      <div className="font-extralight tabular-nums leading-none tracking-tight text-zinc-100" style={{ fontSize: size }}>
-        {p(d.getHours())}:{p(d.getMinutes())}:{p(d.getSeconds())}
-      </div>
-      <div className="mt-[1.6vh] text-zinc-400 font-light" style={{ fontSize: `calc(${size} * 0.11)` }}>{date}</div>
+      <SegmentClock text={`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`} height={`calc(${size} * 0.78)`} />
+      <div className="mt-[3vh] text-zinc-400 font-light" style={{ fontSize: `calc(${size} * 0.11)` }}>{date}</div>
     </div>
   );
 }
