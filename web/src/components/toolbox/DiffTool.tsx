@@ -23,7 +23,7 @@ export default function DiffTool() {
 
   return (
     <div className="h-full flex flex-col gap-3 min-h-0">
-      <div className="grid grid-cols-2 gap-3 h-[38%] min-h-[120px]">
+      <div className="grid grid-cols-2 gap-4 h-[38%] min-h-[120px]">
         <Area label={t('tb.diff.old')} value={a} onChange={setA} autoFocus />
         <Area label={t('tb.diff.new')} value={b} onChange={setB} actions={<button className={btn} onClick={() => { setA(b); setB(a); }}>{t('tb.diff.swap')}</button>} />
       </div>

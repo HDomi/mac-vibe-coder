@@ -45,7 +45,7 @@ export default function JwtTool() {
         actions={token ? <button className={btn} onClick={() => setToken('')}>{t('tb.clear')}</button> : null} />
       {parts && <ColorToken parts={parts} />}
       {parts && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           <Area label={<span>{t('tb.jwt.header')} <span className="text-zinc-600">· {alg || '?'}</span></span>} value={header} onChange={setHeader} minRows={5} />
           <div className="flex flex-col gap-2 min-h-0">
             <Area label={t('tb.jwt.payload')} value={payload} onChange={setPayload} minRows={5} className="flex-1" />
@@ -69,7 +69,7 @@ export default function JwtTool() {
           <div className="text-[11px] text-zinc-500">{t('tb.jwt.resignNote')}</div>
           {signErr && <div className="text-[11px] text-red-400">{signErr}</div>}
           {signed && (
-            <div className="flex items-start gap-2">
+            <div className="flex items-start gap-3">
               <div className={`flex-1 min-w-0 break-all rounded-md border border-white/10 bg-white/[.03] px-2.5 py-2 ${mono} text-zinc-200`}>{signed}</div>
               <CopyButton text={signed} />
               <button className={btn} onClick={() => setToken(signed)}>{t('tb.useAsInput')}</button>

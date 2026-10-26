@@ -61,7 +61,7 @@ function Aes() {
           <Seg value={o.dataFormat} onChange={(v: ByteFormat) => set('dataFormat', v)} options={FORMATS.filter((f) => f.value !== 'utf8')} />
         </Field>
       </div>
-      <div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-2 gap-y-2 text-[11px] text-zinc-500">
+      <div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-3 gap-y-2.5 text-[11px] text-zinc-500">
         <span>{t(o.keySource === 'raw' ? 'tb.crypto.key' : 'tb.crypto.passphrase')}</span>
         <input className={input} value={key} onChange={(e) => setKey(e.target.value)} placeholder={o.keySource === 'raw' ? t('tb.crypto.keyPlaceholder') : ''} spellCheck={false} />
         {o.keySource === 'raw' ? <FormatSelect value={o.keyFormat} onChange={(v) => set('keyFormat', v)} /> : <span />}
@@ -80,7 +80,7 @@ function Aes() {
         <FormatSelect value={o.ivFormat} onChange={(v) => set('ivFormat', v)} />
         <button className={btn} onClick={randomIv}>{t('tb.random')}</button>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         <Area label={t('tb.crypto.plain')} value={plain} onChange={setPlain} minRows={6}
           actions={<button className={btnPrimary} disabled={busy || !plain} onClick={() => run('enc')}>{t('tb.crypto.encrypt')} →</button>} />
         <Area label={<span>{t('tb.crypto.cipher')} <span className="text-zinc-600">· {FORMATS.find((f) => f.value === o.dataFormat)?.label}</span></span>} value={cipher} onChange={setCipher} minRows={6}
@@ -153,7 +153,7 @@ function Hmac() {
   const show = (hex: string) => (fmt === 'hex' ? hex : bytesToBase64(hexToBytes(hex)));
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+      <div className="flex items-center gap-3 text-[11px] text-zinc-500">
         <span>{t('tb.crypto.secret')}</span>
         <input className={`${input} flex-1`} value={secret} onChange={(e) => setSecret(e.target.value)} spellCheck={false} />
         <FormatSelect value={secretFmt} onChange={setSecretFmt} />

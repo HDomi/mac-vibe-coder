@@ -54,7 +54,7 @@ export function Area({ label, value, onChange, placeholder, readOnly, error, act
   return (
     <div className={`flex flex-col min-h-0 ${className}`}>
       {(label || actions || copy) && (
-        <div className="h-7 shrink-0 flex items-center gap-1 text-[11px] text-zinc-500">
+        <div className="h-7 shrink-0 mb-1 flex items-center gap-2 text-[11px] text-zinc-500">
           <span className="flex-1 truncate">{label}</span>
           {actions}
           {copy && <CopyButton text={value} />}

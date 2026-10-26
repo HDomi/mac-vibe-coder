@@ -49,7 +49,7 @@ function Pair({ kind }: { kind: Exclude<Kind, 'query' | 'base'> }) {
   const onCoded = (v: string) => { setCoded(v); try { setPlain(dec(v)); setErr(null); } catch (e) { setErr({ side: 'coded', msg: errText(e) }); } };
   const label = KINDS.find((k) => k.value === kind)?.label;
   return (
-    <div className="h-full grid grid-cols-2 gap-3 min-h-0">
+    <div className="h-full grid grid-cols-2 gap-4 min-h-0">
       <Area label={t('tb.encode.plain')} value={plain} onChange={onPlain} error={err?.side === 'plain' ? err.msg : null} autoFocus
         actions={plain ? <button className={btn} onClick={() => onPlain('')}>{t('tb.clear')}</button> : null} />
       <Area label={label} value={coded} onChange={onCoded} error={err?.side === 'coded' ? err.msg : null} />
@@ -63,14 +63,14 @@ function Query() {
   const json = useMemo(() => JSON.stringify(Object.fromEntries(pairs), null, 2), [pairs]);
   const url = useMemo(() => { try { return text.includes('://') ? new URL(text.trim()) : null; } catch { return null; } }, [text]);
   return (
-    <div className="h-full grid grid-cols-2 gap-3 min-h-0">
+    <div className="h-full grid grid-cols-2 gap-4 min-h-0">
       <Area label={t('tb.encode.urlOrQuery')} value={text} onChange={setText} placeholder="https://example.com/path?a=1&b=two+words#frag" autoFocus />
       <div className="flex flex-col gap-2 min-h-0 overflow-y-auto">
         {url && <Rows rows={[
           { label: 'origin', value: url.origin }, { label: 'pathname', value: url.pathname },
           ...(url.hash ? [{ label: 'hash', value: url.hash }] : []),
         ]} />}
-        <div className="h-7 flex items-center text-[11px] text-zinc-500"><span className="flex-1">{t('tb.encode.params', { n: pairs.length })}</span><CopyButton text={json} label="JSON" /></div>
+        <div className="h-7 mb-1 flex items-center gap-2 text-[11px] text-zinc-500"><span className="flex-1">{t('tb.encode.params', { n: pairs.length })}</span><CopyButton text={json} label="JSON" /></div>
         {pairs.length > 0 && (
           <div className={`rounded-md border border-white/10 divide-y divide-white/5 ${mono}`}>
             {pairs.map(([k, v], i) => (
@@ -95,7 +95,7 @@ function BaseConv() {
   const group = (s: string, n: number) => { const neg = s.startsWith('-'); const body = neg ? s.slice(1) : s; return (neg ? '-' : '') + body.replace(new RegExp(`\\B(?=(\\w{${n}})+(?!\\w))`, 'g'), ' '); };
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <Seg value={String(from)} onChange={(v) => setFrom(Number(v) as Base)} options={[{ value: '2', label: 'BIN' }, { value: '8', label: 'OCT' }, { value: '10', label: 'DEC' }, { value: '16', label: 'HEX' }]} />
         <input className={`${input} flex-1`} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('tb.encode.basePlaceholder')} autoFocus spellCheck={false} />
       </div>

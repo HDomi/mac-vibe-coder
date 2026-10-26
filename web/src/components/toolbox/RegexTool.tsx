@@ -34,7 +34,7 @@ export default function RegexTool() {
 
   return (
     <div className="h-full flex flex-col gap-3 min-h-0">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <span className="text-zinc-500 font-mono">/</span>
         <input className={`${input} flex-1 ${result.error ? 'border-red-500/50' : ''}`} value={pattern} onChange={(e) => onPattern(e.target.value)} placeholder={t('tb.regex.placeholder')} autoFocus spellCheck={false} />
         <span className="text-zinc-500 font-mono">/{flags}</span>
@@ -49,11 +49,11 @@ export default function RegexTool() {
         </select>
       </div>
       {result.error && <div className="text-[11px] text-red-400">{result.error}</div>}
-      <div className="flex-1 min-h-0 grid grid-cols-2 gap-3">
+      <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-3 min-h-0">
           <Area className="flex-1" label={t('tb.regex.testText')} value={text} onChange={setText} actions={!text ? <button className={btn} onClick={() => setText(SAMPLE)}>{t('tb.sample')}</button> : null} />
           <div className="flex flex-col min-h-0 flex-1">
-            <div className="h-7 shrink-0 flex items-center gap-2 text-[11px] text-zinc-500">
+            <div className="h-7 shrink-0 mb-1 flex items-center gap-3 text-[11px] text-zinc-500">
               <span>{t('tb.regex.replace')}</span>
               <input className={`${input} flex-1 py-0.5`} value={repl} onChange={(e) => setRepl(e.target.value)} placeholder="$1 · $<name> · $&" spellCheck={false} />
               <CopyButton text={replaced} />

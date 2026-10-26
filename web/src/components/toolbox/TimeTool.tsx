@@ -29,7 +29,7 @@ export default function TimeTool() {
         ]} />
       </Section>
       <Section title={t('tb.time.convert')}>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <input className={`${input} flex-1`} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('tb.time.placeholder')} autoFocus spellCheck={false} />
           <button className={btn} onClick={() => setText(String(Math.floor(Date.now() / 1000)))}>{t('tb.time.nowBtn')}</button>
           {text && <button className={btn} onClick={() => setText('')}>{t('tb.clear')}</button>}
@@ -85,14 +85,14 @@ function Duration({ now }: { now: number }) {
   }, [dur]);
   return (
     <Section title={t('tb.time.duration')}>
-      <div className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-2 text-[11px] text-zinc-500">
+      <div className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-3 gap-y-2 text-[11px] text-zinc-500">
         <span>{t('tb.time.from')}</span><input className={input} value={a} onChange={(e) => setA(e.target.value)} placeholder="now" spellCheck={false} />
         <span>{t('tb.time.to')}</span><input className={input} value={b} onChange={(e) => setB(e.target.value)} placeholder="2030-01-01" spellCheck={false} />
       </div>
       {(a || b) && (diff.ok
         ? <Rows rows={[{ label: t('tb.time.difference'), value: formatDuration(diff.ms), hint: `${Number(diff.days.toFixed(2))} ${t('tb.time.days')} · ${Math.round(diff.ms / 1000).toLocaleString()} s` }]} />
         : <div className="text-[11px] text-red-400">{diff.msg}</div>)}
-      <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+      <div className="flex items-center gap-3 text-[11px] text-zinc-500">
         <span>{t('tb.time.parseDuration')}</span>
         <input className={`${input} flex-1`} value={dur} onChange={(e) => setDur(e.target.value)} placeholder="P1DT2H30M · 90000 · 1h 30m" spellCheck={false} />
       </div>

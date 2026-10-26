@@ -17,7 +17,7 @@ export default function TextTool() {
     [t('tb.text.words'), stats.words], [t('tb.text.lines'), stats.lines], [t('tb.text.sentences'), stats.sentences], [t('tb.text.paragraphs'), stats.paragraphs],
   ];
   return (
-    <div className="h-full grid grid-cols-2 gap-3 min-h-0">
+    <div className="h-full grid grid-cols-2 gap-4 min-h-0">
       <div className="flex flex-col gap-2 min-h-0">
         <Area className="flex-1" label={t('tb.input')} value={text} onChange={setText} autoFocus actions={text ? <button className={btn} onClick={() => setText('')}>{t('tb.clear')}</button> : null} />
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-500 tabular-nums">

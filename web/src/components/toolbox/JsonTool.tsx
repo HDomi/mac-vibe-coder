@@ -40,7 +40,7 @@ export default function JsonTool() {
   const error = parsed && !parsed.ok ? (parsed.pos ? `${parsed.msg}\n${t('tb.json.at', { line: parsed.pos.line, col: parsed.pos.col })}` : parsed.msg) : null;
 
   return (
-    <div className="h-full flex min-h-0 gap-3">
+    <div className="h-full flex min-h-0 gap-4">
       <Area className="w-[42%] shrink-0" label={t('tb.input')} value={text} onChange={setText} placeholder={t('tb.json.placeholder')} error={error} autoFocus
         actions={<>
           <button className={btn} disabled={value === undefined} onClick={() => setText(JSON.stringify(value, null, 2))}>{t('tb.json.format')}</button>
@@ -50,7 +50,7 @@ export default function JsonTool() {
           {text && <button className={btn} onClick={() => setText('')}>{t('tb.clear')}</button>}
         </>} />
       <div className="flex-1 min-w-0 flex flex-col min-h-0">
-        <div className="h-7 shrink-0 flex items-center gap-1.5 text-[11px] text-zinc-500">
+        <div className="h-7 shrink-0 mb-1 flex items-center gap-2 text-[11px] text-zinc-500">
           <Seg value={view} onChange={setView} options={[{ value: 'tree', label: t('tb.json.tree') }, { value: 'text', label: t('tb.json.text') }, { value: 'ts', label: 'TypeScript' }]} />
           {view === 'tree' && <>
             <button className={btn} onClick={() => setReset((r) => ({ gen: r.gen + 1, open: true }))}>{t('tb.json.expandAll')}</button>

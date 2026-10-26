@@ -32,7 +32,7 @@ function Uuid() {
     <Section title="UUID" actions={<button className={btnPrimary} onClick={gen}>{t('tb.generate')}</button>}>
       <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-500">
         <Seg value={ver} onChange={setVer} options={[{ value: 'v4', label: 'v4' }, { value: 'v7', label: `v7 · ${t('tb.random.timeOrdered')}` }]} />
-        <label className="flex items-center gap-1">{t('tb.random.count')}<input type="number" min={1} max={1000} className={`${input} w-16 py-0.5`} value={count} onChange={(e) => setCount(Number(e.target.value) || 1)} /></label>
+        <label className="flex items-center gap-2">{t('tb.random.count')}<input type="number" min={1} max={1000} className={`${input} w-16 py-0.5`} value={count} onChange={(e) => setCount(Number(e.target.value) || 1)} /></label>
         <Check label={t('tb.random.uppercase')} checked={upper} onChange={setUpper} />
         <Check label={t('tb.random.dashes')} checked={dashes} onChange={setDashes} />
       </div>
@@ -74,7 +74,7 @@ function Bytes() {
   return (
     <Section title={t('tb.random.bytes')} actions={<button className={btnPrimary} onClick={gen}>{t('tb.generate')}</button>}>
       <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-500">
-        <label className="flex items-center gap-1">{t('tb.random.bytesN')}<input type="number" min={1} max={4096} className={`${input} w-20 py-0.5`} value={len} onChange={(e) => setLen(Number(e.target.value) || 1)} /></label>
+        <label className="flex items-center gap-2">{t('tb.random.bytesN')}<input type="number" min={1} max={4096} className={`${input} w-20 py-0.5`} value={len} onChange={(e) => setLen(Number(e.target.value) || 1)} /></label>
         <Seg value={fmt} onChange={setFmt} options={[{ value: 'hex', label: 'Hex' }, { value: 'base64', label: 'Base64' }, { value: 'base64url', label: 'Base64url' }]} />
         <span className="text-zinc-600">{t('tb.random.bytesNote')}</span>
       </div>
@@ -107,9 +107,9 @@ function Numbers() {
   return (
     <Section title={t('tb.random.numbers')} actions={<button className={btnPrimary} onClick={gen}>{t('tb.generate')}</button>}>
       <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-500">
-        <label className="flex items-center gap-1">{t('tb.random.min')}<input type="number" className={`${input} w-24 py-0.5`} value={min} onChange={(e) => setMin(Number(e.target.value) || 0)} /></label>
-        <label className="flex items-center gap-1">{t('tb.random.max')}<input type="number" className={`${input} w-24 py-0.5`} value={max} onChange={(e) => setMax(Number(e.target.value) || 0)} /></label>
-        <label className="flex items-center gap-1">{t('tb.random.count')}<input type="number" min={1} max={10000} className={`${input} w-20 py-0.5`} value={count} onChange={(e) => setCount(Number(e.target.value) || 1)} /></label>
+        <label className="flex items-center gap-2">{t('tb.random.min')}<input type="number" className={`${input} w-24 py-0.5`} value={min} onChange={(e) => setMin(Number(e.target.value) || 0)} /></label>
+        <label className="flex items-center gap-2">{t('tb.random.max')}<input type="number" className={`${input} w-24 py-0.5`} value={max} onChange={(e) => setMax(Number(e.target.value) || 0)} /></label>
+        <label className="flex items-center gap-2">{t('tb.random.count')}<input type="number" min={1} max={10000} className={`${input} w-20 py-0.5`} value={count} onChange={(e) => setCount(Number(e.target.value) || 1)} /></label>
         <Check label={t('tb.random.unique')} checked={unique} onChange={setUnique} />
       </div>
       {out && (
