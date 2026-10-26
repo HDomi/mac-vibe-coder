@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { highlight } from '../../lib/highlight';
 import { t } from '../../lib/i18n';
 
 const LS = 'vibe.toolbox.';
@@ -127,3 +128,20 @@ export function Section({ title, children, className = '', actions }: { title: R
 }
 
 export const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** Read-only highlighted code block with a header row (label, actions, copy). */
+export function Code({ code, lang, label, actions, className = '', error }: { code: string; lang: string; label?: ReactNode; actions?: ReactNode; className?: string; error?: string | null }) {
+  const html = useMemo(() => (code ? highlight(code, lang) : ''), [code, lang]);
+  return (
+    <div className={`flex flex-col min-h-0 ${className}`}>
+      <div className="h-7 shrink-0 mb-1 flex items-center gap-2 text-[11px] text-zinc-500">
+        <span className="flex-1 truncate">{label}</span>
+        {actions}
+        <CopyButton text={code} />
+      </div>
+      <pre className={`hljs flex-1 min-h-[3em] overflow-auto rounded-md border px-2.5 py-2 ${mono} !bg-white/[.03] whitespace-pre ${error ? 'border-red-500/50' : 'border-white/10'}`}>
+        {error ? <span className="text-red-400 whitespace-pre-wrap">{error}</span> : <code dangerouslySetInnerHTML={{ __html: html }} />}
+      </pre>
+    </div>
+  );
+}
