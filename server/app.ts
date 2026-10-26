@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import path from 'node:path';
-import { createFile, duplicate, FsError, homeInfo, listDir, mkdir, rawFile, readText, rename, resolvePath, searchFiles, statPath, transfer, trash, writeText } from './fs.js';
+import { createFile, duplicate, findEnvFiles, FsError, homeInfo, listDir, mkdir, rawFile, readText, rename, resolvePath, searchFiles, statPath, transfer, trash, writeText } from './fs.js';
 import { loadConfig, PORT, saveConfig, withConfigLock } from './config.js';
 import { bodyLimit } from 'hono/body-limit';
 import { streamSSE } from 'hono/streaming';
@@ -342,6 +342,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
     else await deleteSession(c.req.param('id'), cwd ? { dir: resolvePath(cwd) } : undefined);
     return c.json({ ok: true });
   });
+  app.get('/api/fs/env-files', async (c) => c.json(await findEnvFiles(c.req.query('cwd') ?? '~')));
   app.get('/api/fs/search', async (c) => c.json(await searchFiles(c.req.query('cwd') ?? '~', c.req.query('q') ?? '', Math.max(1, Math.min(500, Number(c.req.query('limit')) || 200)))));
   app.get('/api/history/:id', async (c) => {
     const dir = resolvePath(c.req.query('cwd') ?? '~');

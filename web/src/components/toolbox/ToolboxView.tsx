@@ -28,6 +28,7 @@ const TOOLS: { id: string; group: Group; badge: string; Comp: ComponentType }[] 
   { id: 'datauri', group: 'image', badge: 'URI', Comp: lazy(() => import('./DataUriTool')) },
   { id: 'favicon', group: 'image', badge: 'ICO', Comp: lazy(() => import('./FaviconTool')) },
   { id: 'net', group: 'system', badge: 'IP', Comp: lazy(() => import('./NetTool')) },
+  { id: 'env', group: 'system', badge: '.env', Comp: lazy(() => import('./EnvTool')) },
   { id: 'chmod', group: 'system', badge: '755', Comp: lazy(() => import('./ChmodTool')) },
   { id: 'calc', group: 'system', badge: '=', Comp: lazy(() => import('./CalcTool')) },
 ];

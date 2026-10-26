@@ -261,6 +261,28 @@ export async function searchFiles(root: string, query: string, limit = 200): Pro
   return out.sort((a, b) => b.score - a.score || a.rel.length - b.rel.length).slice(0, limit).map(({ path: p, rel, isDir }) => ({ path: p, rel, isDir }));
 }
 
+/** `.env`, `.env.local`, `.env.example`, `app.env` … under a project, a few levels deep (monorepo packages). */
+export async function findEnvFiles(root: string, maxDepth = 4): Promise<{ path: string; rel: string; size: number }[]> {
+  const base = resolvePath(root);
+  const out: { path: string; rel: string; size: number }[] = [];
+  async function walk(dir: string, depth: number) {
+    if (depth > maxDepth || out.length >= 200) return;
+    let dirents;
+    try { dirents = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const d of dirents) {
+      const full = path.join(dir, d.name);
+      if (d.isDirectory()) {
+        if (!SKIP_DIRS.has(d.name) && !d.name.startsWith('.')) await walk(full, depth + 1);
+      } else if (d.isFile() && /^\.env(\..+)?$|\.env$/i.test(d.name)) {
+        const st = await fs.stat(full).catch(() => null);
+        if (st && st.size <= 1024 * 1024) out.push({ path: full, rel: path.relative(base, full), size: st.size });
+      }
+    }
+  }
+  await walk(base, 0);
+  return out.sort((a, b) => a.rel.split('/').length - b.rel.split('/').length || a.rel.localeCompare(b.rel));
+}
+
 /* ── Mutations used by the file browser ───────────────────────────── */
 
 async function uniqueDest(dest: string): Promise<string> {
