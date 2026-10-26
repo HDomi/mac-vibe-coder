@@ -155,6 +155,13 @@ function Password({ initialWait }: { initialWait: number }) {
   }, []);
   // A disabled field drops focus (while checking, while waiting out retries); take it back afterwards.
   useEffect(() => { if (!wait && !busy) input.current?.focus(); }, [wait, busy]);
+  // Liveness for the main process watchdog: sent only once the field exists, so a page that never renders it is caught too.
+  useEffect(() => {
+    const ping = () => window.vibe?.lock?.alive();
+    ping();
+    const id = window.setInterval(ping, 10000);
+    return () => window.clearInterval(id);
+  }, []);
   const submit = async () => {
     if (busy || wait || !value) return;
     setBusy(true);

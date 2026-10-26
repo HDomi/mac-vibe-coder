@@ -34,6 +34,9 @@ let quitting = false;
 let respawnDelay = 1500;
 let healthTimer: NodeJS.Timeout | null = null;
 let respawnTimer: NodeJS.Timeout | null = null;
+/** A server this app did not spawn but took over (the previous app was killed by the lock watchdog). Stopped on quit. */
+let adoptedServerPid: number | null = null;
+let lastHealth: { pid?: unknown; appOwned?: unknown } | null = null;
 
 const APP_ORIGIN = new URL(DEV ? URL_DEV : URL_PROD).origin;
 /** Schemes handed to the OS. Anything else (file:, smb:, custom app schemes) could launch local programs. */
@@ -92,6 +95,7 @@ function healthy(): Promise<boolean> {
       res.on('data', (chunk) => { data += String(chunk); if (data.length > 8192) req.destroy(); });
       res.on('end', () => { try {
         const info = JSON.parse(data);
+        lastHealth = info;
         resolve(res.statusCode === 200 && info.repo === REPO_ROOT && (!EXPECTED_BUILD || info.version === EXPECTED_BUILD.version && info.commit === EXPECTED_BUILD.commit));
       } catch { resolve(false); } });
     });
@@ -112,7 +116,20 @@ async function waitHealthy(ms: number): Promise<boolean> {
 async function startServer(): Promise<void> {
   respawnTimer = null;
   if (quitting) return;
-  if (await healthy()) return; // already running (e.g. `npm run serve`)
+  if (await healthy()) {
+    // Already running: `npm run serve` (left alone on quit), or a server an earlier app instance spawned.
+    if (!server && lastHealth?.appOwned === true && Number.isInteger(lastHealth.pid)) adoptedServerPid = lastHealth.pid as number;
+    return;
+  }
+  if (adoptedServerPid !== null) {
+    // The adopted server went away (an update restart, or a crash). Its exit code never reaches us, so
+    // relaunch the whole app the way an update would; the new instance spawns and owns its server.
+    console.log('[mac-vibe-coder] adopted server exited; relaunching');
+    rememberLockForRelaunch();
+    app.relaunch();
+    app.exit(0);
+    return;
+  }
   const runtime = await resolveNode();
   const entry = path.join(REPO_ROOT, 'dist', 'server', 'index.js');
   if (quitting) return;
@@ -316,7 +333,10 @@ app.whenReady().then(async () => {
   if (!primaryInstance || quitting) return;
   app.dock?.setIcon(APP_ICON);
   buildMenu();
-  const lock = initLockScreen({ appUrl: DEV ? URL_DEV : URL_PROD, preload: path.join(__dirname, 'preload.cjs'), fromApp });
+  // The installed app is a bundle the server can reopen if it has to kill a hung, locked app.
+  const exe = app.getPath('exe');
+  const bundle = app.isPackaged && exe.includes('.app/Contents/MacOS/') ? exe.slice(0, exe.indexOf('.app/Contents/MacOS/') + 4) : null;
+  const lock = initLockScreen({ appUrl: DEV ? URL_DEV : URL_PROD, preload: path.join(__dirname, 'preload.cjs'), fromApp, serverUrl: URL_PROD, relaunchBundle: bundle });
   if (!DEV) {
     await startServer();
     let checking = false;
@@ -342,6 +362,7 @@ app.on('before-quit', (e) => {
   if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
   if (respawnTimer) { clearTimeout(respawnTimer); respawnTimer = null; }
   server?.kill();
+  if (!server && adoptedServerPid) { try { process.kill(adoptedServerPid, 'SIGTERM'); } catch { /* already gone */ } }
 });
 
 app.on('window-all-closed', () => {

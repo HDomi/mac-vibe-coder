@@ -29,12 +29,15 @@ contextBridge.exposeInMainWorld('vibe', {
     get: () => ipcRenderer.invoke('lock:get'),
     set: (patch) => ipcRenderer.invoke('lock:set', patch),
     setPassword: (req) => ipcRenderer.invoke('lock:password', req),
+    newRecoveryCode: (current) => ipcRenderer.invoke('lock:recovery', current),
     now: () => ipcRenderer.send('lock:now'),
     reportSessions: (list) => ipcRenderer.send('lock:sessions', list),
     onOpenSettings: (cb) => { const h = () => cb(); ipcRenderer.on('lock:open-settings', h); return () => ipcRenderer.removeListener('lock:open-settings', h); },
     onDisplays: (cb) => { const h = () => cb(); ipcRenderer.on('lock:displays', h); return () => ipcRenderer.removeListener('lock:displays', h); },
     init: () => ipcRenderer.invoke('lock:init'),
     unlock: (password) => ipcRenderer.invoke('lock:unlock', password),
+    // Main cover's liveness ping for the watchdog in lockScreen.cts.
+    alive: () => ipcRenderer.send('lock:alive'),
     onUpdate: (cb) => { const h = (_e, u) => cb(u); ipcRenderer.on('lock:update', h); return () => ipcRenderer.removeListener('lock:update', h); },
   },
   // Browser panel: a native Chromium view laid over the panel (see electron/browserView.cts).

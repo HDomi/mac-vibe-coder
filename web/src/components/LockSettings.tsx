@@ -54,6 +54,8 @@ export default function LockSettings({ focus }: { focus?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [hasPassword, setHasPassword] = useState(false);
+  const [hasRecovery, setHasRecovery] = useState(false);
+  const [shownCode, setShownCode] = useState<string | null>(null);
   const [displays, setDisplays] = useState<LockDisplay[]>([]);
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -61,7 +63,7 @@ export default function LockSettings({ focus }: { focus?: boolean }) {
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const refresh = useCallback(() => {
-    void lock?.get().then((r) => { if (!r) return; setSettings(r.settings); setHasPassword(r.hasPassword); setDisplays(r.displays); });
+    void lock?.get().then((r) => { if (!r) return; setSettings(r.settings); setHasPassword(r.hasPassword); setHasRecovery(r.hasRecovery); setDisplays(r.displays); });
   }, [lock]);
   useEffect(() => {
     refresh();
@@ -84,14 +86,21 @@ export default function LockSettings({ focus }: { focus?: boolean }) {
     if (next !== confirm) { setMsg({ text: t('lockSettings.errMismatch'), ok: false }); return; }
     const r = await lock.setPassword({ current, next });
     if (!r.ok) { setMsg({ text: errorText(r), ok: false }); return; }
-    setHasPassword(true); setCurrent(''); setNext(''); setConfirm('');
+    setHasPassword(true); setHasRecovery(!!r.hasRecovery); setCurrent(''); setNext(''); setConfirm('');
+    if (r.recoveryCode) setShownCode(r.recoveryCode);
     setMsg({ text: t('lockSettings.saved'), ok: true });
   };
   const removePassword = async () => {
     const r = await lock.setPassword({ current, next: '' });
     if (!r.ok) { setMsg({ text: errorText(r), ok: false }); return; }
-    setHasPassword(false); setCurrent(''); setNext(''); setConfirm('');
+    setHasPassword(false); setHasRecovery(false); setShownCode(null); setCurrent(''); setNext(''); setConfirm('');
     setMsg({ text: t('lockSettings.removed'), ok: true });
+  };
+  const newRecovery = async () => {
+    if (!current) { setMsg({ text: t('lockSettings.recoveryNeedsCurrent'), ok: false }); return; }
+    const r = await lock.newRecoveryCode(current);
+    if (!r.ok || !r.recoveryCode) { setMsg({ text: errorText(r), ok: false }); return; }
+    setCurrent(''); setMsg(null); setHasRecovery(true); setShownCode(r.recoveryCode);
   };
   const field = 'bg-white/5 rounded-md text-xs px-2 py-1.5 outline-none w-44 placeholder:text-zinc-600';
 
@@ -119,6 +128,29 @@ export default function LockSettings({ focus }: { focus?: boolean }) {
         </form>
         {msg && <div className={`text-xs pl-[124px] ${msg.ok ? 'text-emerald-300' : 'text-red-300'}`}>{msg.text}</div>}
       </div>
+
+      {hasPassword && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 text-sm">
+            <span className="w-28 text-zinc-400">{t('lockSettings.recovery')}</span>
+            <span className={`text-xs ${hasRecovery ? 'text-emerald-300' : 'text-amber-300'}`}>{hasRecovery ? t('lockSettings.recoverySet') : t('lockSettings.recoveryNone')}</span>
+            <div className="flex-1" />
+            <button onClick={() => void newRecovery()} className="text-xs rounded-md bg-white/10 hover:bg-white/15 px-2.5 py-1.5 text-zinc-200">{t('lockSettings.recoveryNew')}</button>
+          </div>
+          {shownCode && (
+            <div className="ml-[124px] rounded-md border border-amber-400/30 bg-amber-400/[0.06] p-3 space-y-2">
+              <div className="flex items-center gap-3">
+                <code className="font-mono text-base tracking-wider text-zinc-100 select-all">{shownCode}</code>
+                <div className="flex-1" />
+                <button className="text-xs text-zinc-400 hover:text-white" onClick={() => void navigator.clipboard.writeText(shownCode)}>{t('common.copy')}</button>
+                <button className="text-xs rounded-md bg-white/10 hover:bg-white/15 px-2.5 py-1 text-zinc-200" onClick={() => setShownCode(null)}>{t('lockSettings.recoveryDone')}</button>
+              </div>
+              <div className="text-xs text-amber-200/80 leading-relaxed">{t('lockSettings.recoveryShow')}</div>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="text-xs text-zinc-500 leading-relaxed">{t('lockSettings.failsafe')}</div>
 
       {settings && (
         <>

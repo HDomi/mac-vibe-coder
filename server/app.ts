@@ -23,6 +23,7 @@ import { rejectReason } from './guard.js';
 import { readPasteboardFiles, writePasteboardFiles } from './pasteboard.js';
 import { watch } from 'node:fs';
 import { requestShutdown } from './lifecycle.js';
+import { lockBeat, type LockBeat } from './lockWatch.js';
 import { gitBranches, gitCheckout, gitCommit, gitCommitDiff, gitCommitFiles, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
 import { displayableIcon, findProjectIcon } from './icons.js';
 import { convertImage, imageInfo, renderPng, writeImageBytes } from './image.js';
@@ -63,7 +64,8 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
     return c.json({ error: err.message ?? 'Internal error', code: 'INTERNAL' }, 500);
   });
 
-  app.get('/api/health', (c) => c.json({ ok: true, repo: REPO_ROOT, version: BUILD.version, commit: BUILD.commit, builtAt: BUILD.builtAt }));
+  // pid / appOwned let an app that adopts an already running server (after the lock watchdog restarted it) stop it on quit.
+  app.get('/api/health', (c) => c.json({ ok: true, repo: REPO_ROOT, version: BUILD.version, commit: BUILD.commit, builtAt: BUILD.builtAt, pid: process.pid, appOwned: !!process.env.MVC_ELECTRON_EXEC_PATH }));
   app.get('/api/home', async (c) => c.json(await homeInfo()));
 
   app.get('/api/fs/list', async (c) => c.json(await listDir(c.req.query('path') ?? '~')));
@@ -444,6 +446,11 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
       setTimeout(() => requestShutdown('update applied', RESTART_EXIT_CODE), 800);
     }
   }));
+  // Lock screen failsafe (see lockWatch.ts). Only the Electron main process calls this; pages always send an Origin.
+  app.post('/api/lock-watch', async (c) => {
+    if (c.req.header('origin')) return c.json({ ok: false }, 403);
+    return c.json(lockBeat(await c.req.json<LockBeat>().catch(() => ({ active: false }))));
+  });
   app.post('/api/restart', (c) => { setTimeout(() => requestShutdown('restart requested', RESTART_EXIT_CODE), 300); return c.json({ ok: true }); });
 
   // Static SPA (production build)

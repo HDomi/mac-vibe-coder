@@ -25,15 +25,18 @@ export interface LockDisplay { key: string; label: string; internal: boolean; pr
 export interface LockSessionSummary { agent: string; total: number; running: number; waiting: number }
 export interface LockInit { role: 'main' | 'sub'; self: ViewBounds; displays: LockDisplay[]; settings: LockSettings; sessions: LockSessionSummary[]; retryIn: number }
 export interface LockBridge {
-  get: () => Promise<{ settings: LockSettings; hasPassword: boolean; displays: LockDisplay[] } | null>;
+  get: () => Promise<{ settings: LockSettings; hasPassword: boolean; hasRecovery: boolean; displays: LockDisplay[] } | null>;
   set: (patch: Partial<LockSettings>) => Promise<LockSettings | null>;
-  setPassword: (req: { current?: string; next: string }) => Promise<{ ok: boolean; error?: 'invalid' | 'short' | 'wrong' | 'wait'; retryIn?: number; hasPassword?: boolean }>;
+  setPassword: (req: { current?: string; next: string }) => Promise<{ ok: boolean; error?: 'invalid' | 'short' | 'wrong' | 'wait'; retryIn?: number; hasPassword?: boolean; hasRecovery?: boolean; recoveryCode?: string }>;
+  /** Replace the recovery code; needs the current password. The code is returned once. */
+  newRecoveryCode: (current: string) => Promise<{ ok: boolean; error?: 'invalid' | 'wrong' | 'wait'; retryIn?: number; recoveryCode?: string }>;
   now: () => void;
   reportSessions: (list: LockSessionSummary[]) => void;
   onOpenSettings: (cb: () => void) => () => void;
   onDisplays: (cb: () => void) => () => void;
   init: () => Promise<LockInit | null>;
   unlock: (password: string) => Promise<{ ok: boolean; retryIn?: number }>;
+  alive: () => void;
   onUpdate: (cb: (u: { sessions?: LockSessionSummary[]; settings?: LockSettings }) => void) => () => void;
 }
 

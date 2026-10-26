@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, powerMonitor, powerSaveBlocker, screen, ty
 import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 
 /*
@@ -12,10 +13,20 @@ import path from 'node:path';
  * While locked on AC power the display is kept awake so macOS does not sleep-lock the screen.
  * Ctrl+Cmd+Q (macOS Lock Screen) still works: the system handles it, or, when kiosk mode disables the
  * Apple menu shortcut, the cover window catches it and asks loginwindow to lock.
+ *
+ * Failsafes, so a bug never leaves the user locked out:
+ *  - Cover watchdog: the main cover's page pings every 10s. A cover that stops pinging, hangs or crashes is
+ *    rebuilt; after MAX_REBUILDS rebuilds in a row without a ping the lock gives up and opens.
+ *  - Server watchdog: while locked this process beats the local server every 10s. If the beats stop (this
+ *    process hung, kiosk mode also disables force quit) the server kills the app and reopens it unlocked.
+ *    Agent sessions live in the server, so they keep running.
+ *  - Recovery code: shown once when the password is first set; typed into the cover instead of the
+ *    password it unlocks once and is then used up.
+ *  - A cover page that cannot load at all opens the lock (did-fail-load below).
  */
 
 export interface LockSettings { mainDisplay: string | null; mainBg: string; subBg: string; heartbeat: boolean }
-interface Stored extends LockSettings { salt?: string; hash?: string; relaunchLockedAt?: number }
+interface Stored extends LockSettings { salt?: string; hash?: string; recoverySalt?: string; recoveryHash?: string; relaunchLockedAt?: number }
 export interface LockSessionSummary { agent: string; total: number; running: number; waiting: number }
 
 const DEFAULTS: LockSettings = { mainDisplay: null, mainBg: '#0b0d11', subBg: '#0b0d11', heartbeat: true };
@@ -23,6 +34,12 @@ const MIN_PASSWORD = 4;
 /** A relaunch (self-update) within this window comes back locked. Older flags are ignored so a reboot never traps the user. */
 const RELAUNCH_GRACE_MS = 2 * 60 * 1000;
 const COLOR = /^#[0-9a-f]{6}$/i;
+const HEX = /^[0-9a-f]{16,128}$/;
+/** 32 letters and digits without 0/O/1/I; 20 of them = 100 bits, shown as XXXXX-XXXXX-XXXXX-XXXXX. */
+const RECOVERY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const ALIVE_TIMEOUT_MS = 35000;
+const MAX_REBUILDS = 3;
+const SERVER_BEAT_MS = 10000;
 // loginwindow's own "lock now" entry point; same as the Lock Screen menu item. Symbol presence checked on macOS 26.
 const MAC_LOCK_JXA = 'ObjC.import("Foundation");$.NSBundle.bundleWithPath("/System/Library/PrivateFrameworks/login.framework").load;ObjC.bindFunction("SACLockScreenImmediate",["int",[]]);$.SACLockScreenImmediate();';
 
@@ -41,11 +58,19 @@ let failures = 0;
 let retryAt = 0;
 let rebuildTimer: NodeJS.Timeout | null = null;
 let systemShutdown = false;
+let serverUrl = '';
+let relaunchBundle: string | null = null;
+let lastAlive = 0;
+let lastTick = 0;
+let lastBeat = 0;
+let rebuilds = 0;
+let watchTimer: NodeJS.Timeout | null = null;
 
 function load() {
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<Stored>;
-    stored = { ...DEFAULTS, ...sanitize(raw), salt: typeof raw.salt === 'string' ? raw.salt : undefined, hash: typeof raw.hash === 'string' ? raw.hash : undefined, relaunchLockedAt: typeof raw.relaunchLockedAt === 'number' ? raw.relaunchLockedAt : undefined };
+    const hex = (v: unknown) => (typeof v === 'string' && HEX.test(v) ? v : undefined);
+    stored = { ...DEFAULTS, ...sanitize(raw), salt: hex(raw.salt), hash: hex(raw.hash), recoverySalt: hex(raw.recoverySalt), recoveryHash: hex(raw.recoveryHash), relaunchLockedAt: typeof raw.relaunchLockedAt === 'number' ? raw.relaunchLockedAt : undefined };
   } catch { stored = { ...DEFAULTS }; }
 }
 function save() {
@@ -64,15 +89,31 @@ function sanitize(raw: Partial<LockSettings>): Partial<LockSettings> {
 }
 const settings = (): LockSettings => ({ mainDisplay: stored.mainDisplay, mainBg: stored.mainBg, subBg: stored.subBg, heartbeat: stored.heartbeat });
 const hasPassword = () => !!(stored.salt && stored.hash);
+const hasRecovery = () => !!(stored.recoverySalt && stored.recoveryHash);
 
 function scrypt(password: string, salt: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => crypto.scrypt(password, salt, 32, { N: 16384, r: 8, p: 1 }, (err, key) => err ? reject(err) : resolve(key)));
 }
-async function verify(password: string): Promise<boolean> {
-  if (!stored.salt || !stored.hash || typeof password !== 'string' || password.length > 1024) return false;
-  const want = Buffer.from(stored.hash, 'hex');
-  const got = await scrypt(password, Buffer.from(stored.salt, 'hex'));
+async function matches(secret: string, salt: string | undefined, hash: string | undefined): Promise<boolean> {
+  if (!salt || !hash || typeof secret !== 'string' || secret.length > 1024) return false;
+  const want = Buffer.from(hash, 'hex');
+  const got = await scrypt(secret, Buffer.from(salt, 'hex'));
   return want.length === got.length && crypto.timingSafeEqual(want, got);
+}
+const verify = (password: string) => matches(password, stored.salt, stored.hash);
+
+/** Recovery code as typed: case, spaces and dashes do not matter. Null when it cannot be a code. */
+export function normalizeRecovery(input: string): string | null {
+  const s = input.toUpperCase().replace(/[\s-]/g, '');
+  return s.length === 20 && [...s].every((ch) => RECOVERY_ALPHABET.includes(ch)) ? s : null;
+}
+/** New recovery code; only its hash is stored, the plain code is returned once for the user to write down. */
+async function issueRecovery(): Promise<string> {
+  const code = [...crypto.randomBytes(20)].map((b) => RECOVERY_ALPHABET[b & 31]).join('');
+  const salt = crypto.randomBytes(16);
+  stored.recoverySalt = salt.toString('hex');
+  stored.recoveryHash = (await scrypt(code, salt)).toString('hex');
+  return code.match(/.{5}/g)!.join('-');
 }
 /** 5 free tries, then a wait that doubles per miss (30s → 10min). Shared by unlock and password change. */
 function noteFailure() {
@@ -121,6 +162,10 @@ export function lockNow() {
   locked = true;
   unlocking = false;
   hiddenWins = appWindows().filter((w) => w.isVisible());
+  rebuilds = 0;
+  lastAlive = lastTick = Date.now();
+  watchTimer = setInterval(watchdog, 5000);
+  beatServer(true);
   buildCovers();
   for (const w of hiddenWins) w.hide();
   focusMainCover(); // hiding the app's key window can leave no key window at all
@@ -167,7 +212,12 @@ function buildCovers() {
       if (++failedLoads > 20) { console.error('[lock] cover page unreachable; unlocking'); finishUnlock(); return; }
       setTimeout(() => { if (!win.isDestroyed()) void win.loadURL(`${appUrl}/?lock=${role}`).catch(() => {}); }, 1000);
     });
-    win.webContents.on('render-process-gone', () => { if (!win.isDestroyed() && locked) win.reload(); });
+    win.webContents.on('render-process-gone', () => {
+      if (!locked || win.isDestroyed() || !covers.some((c) => c.win === win)) return;
+      if (role === 'main') recoverCover('renderer gone'); else win.reload();
+    });
+    // Chromium's hang monitor: the page stopped handling input. Only the main cover takes input.
+    if (role === 'main') win.on('unresponsive', () => { if (locked && covers.some((c) => c.win === win)) recoverCover('unresponsive'); });
     void win.loadURL(`${appUrl}/?lock=${role}`).catch(() => {});
     if (role === 'main') {
       win.show();
@@ -213,6 +263,45 @@ function guardCover(win: BrowserWindow, role: 'main' | 'sub') {
   }
 }
 
+/**
+ * Every 5s while locked. The main cover's page pings every 10s once its password field is up; 35s of silence
+ * means the page is broken (blank, stuck, never rendered). Time spent asleep or behind the macOS lock does not count.
+ */
+function watchdog() {
+  const now = Date.now();
+  if (macLocked || now - lastTick > 15000) lastAlive = now;
+  lastTick = now;
+  if (now - lastBeat >= SERVER_BEAT_MS) beatServer(true);
+  if (locked && now - lastAlive > ALIVE_TIMEOUT_MS) recoverCover('no heartbeat');
+}
+
+/** Rebuild the covers (fresh renderer processes). Gives up and unlocks after MAX_REBUILDS failures in a row. */
+function recoverCover(reason: string) {
+  if (!locked) return;
+  if (++rebuilds > MAX_REBUILDS) {
+    console.error(`[lock] lock screen still broken after ${MAX_REBUILDS} rebuilds (${reason}); unlocking`);
+    finishUnlock();
+    return;
+  }
+  console.error(`[lock] lock screen ${reason}; rebuilding (${rebuilds}/${MAX_REBUILDS})`);
+  lastAlive = Date.now();
+  // Deferred: this can run inside one of the old covers' own event handlers.
+  setTimeout(() => { if (locked) buildCovers(); }, 0);
+}
+
+/** Tell the server we are alive (or that the lock ended). It kills and reopens the app if the beats stop while locked. */
+function beatServer(active: boolean) {
+  if (!serverUrl) return;
+  lastBeat = Date.now();
+  const body = JSON.stringify(active ? { active, pid: process.pid, exe: app.getPath('exe'), bundle: relaunchBundle, timeoutMs: 40000 } : { active });
+  try {
+    const req = http.request(`${serverUrl}/api/lock-watch`, { method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) }, timeout: 3000 });
+    req.on('error', () => {});
+    req.on('timeout', () => req.destroy());
+    req.end(body);
+  } catch { /* server down: nothing to tell */ }
+}
+
 function lockMac() {
   execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', MAC_LOCK_JXA], { timeout: 5000 }, (err) => {
     if (err) execFile('/usr/bin/pmset', ['displaysleepnow'], () => {});
@@ -225,6 +314,8 @@ function finishUnlock() {
   locked = false;
   failures = 0;
   retryAt = 0;
+  if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+  beatServer(false);
   const wins = hiddenWins;
   hiddenWins = [];
   const old = covers;
@@ -269,16 +360,22 @@ export function rememberLockForRelaunch() {
 
 type FromApp = (e: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) => boolean;
 
-export function initLockScreen(opts: { appUrl: string; preload: string; fromApp: FromApp }) {
+/**
+ * serverUrl: the local server that watches for a hung app while locked. relaunchBundle: the .app it reopens after
+ * killing a hung app (null in development, where there is no bundle to open).
+ */
+export function initLockScreen(opts: { appUrl: string; preload: string; fromApp: FromApp; serverUrl?: string; relaunchBundle?: string | null }) {
   file = path.join(app.getPath('userData'), 'lock-screen.json');
   appUrl = opts.appUrl;
   preload = opts.preload;
+  serverUrl = opts.serverUrl ?? '';
+  relaunchBundle = opts.relaunchBundle ?? null;
   load();
   const { fromApp } = opts;
   const isCover = (e: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) => covers.some((c) => c.win.webContents === e.sender);
   const fromAppWindow = (e: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) => fromApp(e) && !isCover(e);
 
-  ipcMain.handle('lock:get', (e) => fromAppWindow(e) ? { settings: settings(), hasPassword: hasPassword(), displays: layout() } : null);
+  ipcMain.handle('lock:get', (e) => fromAppWindow(e) ? { settings: settings(), hasPassword: hasPassword(), hasRecovery: hasRecovery(), displays: layout() } : null);
   ipcMain.handle('lock:set', (e, patch: unknown) => {
     if (!fromAppWindow(e) || !patch || typeof patch !== 'object') return null;
     Object.assign(stored, sanitize(patch as Partial<LockSettings>));
@@ -295,14 +392,27 @@ export function initLockScreen(opts: { appUrl: string; preload: string; fromApp:
       if (!(await verify(typeof current === 'string' ? current : ''))) { noteFailure(); return { ok: false, error: 'wrong', retryIn: retryIn() }; }
       failures = 0;
     }
-    if (next === '') { delete stored.salt; delete stored.hash; }
+    let recoveryCode: string | undefined;
+    if (next === '') { delete stored.salt; delete stored.hash; delete stored.recoverySalt; delete stored.recoveryHash; }
     else {
       const salt = crypto.randomBytes(16);
       stored.salt = salt.toString('hex');
       stored.hash = (await scrypt(next, salt)).toString('hex');
+      // First password (or none left after one was used): hand out a recovery code. A change keeps the existing one.
+      if (!hasRecovery()) recoveryCode = await issueRecovery();
     }
     save();
-    return { ok: true, hasPassword: hasPassword() };
+    return { ok: true, hasPassword: hasPassword(), hasRecovery: hasRecovery(), recoveryCode };
+  });
+  // A new recovery code replaces the old one; needs the current password.
+  ipcMain.handle('lock:recovery', async (e, current: unknown) => {
+    if (!fromAppWindow(e) || !hasPassword()) return { ok: false, error: 'invalid' };
+    if (retryIn() > 0) return { ok: false, error: 'wait', retryIn: retryIn() };
+    if (!(await verify(typeof current === 'string' ? current : ''))) { noteFailure(); return { ok: false, error: 'wrong', retryIn: retryIn() }; }
+    failures = 0;
+    const recoveryCode = await issueRecovery();
+    save();
+    return { ok: true, recoveryCode };
   });
   ipcMain.on('lock:now', (e) => { if (fromAppWindow(e)) lockNow(); });
   // The app window reports per-agent session counts; the covers show them without titles.
@@ -319,11 +429,24 @@ export function initLockScreen(opts: { appUrl: string; preload: string; fromApp:
     if (!c || !fromApp(e)) return null;
     return { role: c.role, self: c.display.bounds, displays: layout(), settings: settings(), sessions, retryIn: retryIn() };
   });
+  ipcMain.on('lock:alive', (e) => {
+    const c = covers.find((x) => x.win.webContents === e.sender);
+    if (c?.role === 'main' && fromApp(e)) { lastAlive = Date.now(); rebuilds = 0; }
+  });
   ipcMain.handle('lock:unlock', async (e, password: unknown) => {
     if (!isCover(e) || !fromApp(e) || !locked) return { ok: false };
     if (retryIn() > 0) return { ok: false, retryIn: retryIn() };
+    const input = typeof password === 'string' ? password : '';
     // Reply before the covers are destroyed, or the cover's pending invoke never settles.
-    if (await verify(typeof password === 'string' ? password : '')) { setTimeout(finishUnlock, 30); return { ok: true }; }
+    if (await verify(input)) { setTimeout(finishUnlock, 30); return { ok: true }; }
+    const code = normalizeRecovery(input);
+    if (code && await matches(code, stored.recoverySalt, stored.recoveryHash)) {
+      // Single use: once typed on the cover it may have been seen. Settings then offer a new one.
+      delete stored.recoverySalt; delete stored.recoveryHash;
+      save();
+      setTimeout(() => { finishUnlock(); openLockSettings(); }, 30);
+      return { ok: true };
+    }
     noteFailure();
     return { ok: false, retryIn: retryIn() };
   });
