@@ -3,7 +3,7 @@ import { api, type UsageSnapshot, type UsageWindow } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
 import Icon from './Icon';
 
-export type ViewMode = 'vibe' | 'ide' | 'agent';
+export type ViewMode = 'vibe' | 'ide' | 'agent' | 'tools';
 
 interface Props { mode: ViewMode; onMode: (m: ViewMode) => void; companions?: boolean; onCompanions?: () => void }
 
@@ -85,7 +85,7 @@ export default function UsageBar({ mode, onMode, companions, onCompanions }: Pro
       <div />
       {/* Mode switch, centered */}
       <div className="titlebar-nodrag flex items-center rounded-md bg-white/5 p-0.5 mx-3">
-        {(['vibe', 'ide', 'agent'] as ViewMode[]).map((m) => (
+        {(['vibe', 'ide', 'agent', 'tools'] as ViewMode[]).map((m) => (
           <button key={m} onClick={() => onMode(m)}
             className={`px-3 py-0.5 rounded text-[11px] font-medium transition-colors ${mode === m ? 'bg-white/15 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
             {t(`usage.${m}`)}

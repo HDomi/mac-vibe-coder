@@ -25,8 +25,9 @@ import Lightbox from './components/Lightbox';
 import Icon from './components/Icon';
 import SessionCompanions from './components/SessionCompanions';
 
-// CodeMirror and the explorer load the first time IDE mode is shown.
+// CodeMirror and the explorer load the first time IDE mode is shown; the toolbox likewise.
 const EditorPanel = lazy(() => import('./components/editor/EditorPanel'));
+const ToolboxView = lazy(() => import('./components/toolbox/ToolboxView'));
 
 const LS_CWD = 'vibe.cwd';
 const LS_PROJECT = 'vibe.project';
@@ -216,6 +217,8 @@ function AppInner() {
       // The editor owns ⌘W (close tab), ⌘/ (toggle comment), ⌘S and ⇧⌘K (delete line) while it has focus.
       const inEditor = !!(e.target as HTMLElement)?.closest?.('[data-editor-scope]');
       if (inEditor && (k === 'w' || k === '/' || k === 's' || k === 'k')) return;
+      // Tools mode has no sessions or panels; its own ⌘1-9 switch tools (see ToolboxView).
+      if (view === 'tools') return;
       if (view === 'ide') {
         // No chat or right panel on screen: ⌘W closes an editor tab (never a hidden session), ⌘B the explorer.
         if (k === 'w') { e.preventDefault(); if (editor.active) editor.close(editor.active); return; }
@@ -252,6 +255,8 @@ function AppInner() {
         {companions && <SessionCompanions sessions={Object.values(S.sessions)} scene={`${view}:${rightTab}:${rightCollapsed}`} />}
         {view === 'agent' ? (
           <AgentView home={home?.home ?? '~'} S={S} active={agentActive} setActive={setAgentActive} />
+        ) : view === 'tools' ? (
+          <Suspense fallback={null}><ToolboxView /></Suspense>
         ) : view === 'ide' ? (
           <div className="flex-1 flex min-h-0 relative">
             {project
