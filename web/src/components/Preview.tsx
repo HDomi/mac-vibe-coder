@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import ImageConvertDialog from './ImageConvertDialog';
 import { highlight, highlightedLines, LANGUAGES, languageFor, rememberLanguage } from '../lib/highlight';
 import { CopyButton } from './MarkdownView';
 import MarkdownView from './MarkdownView';
-import { api, formatSize, imageSrc, type Entry } from '../lib/api';
+import { api, ApiError, formatSize, imageSrc, type Entry, type TextFile } from '../lib/api';
+import { findTables } from '../lib/mdtable';
+
+// The grid editor only loads when a Markdown file's tables are edited.
+const MdTableEditor = lazy(() => import('./MdTableEditor'));
 import { t, useLang } from '../lib/i18n';
 
 interface Props { entry: Entry | null }
@@ -43,14 +47,29 @@ function CodeView({ content, name, ext }: { content: string; name: string; ext: 
 
 function TextView({ path, markdown, name, ext }: { path: string; markdown: boolean; name: string; ext: string }) {
   useLang();
-  const [state, setState] = useState<{ content: string; truncated: boolean } | null>(null);
+  const [state, setState] = useState<TextFile | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [mode, setMode] = useState<'view' | 'tables'>('view');
+  const [conflict, setConflict] = useState(false);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true;
-    setState(null); setErr(null);
+    setState(null); setErr(null); setConflict(false);
     api.text(path).then((r) => alive && setState(r)).catch((e) => alive && setErr(e.message));
     return () => { alive = false; };
-  }, [path]);
+  }, [path, tick]);
+  useEffect(() => { setMode('view'); }, [path]);
+  const tableCount = useMemo(() => (markdown && state ? findTables(state.content).length : 0), [markdown, state]);
+  const saveTables = async (next: string) => {
+    if (!state) return;
+    try {
+      const r = await api.saveText(path, next, { baseMtime: state.mtime, bom: state.bom });
+      setState({ ...state, content: next, mtime: r.mtime, size: r.size });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) { setConflict(true); throw new Error(t('preview.table.conflict')); }
+      throw e;
+    }
+  };
   if (err) return <div className="p-4 text-red-300 text-sm">{err}</div>;
   if (!state) return <div className="p-4 text-zinc-500 text-sm">{t('common.loading')}</div>;
   if (!markdown) {
@@ -61,10 +80,28 @@ function TextView({ path, markdown, name, ext }: { path: string; markdown: boole
       </div>
     );
   }
+  const editable = !state.truncated && !state.lossy && !state.binary;
   return (
     <div className="p-5">
       {state.truncated && <div className="mb-3 text-xs text-amber-400">{t('preview.truncated')}</div>}
-      <MarkdownView text={state.content} baseDir={path.slice(0, path.lastIndexOf('/'))} className="prose-md max-w-3xl text-[15px]" />
+      {editable && (
+        <div className="mb-4 flex items-center gap-2 text-[11px]">
+          <div className="inline-flex items-center rounded-md bg-white/5 p-0.5">
+            {(['view', 'tables'] as const).map((m) => (
+              <button key={m} onClick={() => setMode(m)} className={`px-2 py-0.5 rounded ${mode === m ? 'bg-white/15 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                {m === 'view' ? t('preview.table.view') : t('preview.table.edit', { n: tableCount })}
+              </button>
+            ))}
+          </div>
+          {conflict && <>
+            <span className="text-amber-400">{t('preview.table.conflict')}</span>
+            <button className="px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/15 text-zinc-200" onClick={() => setTick((n) => n + 1)}>{t('preview.table.reload')}</button>
+          </>}
+        </div>
+      )}
+      {mode === 'tables' && editable
+        ? <Suspense fallback={null}><MdTableEditor text={state.content} onSave={saveTables} /></Suspense>
+        : <MarkdownView text={state.content} baseDir={path.slice(0, path.lastIndexOf('/'))} className="prose-md max-w-3xl text-[15px]" />}
     </div>
   );
 }
