@@ -49,8 +49,9 @@ function Ports() {
   const [err, setErr] = useState<string | null>(null);
   const [filter, setFilter] = usePersisted('net.filter', '');
   const [stopped, setStopped] = useState<Record<number, 'term' | 'kill'>>({});
+  const [lan, setLan] = useState<string | null>(null);
   const load = useCallback(() => { api.netPorts().then((l) => { setList(l); setErr(null); }).catch((e) => setErr(errText(e))); }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); api.netInfo().then((i) => setLan(i.lan)).catch(() => {}); }, [load]);
   const home = useMemo(() => list?.find((p) => p.cwd?.startsWith('/Users/'))?.cwd?.split('/').slice(0, 3).join('/') ?? '', [list]);
   const shown = useMemo(() => {
     const f = filter.trim().toLowerCase();
@@ -76,13 +77,13 @@ function Ports() {
     </>}>
       {err && <div className="text-[11px] text-red-400">{err}</div>}
       <div className="rounded-md border border-white/10 overflow-hidden text-[12px]">
-        <div className="grid grid-cols-[64px_100px_1fr_64px_1.2fr_200px] gap-3 px-2.5 py-1.5 bg-white/[.03] text-[11px] text-zinc-500">
+        <div className="grid grid-cols-[64px_100px_1fr_64px_1.2fr_240px] gap-3 px-2.5 py-1.5 bg-white/[.03] text-[11px] text-zinc-500">
           <span>{t('tb.net.port')}</span><span>{t('tb.net.bind')}</span><span>{t('tb.net.process')}</span><span>PID</span><span>{t('tb.net.folder')}</span><span />
         </div>
         {list === null && <div className="px-2.5 py-2 text-zinc-500">{t('common.loading')}</div>}
         {list && !shown.length && <div className="px-2.5 py-2 text-zinc-500">{t('tb.net.noPorts')}</div>}
         {shown.map((p) => (
-          <div key={`${p.pid}:${p.port}`} className={`grid grid-cols-[64px_100px_1fr_64px_1.2fr_200px] gap-3 items-center px-2.5 py-1 border-t border-white/5 ${stopped[p.pid] ? 'opacity-40' : ''}`}>
+          <div key={`${p.pid}:${p.port}`} className={`grid grid-cols-[64px_100px_1fr_64px_1.2fr_240px] gap-3 items-center px-2.5 py-1 border-t border-white/5 ${stopped[p.pid] ? 'opacity-40' : ''}`}>
             <span className={`${mono} text-zinc-100`}>{p.port}</span>
             <span className={`text-[11px] ${local(p.addresses) ? 'text-zinc-500' : 'text-amber-300'}`} title={p.addresses.join(', ')}>{local(p.addresses) ? t('tb.net.localOnly') : t('tb.net.allIfaces')}</span>
             <span className="truncate text-zinc-300" title={p.command}>{p.command}{p.self && <span className="ml-1.5 text-[10px] text-blue-300">{t('tb.net.thisApp')}</span>}</span>
@@ -91,6 +92,7 @@ function Ports() {
             <span className="flex items-center justify-end gap-1.5">
               <CopyButton text={`http://localhost:${p.port}`} label="URL" />
               <button className={btn} onClick={() => openTool('http', { request: { method: 'GET', url: `http://localhost:${p.port}/`, headers: [] } })}>{t('tb.net.request')}</button>
+              {lan && !local(p.addresses) && <button className={btn} title={t('tb.net.qrHint')} onClick={() => openTool('qr', { text: `http://${lan}:${p.port}/` })}>QR</button>}
               {!p.self && (stopped[p.pid] === 'term'
                 ? <button className={`${btn} text-red-300`} onClick={() => stop(p, true)}>{t('tb.net.forceKill')}</button>
                 : <button className={`${btn} text-red-300`} onClick={() => stop(p, false)}>{t('tb.net.stop')}</button>)}

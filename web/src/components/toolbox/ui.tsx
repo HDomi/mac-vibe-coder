@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { highlight } from '../../lib/highlight';
+import { api } from '../../lib/api';
 import { t } from '../../lib/i18n';
 
 const LS = 'vibe.toolbox.';
@@ -130,7 +131,7 @@ export function Section({ title, children, className = '', actions }: { title: R
 export const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** Read-only highlighted code block with a header row (label, actions, copy). */
-export function Code({ code, lang, label, actions, className = '', error }: { code: string; lang: string; label?: ReactNode; actions?: ReactNode; className?: string; error?: string | null }) {
+export function Code({ code, lang, label, actions, className = '', error, wrap }: { code: string; lang: string; label?: ReactNode; actions?: ReactNode; className?: string; error?: string | null; wrap?: boolean }) {
   const html = useMemo(() => (code ? highlight(code, lang) : ''), [code, lang]);
   return (
     <div className={`flex flex-col min-h-0 ${className}`}>
@@ -139,9 +140,59 @@ export function Code({ code, lang, label, actions, className = '', error }: { co
         {actions}
         <CopyButton text={code} />
       </div>
-      <pre className={`hljs flex-1 min-h-[3em] overflow-auto rounded-md border px-2.5 py-2 ${mono} !bg-white/[.03] whitespace-pre ${error ? 'border-red-500/50' : 'border-white/10'}`}>
+      <pre className={`hljs flex-1 min-h-[3em] overflow-auto rounded-md border px-2.5 py-2 ${mono} !bg-white/[.03] ${wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'} ${error ? 'border-red-500/50' : 'border-white/10'}`}>
         {error ? <span className="text-red-400 whitespace-pre-wrap">{error}</span> : <code dangerouslySetInnerHTML={{ __html: html }} />}
       </pre>
     </div>
   );
 }
+
+/** Native Save As in the app (writes through the server); a download in a plain browser tab. Resolves to the saved path or null. */
+export async function saveBytes(name: string, base64: string): Promise<string | null> {
+  const ext = name.includes('.') ? name.split('.').pop()! : '';
+  if (window.vibe?.saveDialog) {
+    const target = await window.vibe.saveDialog({ defaultPath: name, ext });
+    if (!target) return null;
+    await api.imageWrite(target, base64, true);
+    return target;
+  }
+  const a = document.createElement('a');
+  a.href = `data:application/octet-stream;base64,${base64}`;
+  a.download = name;
+  a.click();
+  return name;
+}
+
+export function blobToBase64(b: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ''));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(b);
+  });
+}
+
+/** Click to pick, drop a file, or paste one (⌘V) while the tool is on screen. */
+export function DropZone({ accept, onFile, children, className = '' }: { accept?: string; onFile: (f: File) => void; children: ReactNode; className?: string }) {
+  const [over, setOver] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const h = (e: ClipboardEvent) => {
+      if ((e.target as HTMLElement)?.closest?.('input, textarea')) return;
+      const f = [...(e.clipboardData?.files ?? [])][0];
+      if (f) { e.preventDefault(); onFile(f); }
+    };
+    window.addEventListener('paste', h);
+    return () => window.removeEventListener('paste', h);
+  }, [onFile]);
+  return (
+    <div onClick={() => ref.current?.click()} onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
+      onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f) onFile(f); }}
+      className={`cursor-pointer rounded-md border border-dashed flex items-center justify-center text-center text-[12px] text-zinc-500 ${over ? 'border-blue-400 bg-blue-500/10' : 'border-white/15 hover:border-white/30 hover:bg-white/[.02]'} ${className}`}>
+      <input ref={ref} type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }} />
+      {children}
+    </div>
+  );
+}
+
+export const fmtBytes = (n: number) => (n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 ** 2).toFixed(2)} MB`);
