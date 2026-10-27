@@ -30,6 +30,8 @@ interface Entry {
   verifying?: { id: string; cancel: () => void };
   /** Working tree snapshot taken before the current turn (git projects only). */
   turnBase?: Snapshot | null;
+  /** Sends are serialized: a message waiting for its snapshot must not be overtaken by the next one. */
+  sendChain: Promise<void>;
 }
 
 export class SessionRegistry {
@@ -76,7 +78,7 @@ export class SessionRegistry {
       throw new Error(`Unknown agent: ${cmd.agent}`);
     }
     if (this.closing || ws.readyState !== ws.OPEN) throw new Error('Connection closed before session started');
-    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set([ws]), createdAt: Date.now(), lastActivity: Date.now(), running: false, closed: false, bufferBytes: 0, touched: false };
+    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set([ws]), createdAt: Date.now(), lastActivity: Date.now(), running: false, closed: false, bufferBytes: 0, touched: false, sendChain: Promise.resolve() };
     this.entries.set(session.id, entry);
     session.onEvent((event) => this.broadcast(entry, event));
     return session;
@@ -109,12 +111,23 @@ export class SessionRegistry {
     await e.session.close();
   }
 
-  /** Snapshot the working tree before a message starts a new turn; bounded so a huge repo cannot hold the send. */
-  async beforeSend(id: string) {
+  /**
+   * Hand a message to the CLI, in arrival order. A message that starts a new turn first snapshots the
+   * working tree (bounded, so a huge repo cannot hold the send for long).
+   */
+  send(id: string, run: () => Promise<void>): Promise<void> {
     const e = this.entries.get(id);
-    if (!e || e.running || e.closed) return;
-    const timeout = new Promise<null>((r) => setTimeout(() => r(null), 8000).unref());
-    e.turnBase = await Promise.race([snapshot(e.session.cwd).catch(() => null), timeout]);
+    if (!e) return Promise.reject(new Error('Unknown session'));
+    const job = e.sendChain.then(async () => {
+      if (e.closed || !this.entries.has(id)) throw new Error('Session closed');
+      if (!e.running) {
+        const timeout = new Promise<null>((r) => setTimeout(() => r(null), 3000).unref());
+        e.turnBase = await Promise.race([snapshot(e.session.cwd).catch(() => null), timeout]);
+      }
+      await run();
+    });
+    e.sendChain = job.catch(() => {});
+    return job;
   }
 
   /** After a turn: report what it changed, then verify if it changed anything. */
@@ -232,11 +245,11 @@ async function handle(cmd: ClientCommand, ws: WebSocket, registry: SessionRegist
       safeSend(ws, { type: 'session.attached', sessionId: cmd.sessionId });
       if (!registry.attach(cmd.sessionId, ws, cmd.after)) safeSend(ws, { type: 'session.missing', sessionId: cmd.sessionId });
       return;
-    case 'session.send':
-      must(registry, cmd.sessionId);
-      await registry.beforeSend(cmd.sessionId);
-      await must(registry, cmd.sessionId).send(cmd.text, cmd.attachments ?? [], cmd.messageId);
+    case 'session.send': {
+      const s = must(registry, cmd.sessionId);
+      await registry.send(cmd.sessionId, () => s.send(cmd.text, cmd.attachments ?? [], cmd.messageId));
       return;
+    }
     case 'session.rewind': {
       const s = must(registry, cmd.sessionId);
       const result = s.rewindFiles
