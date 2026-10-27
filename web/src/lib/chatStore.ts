@@ -119,6 +119,8 @@ export interface ChatSession {
   worktree?: WorktreeInfo;
   /** Sessions started together on one prompt (Claude vs Codex comparison) share this key. */
   pairKey?: string;
+  /** Opened from a previous conversation; the chat shows a briefing of what it already did. */
+  resumed?: boolean;
   /** Last turn start, turn end or request (server ms); tabs sort by this, newest first. */
   lastActivity?: number;
   status: 'starting' | 'running' | 'idle' | 'compacting' | 'closed';

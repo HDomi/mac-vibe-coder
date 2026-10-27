@@ -17,6 +17,7 @@ import { TurnChangesItem } from './TurnChanges';
 import WorktreeChip from './WorktreeChip';
 import { useUsage } from '../lib/usageStore';
 import { minutesLabel } from './UsageBar';
+import { sessionBrief } from '../lib/brief';
 
 /** Same prompt to Claude and Codex, each in its own worktree, to compare and keep the better result. */
 export interface PairOptions { prompt: string; branch?: string; permissionMode: PermissionModeId; models: { claude: string | null; codex: string | null } }
@@ -106,6 +107,40 @@ function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: 
     case 'changes': return <TurnChangesItem key={it.id} item={it} onReview={actions.review ? () => actions.review!(it) : undefined} reviewer={actions.otherAgent} />;
     case 'verify': return <VerifyItem key={it.id} item={it} latest={it.id === actions.latestVerify} onRerun={it.id === actions.latestVerify ? actions.verify : undefined} />;
   }
+}
+
+/** Pinned to the top of a resumed conversation: what it already did, without scrolling back through it. */
+function ResumeBrief({ session }: { session: ChatSession }) {
+  useLang();
+  const [open, setOpen] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const b = useMemo(() => sessionBrief(session), [session.items, session.todos, session.cwd]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (hidden || !b.asks) return null;
+  const parts = [t('brief.asks', { n: b.asks }), b.files.length ? t('brief.files', { n: b.files.length }) : null, b.commits.length ? t('brief.commits', { n: b.commits.length }) : null, b.todos.length ? t('brief.todos', { n: b.todos.length }) : null].filter(Boolean);
+  return (
+    <div className="sticky top-0 z-10 -mx-5 -mt-4 mb-1 px-5 pt-2 pb-2 bg-[#0b0d12]/95 backdrop-blur border-b border-white/5">
+      <div className="rounded-lg border border-sky-400/20 bg-sky-400/[0.05] text-[12px]">
+        <div className="flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none" onClick={() => setOpen((v) => !v)}>
+          <Icon name="undo" size={12} className="text-sky-300 shrink-0" />
+          <span className="text-sky-100 font-medium whitespace-nowrap">{t('brief.title')}</span>
+          <span className="truncate min-w-0 text-zinc-400">{parts.join(' · ')}</span>
+          <div className="flex-1" />
+          <span className="text-zinc-500 text-[10px]">{open ? '▾' : '▸'}</span>
+          <button onClick={(e) => { e.stopPropagation(); setHidden(true); }} className="text-zinc-500 hover:text-zinc-200"><Icon name="close" size={11} /></button>
+        </div>
+        {open && (
+          <div className="border-t border-sky-400/10 px-3 py-2 space-y-2 max-h-72 overflow-y-auto">
+            {b.files.length > 0 && <div><div className="text-[11px] text-zinc-500 mb-0.5">{t('brief.filesTitle')}</div><div className="flex flex-wrap gap-1">{b.files.slice(0, 30).map((f) => (
+              <button key={f} onClick={() => window.dispatchEvent(new CustomEvent('vibe:open-file', { detail: { path: f.startsWith('/') ? f : `${session.cwd}/${f}` } }))} className="rounded bg-white/5 hover:bg-white/10 px-1.5 py-0.5 font-mono text-[11px] text-zinc-300">{f}</button>
+            ))}{b.files.length > 30 && <span className="text-[11px] text-zinc-500">+{b.files.length - 30}</span>}</div></div>}
+            {b.commits.length > 0 && <div><div className="text-[11px] text-zinc-500 mb-0.5">{t('brief.commitsTitle')}</div>{b.commits.slice(-8).map((c, i) => <div key={i} className="font-mono text-[11.5px] text-zinc-300 truncate">{c}</div>)}</div>}
+            {b.todos.length > 0 && <div><div className="text-[11px] text-zinc-500 mb-0.5">{t('brief.todosTitle')}</div>{b.todos.map((x, i) => <div key={i} className="text-zinc-300">☐ {x}</div>)}</div>}
+            {b.last && <div><div className="text-[11px] text-zinc-500 mb-0.5">{t('brief.lastTitle')}</div><div className="text-zinc-400 whitespace-pre-wrap line-clamp-6">{b.last}</div></div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** Above the composer when this agent's 5-hour window is nearly used up: offer to continue with the other one. */
@@ -448,6 +483,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
           onJump={() => { stick.current = false; setAtBottom(false); }} />}
         <div ref={scroller} className="absolute inset-0 overflow-y-auto" onScroll={onScroll} onWheel={onWheel}>
           <div ref={content} className="px-5 py-4 space-y-3">
+            {session.resumed && <ResumeBrief session={session} />}
             {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.restoring ? t('chat.restoring') : session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}
             {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd, rewind: canRewind ? rewind : undefined, latestVerify, verify: running ? undefined : onVerify, review: onCrossReview, otherAgent: session.agent === 'claude' ? 'Codex' : 'Claude' }))}
           </div>

@@ -44,8 +44,8 @@ export function requestNotificationPermission() {
   if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission();
 }
 
-interface Persisted { id: string; cwd: string; agent: AgentId; agentSessionId?: string; permissionMode?: PermissionModeId; model?: string; historyLen?: number; title?: string; pinned?: boolean; lastActivity?: number; worktree?: WorktreeInfo; pairKey?: string }
-interface PendingStart { cwd: string; resolve: (id: string) => void; reject: (err: Error) => void; preload: ChatItem[]; historyLen?: number; replaces?: string; title?: string; worktree?: WorktreeInfo; pairKey?: string }
+interface Persisted { id: string; cwd: string; agent: AgentId; agentSessionId?: string; permissionMode?: PermissionModeId; model?: string; historyLen?: number; title?: string; pinned?: boolean; lastActivity?: number; worktree?: WorktreeInfo; pairKey?: string; resumed?: boolean }
+interface PendingStart { cwd: string; resolve: (id: string) => void; reject: (err: Error) => void; preload: ChatItem[]; historyLen?: number; replaces?: string; title?: string; worktree?: WorktreeInfo; pairKey?: string; resumed?: boolean }
 /** A revived session that goes missing again this soon is reported lost instead of looping. */
 const REVIVE_COOLDOWN_MS = 30000;
 
@@ -91,7 +91,7 @@ export function useSessions() {
           if (m.requestId) pendingStart.current.delete(m.requestId);
           const fresh: ChatSession = {
             id: m.sessionId, agent: m.agent ?? 'claude', cwd: m.requestCwd, permissionMode: 'default', status: 'starting',
-            items: p?.preload ?? [], historyLen: p?.historyLen, title: p?.title, worktree: p?.worktree, pairKey: p?.pairKey, totalCostUsd: 0, lastSeq: 0, lastActivity: Date.now(),
+            items: p?.preload ?? [], historyLen: p?.historyLen, title: p?.title, worktree: p?.worktree, pairKey: p?.pairKey, resumed: p?.resumed, totalCostUsd: 0, lastSeq: 0, lastActivity: Date.now(),
           };
           const old = p?.replaces;
           setSessions((prev) => {
@@ -100,7 +100,7 @@ export function useSessions() {
             // Keep the tab where it was and the conversation on screen; history replay (Claude) wins when available.
             const items = fresh.items.length ? fresh.items : was.items.filter((it) => !it.id.startsWith('gone-')).map((it) =>
               it.kind === 'assistant' ? { ...it, streaming: false } : it.kind === 'tool' ? { ...it, done: true } : it);
-            const revived: ChatSession = { ...fresh, title: fresh.title ?? was.title, pinned: was.pinned, lastActivity: was.lastActivity, permissionMode: was.permissionMode, model: was.model, agentSessionId: was.agentSessionId, worktree: fresh.worktree ?? was.worktree, pairKey: fresh.pairKey ?? was.pairKey, items: [...items, { kind: 'system', id: `revived-${m.sessionId}`, text: t('session.revived') }] };
+            const revived: ChatSession = { ...fresh, title: fresh.title ?? was.title, pinned: was.pinned, lastActivity: was.lastActivity, permissionMode: was.permissionMode, model: was.model, agentSessionId: was.agentSessionId, worktree: fresh.worktree ?? was.worktree, pairKey: fresh.pairKey ?? was.pairKey, resumed: was.resumed, items: [...items, { kind: 'system', id: `revived-${m.sessionId}`, text: t('session.revived') }] };
             return Object.fromEntries(Object.entries(prev).map(([k, v]) => k === old ? [m.sessionId, revived] : [k, v]));
           });
           if (old) {
@@ -154,7 +154,7 @@ export function useSessions() {
     if (!saved.length) return;
     setSessions((prev) => {
       const next = { ...prev };
-      for (const p of saved) if (!next[p.id]) next[p.id] = { id: p.id, agent: p.agent, cwd: p.cwd, agentSessionId: p.agentSessionId, historyLen: p.historyLen, title: p.title, pinned: p.pinned, lastActivity: p.lastActivity, worktree: p.worktree, pairKey: p.pairKey, permissionMode: p.permissionMode ?? 'default', model: p.model, status: 'idle', items: [], totalCostUsd: 0, lastSeq: 0, restoring: true };
+      for (const p of saved) if (!next[p.id]) next[p.id] = { id: p.id, agent: p.agent, cwd: p.cwd, agentSessionId: p.agentSessionId, historyLen: p.historyLen, title: p.title, pinned: p.pinned, lastActivity: p.lastActivity, worktree: p.worktree, pairKey: p.pairKey, resumed: p.resumed, permissionMode: p.permissionMode ?? 'default', model: p.model, status: 'idle', items: [], totalCostUsd: 0, lastSeq: 0, restoring: true };
       return next;
     });
     for (const p of saved) void reattach(p);
@@ -183,7 +183,7 @@ export function useSessions() {
   };
 
   useEffect(() => {
-    const list: Persisted[] = Object.values(sessions).filter((s) => s.status !== 'closed').map((s) => ({ id: s.id, cwd: s.cwd, agent: s.agent, agentSessionId: s.agentSessionId, permissionMode: s.permissionMode, model: s.model, historyLen: s.historyLen, title: s.title, pinned: s.pinned, lastActivity: s.lastActivity, worktree: s.worktree, pairKey: s.pairKey }));
+    const list: Persisted[] = Object.values(sessions).filter((s) => s.status !== 'closed').map((s) => ({ id: s.id, cwd: s.cwd, agent: s.agent, agentSessionId: s.agentSessionId, permissionMode: s.permissionMode, model: s.model, historyLen: s.historyLen, title: s.title, pinned: s.pinned, lastActivity: s.lastActivity, worktree: s.worktree, pairKey: s.pairKey, resumed: s.resumed }));
     try { localStorage.setItem(LS_ACTIVE, JSON.stringify(list)); } catch { /* ignore */ }
   }, [sessions]);
 
@@ -205,7 +205,7 @@ export function useSessions() {
     }
     return new Promise<string>((resolve, reject) => {
       const requestId = crypto.randomUUID();
-      pendingStart.current.set(requestId, { cwd, resolve, reject, preload, historyLen, replaces: opts.replaces, title: opts.title, worktree: opts.worktree, pairKey: opts.pairKey });
+      pendingStart.current.set(requestId, { cwd, resolve, reject, preload, historyLen, replaces: opts.replaces, title: opts.title, worktree: opts.worktree, pairKey: opts.pairKey, resumed: !!opts.resume && !opts.replaces });
       agentClient.send({ type: 'session.start', requestId, agent: opts.agent ?? 'claude', cwd, resume: opts.resume, permissionMode: opts.permissionMode, model: opts.model ?? undefined });
     });
   }, []);

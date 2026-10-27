@@ -1131,6 +1131,15 @@ const en: Record<string, string> = {
   'git.suggesting': 'Writing…',
   'git.suggestHint': 'Write the message from the staged diff with your CLI, following this repository\'s conventions',
   'git.suggestNothing': 'Stage changes first',
+  'brief.title': 'Picking up',
+  'brief.asks': '{n} request(s)',
+  'brief.files': '{n} file(s) edited',
+  'brief.commits': '{n} commit(s)',
+  'brief.todos': '{n} open todo(s)',
+  'brief.filesTitle': 'Files edited',
+  'brief.commitsTitle': 'Commits made',
+  'brief.todosTitle': 'Still open',
+  'brief.lastTitle': 'Last answer',
 };
 
 const ko: Record<string, string> = {
@@ -2243,6 +2252,15 @@ const ko: Record<string, string> = {
   'git.suggesting': '작성 중…',
   'git.suggestHint': '스테이지된 diff 로 이 레포 컨벤션에 맞는 커밋 메시지를 CLI 가 작성',
   'git.suggestNothing': '먼저 변경을 스테이지해',
+  'brief.title': '이어서',
+  'brief.asks': '요청 {n}개',
+  'brief.files': '파일 {n}개 수정',
+  'brief.commits': '커밋 {n}개',
+  'brief.todos': '남은 할 일 {n}개',
+  'brief.filesTitle': '수정한 파일',
+  'brief.commitsTitle': '만든 커밋',
+  'brief.todosTitle': '남은 할 일',
+  'brief.lastTitle': '마지막 답변',
 };
 
 const dict: Record<Lang, Record<string, string>> = { en, ko };
