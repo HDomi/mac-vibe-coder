@@ -15,7 +15,7 @@ import { previewKind } from './mime.js';
 import { codexThreadOp, listCodexModels, listCodexThreads } from './agents/codex.js';
 import { listClaudeModels } from './agents/claude.js';
 import { which, run } from './shell.js';
-import { applyUpdate, checkUpdate, isUpdating, readBuildInfo, REPO_ROOT, RESTART_EXIT_CODE } from './updater.js';
+import { applyUpdate, checkUpdate, isUpdating, readBuildInfo, REPO_ROOT, RESTART_EXIT_CODE, UPDATE_SOURCE } from './updater.js';
 /** Claude Code stores its compaction summary as a user turn; never surface it as a session title. */
 const isCompactSummary = (text?: string | null) => (text ?? '').trimStart().startsWith('This session is being continued from a previous conversation');
 
@@ -424,7 +424,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
     return c.json(await gitCommit(b.cwd, b.message));
   });
 
-  // Self-update from the git remote.
+  // Self-update: GitHub releases for the standalone app, the git remote for a source checkout (updater.ts).
   app.get('/api/update/status', async (c) => c.json(await checkUpdate(c.req.query('force') === '1')));
   app.get('/api/update/apply', (c) => streamSSE(c, async (stream) => {
     if (isUpdating()) {
@@ -438,7 +438,9 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
       await stream.writeSSE({ event: 'done', data: '1' });
       return;
     }
-    await stream.writeSSE({ event: 'start', data: 'Clone, install and build in a temporary directory, then replace the installed build' });
+    await stream.writeSSE({ event: 'start', data: UPDATE_SOURCE === 'release'
+      ? 'Download the latest release, verify it, and install it when the app restarts'
+      : 'Clone, install and build in a temporary directory, then replace the installed build' });
     const code = await applyUpdate((line, src) => { stream.writeSSE({ event: src, data: line }).catch(() => {}); }).catch((e) => { stream.writeSSE({ event: 'stderr', data: String((e as Error).message) }).catch(() => {}); return 1; });
     await stream.writeSSE({ event: 'done', data: String(code) });
     if (code === 0) {

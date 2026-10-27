@@ -41,7 +41,7 @@ export interface HistorySession { agent: 'claude' | 'codex'; sessionId: string; 
 export interface HistoryMessage { type: string; uuid: string; message: unknown; parent_tool_use_id: string | null }
 
 export interface BuildInfo { version: string; commit: string; builtAt: string | null }
-export interface UpdateStatus { repo: string; branch: string | null; installed: BuildInfo; remote: BuildInfo | null; available: boolean; commits: { hash: string; subject: string }[]; checkedAt: number; error: string | null }
+export interface UpdateStatus { source: 'release' | 'git'; repo: string; branch: string | null; installed: BuildInfo; remote: BuildInfo | null; available: boolean; commits: { hash: string; subject: string }[]; checkedAt: number; error: string | null }
 
 export interface GitFile { path: string; index: string; worktree: string; staged: boolean; untracked: boolean }
 export interface GitCommit { hash: string; parents: string[]; refs: string[]; subject: string; author: string; date: string }

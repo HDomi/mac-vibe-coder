@@ -2,7 +2,15 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { run, streamShell } from './shell.js';
 import { REPO_ROOT } from './paths.js';
+import { bundleOf, bundleProblem, latestRelease, releaseCommits, stageRelease, type Release } from './releaseUpdate.js';
 export { REPO_ROOT };
+
+/**
+ * Two update sources. The standalone app (a .app bundle from electron-builder) updates from GitHub releases;
+ * a source checkout (development, or the older install.sh launcher) updates with git as before.
+ */
+export const APP_BUNDLE = bundleOf(REPO_ROOT);
+export const UPDATE_SOURCE: 'release' | 'git' = APP_BUNDLE ? 'release' : 'git';
 
 const CHECK_TTL_MS = 10 * 60 * 1000;
 /** Exit code that tells the launcher (Electron / launchd) to restart us after an update. */
@@ -11,6 +19,7 @@ export const RESTART_EXIT_CODE = 75;
 export interface BuildInfo { version: string; commit: string; builtAt: string | null }
 
 export interface UpdateStatus {
+  source: 'release' | 'git';
   repo: string;
   branch: string | null;
   /** What the running app was built from (dist/build-info.json). */
@@ -64,15 +73,39 @@ const INSTALLED: BuildInfo = readBuildInfo();
 
 export function checkUpdate(force = false): Promise<UpdateStatus> {
   if (checking) return checking;
-  if (applying) return Promise.resolve(cached ?? { repo: REPO_ROOT, branch: null, installed: INSTALLED, remote: null, available: false, commits: [], checkedAt: Date.now(), error: 'An update is running' });
+  if (applying) return Promise.resolve(cached ?? { source: UPDATE_SOURCE, repo: REPO_ROOT, branch: null, installed: INSTALLED, remote: null, available: false, commits: [], checkedAt: Date.now(), error: 'An update is running' });
   checking = readUpdate(force).finally(() => { checking = null; });
   return checking;
+}
+
+let latest: Release | null = null;
+
+async function readReleaseUpdate(status: UpdateStatus): Promise<UpdateStatus> {
+  try {
+    const problem = bundleProblem(APP_BUNDLE!);
+    if (problem) throw new Error(problem);
+    const release = await latestRelease();
+    latest = release;
+    const version = release.tag_name.replace(/^v/, '');
+    status.remote = { version, commit: '', builtAt: null };
+    status.available = compareVersions(version, status.installed.version) > 0;
+    if (status.available) {
+      status.commits = await releaseCommits(`v${status.installed.version}`, release.tag_name);
+      status.remote.commit = status.commits[0]?.hash ?? '';
+    }
+  } catch (err) {
+    // A repository without any release yet answers 404 for releases/latest.
+    status.error = (err as { status?: number }).status === 404 ? 'No release has been published yet.' : (err as Error).message;
+  }
+  cached = status;
+  return status;
 }
 
 async function readUpdate(force: boolean): Promise<UpdateStatus> {
   if (!force && cached && Date.now() - cached.checkedAt < CHECK_TTL_MS) return cached;
   const installed = INSTALLED;
-  const status: UpdateStatus = { repo: REPO_ROOT, branch: null, installed, remote: null, available: false, commits: [], checkedAt: Date.now(), error: null };
+  if (UPDATE_SOURCE === 'release') return readReleaseUpdate({ source: 'release', repo: APP_BUNDLE!, branch: null, installed, remote: null, available: false, commits: [], checkedAt: Date.now(), error: null });
+  const status: UpdateStatus = { source: 'git', repo: REPO_ROOT, branch: null, installed, remote: null, available: false, commits: [], checkedAt: Date.now(), error: null };
   try {
     const branch = await git(['rev-parse', '--abbrev-ref', 'HEAD']);
     if (!branch.ok) throw new Error(branch.stderr || 'not a git repository');
@@ -122,6 +155,13 @@ async function readUpdate(force: boolean): Promise<UpdateStatus> {
  * A failure anywhere leaves the running installation untouched.
  */
 export function applyUpdate(onLine: (line: string, stream: 'stdout' | 'stderr') => void): Promise<number> {
+  if (UPDATE_SOURCE === 'release') {
+    if (applying) return Promise.reject(new Error('An update is already running'));
+    applying = true;
+    // Always the latest release (also for "reinstall latest"), fetched again so a stale check is not applied.
+    return (checking ?? Promise.resolve()).then(async () => stageRelease(latest = await latestRelease(), onLine))
+      .finally(() => { applying = false; cached = null; });
+  }
   const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
   const cmd = `/bin/zsh ${quote(path.join(REPO_ROOT, 'scripts/apply-update.sh'))}`;
   if (applying) return Promise.reject(new Error('An update is already running'));

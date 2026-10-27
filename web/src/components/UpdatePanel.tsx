@@ -37,6 +37,7 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [log]);
   // While an update runs (or the server restarts) the modal cannot be dismissed: the log is the only feedback.
   const locked = phase === 'running' || phase === 'restarting';
+  const release = status?.source === 'release';
   const close = () => { if (!locked) onClose(); };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
@@ -90,12 +91,12 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
           {status && !status.error && (
             <div className="text-xs text-zinc-400 space-y-0.5">
               <div>{t('update.installed')}: <span className="text-zinc-200">v{status.installed.version}</span> <span className="font-mono">{status.installed.commit}</span>{status.installed.builtAt ? ` · ${new Date(status.installed.builtAt).toLocaleString()}` : ''}</div>
-              <div>{t('update.pushed')}: <span className="text-zinc-200">v{status.remote?.version ?? '?'}</span> <span className="font-mono">{status.remote?.commit ?? ''}</span> · {status.branch}</div>
+              <div>{t(release ? 'update.latestRelease' : 'update.pushed')}: <span className="text-zinc-200">v{status.remote?.version ?? '?'}</span> <span className="font-mono">{status.remote?.commit ?? ''}</span>{status.branch ? ` · ${status.branch}` : ''}</div>
             </div>
           )}
           {status && status.available ? (
             <div className="rounded-lg border border-white/10 divide-y divide-white/5">
-              {status.commits.length === 0 && <div className="px-3 py-1.5 text-xs text-zinc-500">{t('update.newBuildAvailable')}</div>}
+              {status.commits.length === 0 && <div className="px-3 py-1.5 text-xs text-zinc-500">{t(release ? 'update.newReleaseAvailable' : 'update.newBuildAvailable')}</div>}
               {status.commits.map((c) => (
                 <div key={c.hash} className="px-3 py-1.5 flex gap-3"><span className="font-mono text-zinc-500 text-xs">{c.hash}</span><span className="truncate">{c.subject}</span></div>
               ))}
@@ -108,8 +109,8 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
             </button>
             <button disabled={phase === 'running' || phase === 'restarting' || !status || !!status.error}
               className="rounded bg-white/5 hover:bg-white/10 text-zinc-200 px-3 py-1.5 disabled:opacity-40"
-              title={t('update.reinstallHint')}
-              onClick={() => { if (window.confirm(t('update.reinstallConfirm', { v: status?.remote?.version ?? '' }))) apply(false); }}>
+              title={t(release ? 'update.reinstallReleaseHint' : 'update.reinstallHint')}
+              onClick={() => { if (window.confirm(t(release ? 'update.reinstallReleaseConfirm' : 'update.reinstallConfirm', { v: status?.remote?.version ?? '' }))) apply(false); }}>
               {t('update.reinstall')}
             </button>
             {phase === 'failed' && <button className="rounded bg-white/5 hover:bg-white/10 px-3 py-1.5 text-xs" onClick={() => apply(true)}>{t('update.force')}</button>}

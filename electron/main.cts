@@ -3,6 +3,7 @@ import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import { registerBrowserIpc, stopOldHeadlessChrome } from './browserView.cjs';
 import { blocksQuit, initLockScreen, isLocked, isLockShortcut, lockNow, openLockSettings, rememberLockForRelaunch } from './lockScreen.cjs';
 
@@ -15,7 +16,7 @@ import { blocksQuit, initLockScreen, isLocked, isLockShortcut, lockNow, openLock
  * file access to this app, so folder permission prompts show the app name.
  */
 
-const PORT = 11398;
+const PORT = Number(process.env.MVC_PORT) || 11398; // MVC_PORT: test copies only (server/config.ts)
 const DEV = process.env.VITE_DEV === '1';
 const URL_DEV = 'http://localhost:5173';
 const URL_PROD = `http://127.0.0.1:${PORT}`;
@@ -23,11 +24,17 @@ const RESTART_EXIT_CODE = 75;
 const REPO_ROOT = path.resolve(__dirname, '../..');
 const APP_ICON = path.join(REPO_ROOT, 'web', 'public', 'icon.png');
 const APP_NAME = 'Mac Vibe Coder';
+/** The .app this code runs from (standalone build), or null for a source checkout / the install.sh launcher. */
+const APP_BUNDLE = (() => { const i = __dirname.indexOf('.app/Contents/Resources/app/'); return i < 0 ? null : __dirname.slice(0, i + 4); })();
+/** Shared with server/releaseUpdate.ts: where a downloaded update waits until the app restarts. */
+const UPDATE_DIR = process.env.MVC_UPDATE_DIR || path.join(os.homedir(), 'Library', 'Caches', 'com.hdomi.mac-vibe-coder', 'update');
 const EXPECTED_BUILD = (() => { try { return JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'dist/build-info.json'), 'utf8')); } catch { return null; } })();
 
 // Name used by dialogs, the app menu title and notifications. The menu bar / Dock label of the
 // unpackaged Electron.app comes from its Info.plist, which scripts/brand-electron.sh patches.
 app.setName(APP_NAME);
+// Test copies run beside the real app with their own profile (and so their own single-instance lock).
+if (process.env.MVC_USER_DATA) app.setPath('userData', process.env.MVC_USER_DATA);
 
 let server: ChildProcess | null = null;
 let quitting = false;
@@ -125,15 +132,13 @@ async function startServer(): Promise<void> {
     // The adopted server went away (an update restart, or a crash). Its exit code never reaches us, so
     // relaunch the whole app the way an update would; the new instance spawns and owns its server.
     console.log('[mac-vibe-coder] adopted server exited; relaunching');
-    rememberLockForRelaunch();
-    app.relaunch();
-    app.exit(0);
+    restartApp();
     return;
   }
   const runtime = await resolveNode();
   const entry = path.join(REPO_ROOT, 'dist', 'server', 'index.js');
   if (quitting) return;
-  const env: NodeJS.ProcessEnv = { ...process.env, MVC_DEV: DEV ? '1' : '0', MVC_ELECTRON_EXEC_PATH: process.execPath, MVC_ELECTRON_VERSION: process.versions.electron };
+  const env: NodeJS.ProcessEnv = { ...process.env, MVC_DEV: DEV ? '1' : '0', MVC_ELECTRON_EXEC_PATH: process.execPath, MVC_ELECTRON_VERSION: process.versions.electron, MVC_UPDATE_DIR: UPDATE_DIR };
   delete env.ELECTRON_RUN_AS_NODE;
   Object.assign(env, runtime.env);
   console.log(`[mac-vibe-coder] server runtime: ${runtime.label}`);
@@ -144,9 +149,7 @@ async function startServer(): Promise<void> {
     if (quitting) return;
     if (code === RESTART_EXIT_CODE) {
       // Self-update finished: relaunch the whole app so new Electron/main code is picked up too.
-      rememberLockForRelaunch();
-      app.relaunch();
-      app.exit(0);
+      restartApp();
       return;
     }
     // Crash: respawn with exponential backoff (1.5s → 30s) so a persistent failure does not spin.
@@ -157,6 +160,60 @@ async function startServer(): Promise<void> {
   });
   if (await waitHealthy(15000)) respawnDelay = 1500;
   else throw new Error(`Server did not start on port ${PORT}. Close any other Mac Vibe Coder checkout using this port and try again.`); // healthy start resets the backoff
+}
+
+/**
+ * Restart after an update. A standalone app with a downloaded release waiting swaps its bundle first:
+ * a detached helper waits for this process to exit, moves the new .app into place (rolling back on
+ * failure) and opens it. Otherwise (source checkout, or nothing staged) Electron relaunches itself.
+ */
+function restartApp() {
+  rememberLockForRelaunch();
+  if (startBundleSwap()) { app.exit(0); return; }
+  app.relaunch();
+  app.exit(0);
+}
+
+const SWAP_SCRIPT = `#!/bin/zsh
+# Written by Mac Vibe Coder (electron/main.cts). Installs a staged update once the app has quit.
+PID="$1"; APP="$2"; NEW="$3"; shift 3
+for i in {1..300}; do kill -0 "$PID" 2>/dev/null || break; sleep 0.2; done
+echo "$(date '+%F %T') install $NEW -> $APP"
+OLD="\${NEW:h}/previous.app"
+rm -rf "$OLD"
+if mv "$APP" "$OLD"; then
+  if mv "$NEW" "$APP"; then
+    xattr -cr "$APP" 2>/dev/null
+    rm -rf "$OLD"
+    echo "installed"
+  else
+    echo "could not move the new app into place; keeping the old one"
+    mv "$OLD" "$APP"
+  fi
+else
+  echo "could not move the old app aside; keeping it"
+fi
+open "$@" "$APP"
+`;
+
+function startBundleSwap(): boolean {
+  if (!APP_BUNDLE) return false;
+  const pendingFile = path.join(UPDATE_DIR, 'pending.json');
+  try {
+    const pending = JSON.parse(fs.readFileSync(pendingFile, 'utf8')) as { app?: unknown };
+    fs.rmSync(pendingFile, { force: true }); // one attempt per staged update, even if this one fails
+    const staged = typeof pending.app === 'string' ? path.resolve(pending.app) : '';
+    if (!staged.startsWith(UPDATE_DIR + path.sep) || !staged.endsWith('.app') || !fs.existsSync(path.join(staged, 'Contents', 'Info.plist'))) return false;
+    const script = path.join(UPDATE_DIR, 'install-update.sh');
+    fs.writeFileSync(script, SWAP_SCRIPT, { mode: 0o700 });
+    // Test copies keep their isolation across the restart (open --env).
+    const keep = ['MVC_PORT', 'MVC_USER_DATA', 'MVC_CONFIG_DIR', 'MVC_UPDATE_FEED', 'MVC_UPDATE_DIR'].filter((k) => process.env[k]).flatMap((k) => ['--env', `${k}=${process.env[k]}`]);
+    const log = fs.openSync(path.join(UPDATE_DIR, 'install.log'), 'a');
+    spawn('/bin/zsh', [script, String(process.pid), APP_BUNDLE, staged, ...keep], { detached: true, stdio: ['ignore', log, log] }).unref();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function createWindow() {

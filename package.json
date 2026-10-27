@@ -6,6 +6,11 @@
   "type": "module",
   "main": "dist/electron/main.cjs",
   "description": "맥환경에서의 로컬 바이브코딩을 도와주기위한 프로젝트",
+  "author": "HDomi",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HDomi/mac-vibe-coder.git"
+  },
   "scripts": {
     "icons": "env -u ELECTRON_RUN_AS_NODE electron scripts/generate-icons.cjs",
     "dev": "concurrently -k -n web,server \"vite\" \"MVC_DEV=1 tsx watch server/index.ts\"",
@@ -13,6 +18,7 @@
     "build:main": "tsc -p tsconfig.json && cp electron/preload.cjs dist/electron/preload.cjs",
     "build:web": "vite build",
     "build": "npm run build:main && npm run build:web && node scripts/build-info.cjs",
+    "dist": "npm run build && electron-builder --mac --arm64 --publish never",
     "start": "npm run build && env -u ELECTRON_RUN_AS_NODE electron .",
     "serve": "tsx server/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
@@ -69,6 +75,7 @@
     "concurrently": "^9.1.0",
     "cronstrue": "^3.38.0",
     "electron": "^39.0.0",
+    "electron-builder": "^26.18.0",
     "material-icon-theme": "^5.39.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
