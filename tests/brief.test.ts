@@ -19,3 +19,11 @@ test('session brief: files, commits, todos and last answer from a transcript', (
   });
   assert.deepEqual(b, { asks: 1, files: ['src/a.ts'], commits: ['feat: a'], todos: ['tests'], last: 'All done.' });
 });
+
+test('transfer: merged into the target draft without duplicate attachments', async () => {
+  const { mergeDraft } = await import('../web/src/lib/transfer');
+  const a = { path: '/x/a.png', name: 'a.png', kind: 'image' as const };
+  const b = { path: '/x/b.txt', name: 'b.txt', kind: 'file' as const };
+  assert.deepEqual(mergeDraft({ text: 'draft\n', attachments: [a] }, { text: ' report ', attachments: [a, b] }), { text: 'draft\n\nreport', attachments: [a, b] });
+  assert.deepEqual(mergeDraft({ text: '', attachments: [] }, { text: 'x', attachments: [] }), { text: 'x', attachments: [] });
+});

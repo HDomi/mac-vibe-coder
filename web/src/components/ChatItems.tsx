@@ -1,9 +1,29 @@
-import { memo, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import MarkdownView, { CopyButton } from './MarkdownView';
 import type { ChatItem } from '../lib/chatStore';
 import { imageSrc } from '../lib/api';
 import { openLightbox } from './Lightbox';
 import { t, useLang } from '../lib/i18n';
+import { useContextMenu } from './ContextMenu';
+import { setDragTransfer, transferMenu, type Transfer } from '../lib/transfer';
+import type { Attachment } from '../lib/agent';
+
+/** Text selected inside `el`, if any: right-clicking a selection sends only that part. */
+function selectionIn(el: HTMLElement | null): string {
+  const sel = window.getSelection();
+  if (!el || !sel || sel.isCollapsed || !sel.anchorNode || !el.contains(sel.anchorNode)) return '';
+  return sel.toString().trim();
+}
+
+/** Drag handle shown on hover: drop it on another session's tab to put the message in its box. */
+function TransferGrip({ payload, className = '' }: { payload: () => Transfer; className?: string }) {
+  return (
+    <span draggable onDragStart={(e) => setDragTransfer(e, payload())} title={t('transfer.dragHint')}
+      className={`cursor-grab active:cursor-grabbing select-none rounded px-1 text-[11px] leading-4 text-zinc-500 hover:text-zinc-200 hover:bg-white/10 ${className}`}>⠿</span>
+  );
+}
+
+const fileAttachment = (path: string, kind: 'image' | 'file' = 'image'): Attachment => ({ path, name: path.split('/').pop() ?? path, kind });
 
 function summarizeInput(name: string, input: unknown): string {
   const i = (input ?? {}) as Record<string, unknown>;
@@ -22,6 +42,8 @@ function summarizeInput(name: string, input: unknown): string {
 
 export function UserItem({ item, onRewind }: { item: Extract<ChatItem, { kind: 'user' }>; /** Undo file changes made from this message on; absent when not possible. */ onRewind?: () => void }) {
   useLang();
+  const menu = useContextMenu();
+  const bubble = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   if (item.compact) {
     return (
@@ -37,16 +59,18 @@ export function UserItem({ item, onRewind }: { item: Extract<ChatItem, { kind: '
   }
   return (
     <div className="group/user flex justify-end items-start gap-2">
+      {!item.pending && <TransferGrip className="mt-2.5 opacity-0 group-hover/user:opacity-100" payload={() => ({ text: item.text, attachments: item.attachments })} />}
       {onRewind && !item.pending && (
         <button onClick={onRewind} title={t('rewind.hint')}
           className="mt-2 shrink-0 opacity-0 group-hover/user:opacity-100 rounded-md px-2 py-1 text-[11px] text-zinc-400 hover:text-amber-200 hover:bg-white/5">⟲ {t('rewind.button')}</button>
       )}
-      <div className={`max-w-[80%] rounded-2xl rounded-br-md bg-blue-500/20 px-4 py-2.5 text-[14px] whitespace-pre-wrap ${item.pending ? 'opacity-60' : ''}`}>
+      <div ref={bubble} onContextMenu={(e) => { const sel = selectionIn(bubble.current); menu.open(e, transferMenu(sel ? { text: sel, attachments: [] } : { text: item.text, attachments: item.attachments }, sel || item.text)); }}
+        className={`max-w-[80%] rounded-2xl rounded-br-md bg-blue-500/20 px-4 py-2.5 text-[14px] whitespace-pre-wrap ${item.pending ? 'opacity-60' : ''}`}>
         {item.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
             {item.attachments.map((a) => a.kind === 'image'
-              ? <img key={a.path} src={imageSrc(a.path, a.name.slice(a.name.lastIndexOf('.')))} alt={a.name} className="h-20 rounded-md object-cover cursor-zoom-in hover:opacity-90 transition-opacity" title={a.path} onClick={() => openLightbox(imageSrc(a.path, a.name.slice(a.name.lastIndexOf('.'))), a.name)} />
-              : <span key={a.path} className="text-xs bg-white/10 rounded px-2 py-1" title={a.path}>📎 {a.name}</span>)}
+              ? <img key={a.path} draggable onDragStart={(e) => setDragTransfer(e, { text: '', attachments: [a] })} src={imageSrc(a.path, a.name.slice(a.name.lastIndexOf('.')))} alt={a.name} className="h-20 rounded-md object-cover cursor-zoom-in hover:opacity-90 transition-opacity" title={a.path} onClick={() => openLightbox(imageSrc(a.path, a.name.slice(a.name.lastIndexOf('.'))), a.name)} />
+              : <span key={a.path} draggable onDragStart={(e) => setDragTransfer(e, { text: '', attachments: [a] })} className="text-xs bg-white/10 rounded px-2 py-1 cursor-grab" title={a.path}>📎 {a.name}</span>)}
           </div>
         )}
         {item.text}
@@ -57,10 +81,18 @@ export function UserItem({ item, onRewind }: { item: Extract<ChatItem, { kind: '
 
 export const AssistantItem = memo(function AssistantItem({ item, baseDir }: { item: Extract<ChatItem, { kind: 'assistant' }>; baseDir?: string }) {
   useLang();
+  const menu = useContextMenu();
+  const root = useRef<HTMLDivElement>(null);
   const [showThinking, setShowThinking] = useState(false);
   return (
-    <div className={`group/msg relative ${item.parent ? 'ml-6 border-l border-white/10 pl-3' : ''}`}>
-      {item.text && !item.streaming && <CopyButton text={item.text} className="absolute -top-2 right-0 opacity-0 group-hover/msg:opacity-100" />}
+    <div ref={root} className={`group/msg relative ${item.parent ? 'ml-6 border-l border-white/10 pl-3' : ''}`}
+      onContextMenu={item.text && !item.streaming ? (e) => { const sel = selectionIn(root.current); menu.open(e, transferMenu({ text: sel || item.text, attachments: [] }, sel || item.text)); } : undefined}>
+      {item.text && !item.streaming && (
+        <div className="absolute -top-2 right-0 z-[1] flex items-center gap-1 opacity-0 group-hover/msg:opacity-100">
+          <TransferGrip payload={() => ({ text: item.text, attachments: [] })} className="bg-[#0b0d12]" />
+          <CopyButton text={item.text} />
+        </div>
+      )}
       {item.thinking && (
         <div className="mb-1">
           <button className="text-[11px] text-zinc-500 hover:text-zinc-300" onClick={() => setShowThinking((v) => !v)}>
@@ -96,7 +128,8 @@ function ToolImages({ images }: { images: { src: string; label: string }[] }) {
   return (
     <div className="flex flex-wrap gap-2">
       {images.map((im, n) => (
-        <img key={n} src={im.src} alt={im.label} title={im.label} loading="lazy"
+        <img key={n} src={im.src} alt={im.label} title={im.label} loading="lazy" draggable={!im.label.startsWith('data:') && im.label.startsWith('/')}
+          onDragStart={(e) => { if (im.label.startsWith('/')) setDragTransfer(e, { text: '', attachments: [fileAttachment(im.label)] }); }}
           className="max-h-56 max-w-full rounded-md border border-white/10 bg-black/30 object-contain cursor-zoom-in hover:border-white/25 transition-colors"
           onClick={(e) => { e.stopPropagation(); openLightbox(im.src, im.label); }} />
       ))}

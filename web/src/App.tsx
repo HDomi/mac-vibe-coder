@@ -25,6 +25,7 @@ import { t, useLang } from './lib/i18n';
 import { fencedTerminalText } from './lib/textSearch';
 import { handoffText } from './lib/handoff';
 import { draftKey, writeDraft } from './lib/draft';
+import { hasTransfer, readTransfer, sendTransfer, setTransferTargets } from './lib/transfer';
 import AgentIcon from './components/AgentIcon';
 import Lightbox from './components/Lightbox';
 import Toaster from './components/Toast';
@@ -178,14 +179,25 @@ function AppInner() {
     if (view === 'agent') setAgentActive(id);
     else { if (!inProject(s, project)) openProject(s.worktree?.origin ?? s.cwd); setActiveSession(id); }
   };
+  // Sessions a message can be sent to (right-click / drag): every open one except the one on screen.
+  const onScreenId = view === 'agent' ? (agentActive && agentActive !== 'new' ? agentActive : null) : (session?.id ?? null);
+  setTransferTargets(() => sortSessions(Object.values(S.sessions)).filter((s) => s.id !== onScreenId && s.status !== 'closed')
+    .map((s) => ({ id: s.id, agent: s.agent, name: `${displayTitle(s, 28) ?? t('common.new')} · ${(s.worktree?.origin ?? s.cwd).split('/').pop()}` })));
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const dropProps = (id: string) => ({
+    onDragOver: (e: React.DragEvent) => { if (hasTransfer(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; if (dropTarget !== id) setDropTarget(id); } },
+    onDragLeave: () => setDropTarget((d) => (d === id ? null : d)),
+    onDrop: (e: React.DragEvent) => { if (!hasTransfer(e)) return; e.preventDefault(); setDropTarget(null); const p = readTransfer(e); if (p) sendTransfer(id, p); },
+  });
   useEffect(() => {
     const h = (ev: Event) => { const id = (ev as CustomEvent<{ sessionId: string }>).detail?.sessionId; if (id) focusSession.current(id); };
     window.addEventListener('vibe:notify-click', h);
+    window.addEventListener('vibe:transfer-done', h);
     window.vibe?.onNotificationClick?.((id) => focusSession.current(id));
     window.vibe?.onNotificationApproval?.(({ sessionId, requestId, decision }) => approveRef.current(sessionId, requestId, decision));
     // Waking from sleep: reconnect the agent socket (re-attaches every live session) and the shells at once.
     window.vibe?.onPowerResume?.(() => { agentClient.reconnectNow(); reconnectTerminals(); });
-    return () => window.removeEventListener('vibe:notify-click', h);
+    return () => { window.removeEventListener('vibe:notify-click', h); window.removeEventListener('vibe:transfer-done', h); };
   }, []);
   // Keep the Mac awake only while an agent turn or a busy shell is in flight; re-evaluated on session changes and every 10s for shells.
   const sessionsForPower = useRef(S.sessions);
@@ -361,8 +373,8 @@ function AppInner() {
                   <div className="flex-1 min-w-0 h-full flex items-center gap-1 overflow-x-auto">
                   {projectSessions.map((s) => (
                     <div key={s.id} onClick={() => setActiveSession(s.id)} onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeSession(s.id); } }}
-                      onContextMenu={(e) => menu.open(e, sessionMenu(s, S.setPinned, () => closeSession(s.id)))}
-                      className={`group flex items-center gap-1.5 rounded-md pl-2.5 pr-1 py-1 whitespace-nowrap cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`}>
+                      onContextMenu={(e) => menu.open(e, sessionMenu(s, S.setPinned, () => closeSession(s.id)))} {...(s.id !== session?.id ? dropProps(s.id) : {})}
+                      className={`group flex items-center gap-1.5 rounded-md pl-2.5 pr-1 py-1 whitespace-nowrap cursor-pointer ${dropTarget === s.id ? 'ring-2 ring-sky-400/70 bg-sky-400/15 text-white' : session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
                       <AgentIcon agent={s.agent} size={14} />
                       {s.pinned && <span className="text-[9px]" title={t('common.pin')}>📌</span>}
@@ -478,6 +490,7 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
   const live = sortSessions(Object.values(S.sessions));
   const session = active && active !== 'new' ? S.sessions[active] ?? null : null;
   const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActive).catch((e) => window.alert(e.message));
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   return (
     <div className="flex-1 flex min-h-0 relative">
       <aside data-companion-zone="left" data-companion-wall="right" className="w-64 shrink-0 h-full flex flex-col border-r border-white/10 bg-[#0e1117]">
@@ -491,11 +504,14 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
           {live.length === 0 && <div className="px-2 text-xs text-zinc-600">{t('app.nothingOpen')}</div>}
           {live.map((s) => (
             <div key={s.id} onClick={() => setActive(s.id)}
+              onDragOver={(e) => { if (s.id !== session?.id && hasTransfer(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDropTarget(s.id); } }}
+              onDragLeave={() => setDropTarget((d) => (d === s.id ? null : d))}
+              onDrop={(e) => { if (s.id === session?.id || !hasTransfer(e)) return; e.preventDefault(); setDropTarget(null); const p = readTransfer(e); if (p) sendTransfer(s.id, p); }}
               onContextMenu={(e) => menu.open(e, sessionMenu(s, S.setPinned, () => {
                 if ((s.status === 'running' || s.status === 'compacting') && !window.confirm(t('app.confirmCloseRunning'))) return;
                 S.close(s.id); if (session?.id === s.id) setActive(null);
               }))}
-              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer ${session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}>
+              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm cursor-pointer ${dropTarget === s.id ? 'ring-2 ring-sky-400/70 bg-sky-400/15 text-white' : session?.id === s.id ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'}`}>
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'running' || s.status === 'compacting' ? 'bg-amber-400 animate-pulse' : s.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
               <AgentIcon agent={s.agent} size={16} />
               {s.pinned && <span className="text-[10px]" title={t('common.pin')}>📌</span>}

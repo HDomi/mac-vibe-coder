@@ -1148,6 +1148,9 @@ const en: Record<string, string> = {
   'browser.pickedSource': 'source',
   'browser.pickedSize': 'size',
   'browser.pickedStyles': 'styles',
+  'transfer.sendTo': 'Send to session',
+  'transfer.noTargets': 'No other open session to send to',
+  'transfer.dragHint': 'Drag onto another session\'s tab to put this in its message box',
 };
 
 const ko: Record<string, string> = {
@@ -2277,6 +2280,9 @@ const ko: Record<string, string> = {
   'browser.pickedSource': '소스',
   'browser.pickedSize': '크기',
   'browser.pickedStyles': '스타일',
+  'transfer.sendTo': '다른 세션으로 보내기',
+  'transfer.noTargets': '보낼 다른 세션이 없어',
+  'transfer.dragHint': '다른 세션 탭에 끌어다 놓으면 그 세션 입력창에 들어가',
 };
 
 const dict: Record<Lang, Record<string, string>> = { en, ko };
