@@ -23,6 +23,11 @@ function TransferGrip({ payload, className = '' }: { payload: () => Transfer; cl
   );
 }
 
+/** "14:32:05": when an answer block finished. */
+export function clockTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+}
+
 const fileAttachment = (path: string, kind: 'image' | 'file' = 'image'): Attachment => ({ path, name: path.split('/').pop() ?? path, kind });
 
 function summarizeInput(name: string, input: unknown): string {
@@ -107,6 +112,7 @@ export const AssistantItem = memo(function AssistantItem({ item, baseDir }: { it
           {item.streaming && <span className="inline-block w-1.5 h-4 bg-zinc-400 animate-pulse align-middle ml-0.5" />}
         </div>
       )}
+      {item.at && !item.streaming && item.text && <div className="mt-0.5 text-right text-[10px] tabular-nums text-zinc-600" title={new Date(item.at).toLocaleString()}>{clockTime(item.at)}</div>}
     </div>
   );
 });
@@ -280,7 +286,7 @@ export function ResultItem({ item }: { item: Extract<ChatItem, { kind: 'result' 
   useLang();
   return (
     <div className="text-[11px] text-zinc-500 flex gap-3 justify-end">
-      <span>{item.ok ? t('items.done') : t('items.error')}</span>
+      <span>{item.ok ? t('items.done') : t('items.error')}{item.at ? ` · ${clockTime(item.at)}` : ''}</span>
       <span>{(item.durationMs / 1000).toFixed(1)}s</span>
       <span>{t('items.turns', { n: item.numTurns })}</span>
       <span>${item.costUsd.toFixed(3)}</span>

@@ -128,7 +128,7 @@ export function useSessions() {
         const s = prev[m.sessionId];
         if (!s) return prev;
         if (m.seq > 0 && m.seq <= s.lastSeq) return prev;
-        const next = reduceEvent(s, m.event, m.seq);
+        const next = reduceEvent(s, m.event, m.seq, m.ts);
         if (ACTIVITY_EVENTS.has(m.event.kind) && m.ts > (next.lastActivity ?? 0)) next.lastActivity = m.ts;
         return { ...prev, [m.sessionId]: next };
       });

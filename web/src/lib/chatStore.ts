@@ -3,11 +3,11 @@ import type { AgentEvent, AgentId, Attachment, PermissionModeId, Question, TaskI
 
 export type ChatItem =
   | { kind: 'user'; id: string; text: string; attachments: Attachment[]; pending?: boolean; /** Compaction summary injected by the CLI, not typed by the user. */ compact?: boolean }
-  | { kind: 'assistant'; id: string; text: string; thinking: string; parent: string | null; streaming: boolean }
+  | { kind: 'assistant'; id: string; text: string; thinking: string; parent: string | null; streaming: boolean; /** When the block finished (server ms); absent for blocks loaded from saved history. */ at?: number }
   | { kind: 'tool'; id: string; name: string; input: unknown; output: string | null; isError: boolean; parent: string | null; elapsed: number; done: boolean; /** Images the tool returned: absolute paths, or data: URIs from saved history. */ images?: string[] }
   | { kind: 'approval'; id: string; toolName: string; input: unknown; canAlwaysAllow: boolean; decision: string | null }
   | { kind: 'question'; id: string; questions: Question[]; resolved: boolean }
-  | { kind: 'result'; id: string; ok: boolean; text: string; costUsd: number; numTurns: number; durationMs: number }
+  | { kind: 'result'; id: string; ok: boolean; text: string; costUsd: number; numTurns: number; durationMs: number; at?: number }
   | { kind: 'error'; id: string; message: string }
   | { kind: 'system'; id: string; text: string }
   | { kind: 'changes'; id: string; root: string; from: string; to: string; files: TurnFile[] }
@@ -148,7 +148,7 @@ export function splitAttachments(text: string): { text: string; attachments: Att
 }
 
 /** Apply one event to a session, returning a new session object (immutable update). */
-export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSession {
+export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number, ts = Date.now()): ChatSession {
   const items = s.items.slice();
   // Any live event proves the server knows this session, so it is no longer "restoring".
   const next: ChatSession = { ...s, items, lastSeq: Math.max(s.lastSeq, seq), restoring: undefined };
@@ -197,9 +197,9 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       const i = lastAssistant(e.parent);
       if (i >= 0) {
         const a = items[i] as Extract<ChatItem, { kind: 'assistant' }>;
-        items[i] = { ...a, text: text || a.text, thinking: thinking || a.thinking, streaming: false };
+        items[i] = { ...a, text: text || a.text, thinking: thinking || a.thinking, streaming: false, at: ts };
       } else if (text || thinking) {
-        items.push({ kind: 'assistant', id: e.id, text, thinking, parent: e.parent, streaming: false });
+        items.push({ kind: 'assistant', id: e.id, text, thinking, parent: e.parent, streaming: false, at: ts });
       }
       return next;
     }
@@ -266,8 +266,8 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       if (e.permissionMode) next.permissionMode = e.permissionMode as PermissionModeId;
       return next;
     case 'result':
-      for (let i = 0; i < items.length; i++) { const it = items[i]; if (it.kind === 'assistant' && it.streaming) items[i] = { ...it, streaming: false }; }
-      items.push({ kind: 'result', id: uid(), ok: e.ok, text: e.text, costUsd: e.costUsd, numTurns: e.numTurns, durationMs: e.durationMs });
+      for (let i = 0; i < items.length; i++) { const it = items[i]; if (it.kind === 'assistant' && it.streaming) items[i] = { ...it, streaming: false, at: it.at ?? ts }; }
+      items.push({ kind: 'result', id: uid(), ok: e.ok, text: e.text, costUsd: e.costUsd, numTurns: e.numTurns, durationMs: e.durationMs, at: ts });
       next.totalCostUsd = e.costUsd;
       next.agentSessionId = e.agentSessionId ?? s.agentSessionId;
       next.status = 'idle';
