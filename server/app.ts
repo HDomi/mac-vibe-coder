@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import path from 'node:path';
 import { createFile, duplicate, findEnvFiles, FsError, homeInfo, listDir, mkdir, rawFile, readText, rename, resolvePath, searchFiles, statPath, transfer, trash, writeText } from './fs.js';
-import { loadConfig, PORT, saveConfig, withConfigLock } from './config.js';
+import { CUSTOM_PROMPT_MAX, loadConfig, PORT, saveConfig, withConfigLock } from './config.js';
 import { bodyLimit } from 'hono/body-limit';
 import { streamSSE } from 'hono/streaming';
 import { detectTools, INSTALL_COMMANDS, UPDATE_COMMANDS, type InstallMethod, type ToolId } from './tools.js';
@@ -57,7 +57,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   app.use('/api/image/write', bodyLimit({ maxSize: 128 * 1024 * 1024 }));
   app.use('/api/net/http', bodyLimit({ maxSize: 64 * 1024 * 1024 }));
   app.use('*', async (c, next) => {
-    if (c.req.method !== 'GET' && /^(\/api\/favorites(?:\/|$)|\/api\/recent$|\/api\/prompts$|\/api\/history\/pin$|\/api\/history\/[^/]+$)/.test(c.req.path)) return withConfigLock(next);
+    if (c.req.method !== 'GET' && /^(\/api\/favorites(?:\/|$)|\/api\/recent$|\/api\/prompts$|\/api\/custom-prompt$|\/api\/history\/pin$|\/api\/history\/[^/]+$)/.test(c.req.path)) return withConfigLock(next);
     await next();
   });
 
@@ -201,6 +201,16 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
     cfg.prompts = prompts;
     await saveConfig(cfg);
     return c.json(prompts);
+  });
+  app.get('/api/custom-prompt', async (c) => c.json({ text: (await loadConfig()).customPrompt ?? '' }));
+  app.put('/api/custom-prompt', async (c) => {
+    const body = await c.req.json<{ text?: unknown }>().catch(() => null);
+    if (!body || typeof body.text !== 'string') return c.json({ error: 'Expected { text }' }, 400);
+    const text = body.text.replace(/\r\n/g, '\n').trim().slice(0, CUSTOM_PROMPT_MAX);
+    const cfg = await loadConfig();
+    if (text) cfg.customPrompt = text; else delete cfg.customPrompt;
+    await saveConfig(cfg);
+    return c.json({ text });
   });
   app.get('/api/favorites', async (c) => c.json(favPayload(await loadConfig())));
   app.patch('/api/favorites', async (c) => {

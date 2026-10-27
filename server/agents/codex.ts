@@ -86,6 +86,8 @@ export interface CodexSessionOptions {
   resume?: string;
   permissionMode?: PermissionModeId;
   model?: string;
+  /** User's standing instructions (Settings > Custom prompt), sent as the thread's developer instructions. */
+  instructions?: string;
 }
 
 interface PendingReq {
@@ -157,11 +159,21 @@ export class CodexSession implements AgentSession {
     await c.request('initialize', { clientInfo: { name: 'mac-vibe-coder', title: 'mac-vibe-coder', version: '0.1.0' }, capabilities: null });
     c.notify('initialized');
     const pol = policyFor(this.mode, this.cwd);
+    const base: Json = { cwd: this.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandboxMode, model: this.opts.model ?? null };
+    const method = this.opts.resume ? 'thread/resume' : 'thread/start';
+    if (this.opts.resume) base.threadId = this.opts.resume;
     let res: Json;
-    if (this.opts.resume) {
-      res = await c.request<Json>('thread/resume', { threadId: this.opts.resume, cwd: this.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandboxMode, model: this.opts.model ?? null });
+    if (this.opts.instructions) {
+      // `developerInstructions` is part of the thread, so it is sent once rather than with every turn. An app-server
+      // too old to know the field rejects the whole request; fall back to a plain thread rather than failing to start.
+      try {
+        res = await c.request<Json>(method, { ...base, developerInstructions: this.opts.instructions });
+      } catch (err) {
+        this.emit({ kind: 'log', text: `custom prompt not applied: ${(err as Error).message}` });
+        res = await c.request<Json>(method, base);
+      }
     } else {
-      res = await c.request<Json>('thread/start', { cwd: this.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandboxMode, model: this.opts.model ?? null });
+      res = await c.request<Json>(method, base);
     }
     const thread = res.thread as Json;
     this.threadId = String(thread.id);

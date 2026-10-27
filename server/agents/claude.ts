@@ -51,6 +51,8 @@ export interface ClaudeSessionOptions {
   resume?: string;
   permissionMode?: PermissionModeId;
   model?: string;
+  /** User's standing instructions (Settings > Custom prompt), appended to the system prompt. */
+  instructions?: string;
 }
 
 export class ClaudeSession implements AgentSession {
@@ -102,7 +104,8 @@ export class ClaudeSession implements AgentSession {
       // Match `claude` CLI behaviour: the SDK's default system prompt is a minimal tool-calling
       // prompt, not Claude Code's. The preset restores the full prompt (coding guidance, safety rules).
       // settingSources is left at its default, which loads user/project/local settings and CLAUDE.md.
-      systemPrompt: { type: 'preset', preset: 'claude_code', snapshot: true },
+      // `append` lands in the system prompt itself, so the custom prompt is sent once per session and cached.
+      systemPrompt: { type: 'preset', preset: 'claude_code', snapshot: true, ...(this.opts.instructions ? { append: this.opts.instructions } : {}) },
       model: this.opts.model,
       // Backups before each edit, keyed by the user message id we send, so a turn's file changes can be undone.
       enableFileCheckpointing: true,

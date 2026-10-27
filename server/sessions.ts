@@ -4,6 +4,7 @@ import type { AgentEvent, AgentSession, ClientCommand, ServerMessage } from './a
 import { ClaudeSession } from './agents/claude.js';
 import { CodexSession } from './agents/codex.js';
 import { which } from './shell.js';
+import { loadConfig } from './config.js';
 import { runVerify, verifySettings } from './verify.js';
 import { changedFiles, repoRelative, snapshot, type Snapshot } from './turns.js';
 
@@ -70,14 +71,16 @@ export class SessionRegistry {
   async start(cmd: Extract<ClientCommand, { type: 'session.start' }>, ws: WebSocket): Promise<AgentSession> {
     if (this.closing) throw new Error('Server is shutting down');
     let session: ClaudeSession | CodexSession;
+    // Read at start so a prompt edited in Settings reaches the next session without a restart.
+    const instructions = (await loadConfig().catch(() => null))?.customPrompt?.trim() || undefined;
     if (cmd.agent === 'claude') {
       const claudePath = await which('claude');
       if (!claudePath) throw new Error('claude CLI not found. Install it from Settings.');
-      session = new ClaudeSession({ cwd: cmd.cwd, claudePath, resume: cmd.resume, permissionMode: cmd.permissionMode, model: cmd.model });
+      session = new ClaudeSession({ cwd: cmd.cwd, claudePath, resume: cmd.resume, permissionMode: cmd.permissionMode, model: cmd.model, instructions });
     } else if (cmd.agent === 'codex') {
       const codexPath = await which('codex');
       if (!codexPath) throw new Error('codex CLI not found. Install it from Settings.');
-      session = new CodexSession({ cwd: cmd.cwd, codexPath, resume: cmd.resume, permissionMode: cmd.permissionMode, model: cmd.model });
+      session = new CodexSession({ cwd: cmd.cwd, codexPath, resume: cmd.resume, permissionMode: cmd.permissionMode, model: cmd.model, instructions });
     } else {
       throw new Error(`Unknown agent: ${cmd.agent}`);
     }

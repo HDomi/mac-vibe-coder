@@ -58,7 +58,14 @@ export interface Config {
   pinnedSessions: string[];
   prompts: SavedPrompt[];
   projects: ProjectSettings[];
+  /**
+   * Standing instructions handed to every new agent session, whichever CLI runs it. Injected once at session
+   * start (Claude: system prompt append, Codex: thread developer instructions), so it costs no extra tokens per turn.
+   */
+  customPrompt?: string;
 }
+
+export const CUSTOM_PROMPT_MAX = 20000;
 
 const DEFAULT: Config = { favorites: [], groups: [], recent: [], pinnedSessions: [], prompts: [], projects: [] };
 

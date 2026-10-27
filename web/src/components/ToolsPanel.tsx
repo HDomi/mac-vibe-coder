@@ -61,6 +61,27 @@ function GeneralSettings() {
   );
 }
 
+function CustomPromptSettings() {
+  const [text, setText] = useState('');
+  const [saved, setSaved] = useState('');
+  const [flash, setFlash] = useState(false);
+  useEffect(() => { api.customPrompt().then((r) => { setText(r.text); setSaved(r.text); }).catch(() => {}); }, []);
+  const dirty = text.trim() !== saved.trim();
+  const save = () => api.saveCustomPrompt(text).then((r) => { setText(r.text); setSaved(r.text); setFlash(true); setTimeout(() => setFlash(false), 1500); }).catch(() => {});
+  return (
+    <div className="rounded-lg border border-white/10 p-4 space-y-2">
+      <div className="font-medium">{t('settings.customPrompt')}</div>
+      <div className="text-xs text-zinc-500 leading-relaxed">{t('settings.customPromptNote')}</div>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} spellCheck={false} placeholder={t('settings.customPromptPlaceholder')}
+        className="w-full resize-y rounded-md bg-white/5 px-2.5 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:bg-white/[0.07]" />
+      <div className="flex items-center justify-end gap-3 text-xs">
+        {flash && <span className="text-zinc-500">{t('settings.customPromptSaved')}</span>}
+        <button disabled={!dirty} onClick={save} className="rounded-md bg-white/10 px-2.5 py-1.5 text-zinc-200 hover:bg-white/15 disabled:opacity-40 disabled:hover:bg-white/10">{t('settings.customPromptSave')}</button>
+      </div>
+    </div>
+  );
+}
+
 export default function ToolsPanel({ onClose, focusLock }: Props) {
   useLang();
   const [info, setInfo] = useState<ToolsInfo | null>(null);
@@ -104,6 +125,7 @@ export default function ToolsPanel({ onClose, focusLock }: Props) {
         </div>
         <div className="p-5 space-y-4 overflow-y-auto">
           <GeneralSettings />
+          <CustomPromptSettings />
           <LockSettings focus={focusLock} />
           {!info && <div className="text-sm text-zinc-500">{t('settings.detecting')}</div>}
           {info?.tools.map((tool) => (
