@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { loadConfig, saveConfig, withConfigLock, type Backlog, type BacklogItem, type ProjectSettings } from './config.js';
@@ -28,9 +28,22 @@ export function updateProjectSettings(cwd: string, patch: (p: ProjectSettings) =
   });
 }
 
+/**
+ * The verification command for a session folder. A worktree session has no settings of its own; it
+ * uses those of the repository it was made from (compared by real path: /tmp vs /private/tmp).
+ */
 export async function verifySettings(cwd: string): Promise<VerifySettings | null> {
   const v = (await projectSettings(cwd)).verify;
-  return v?.command.trim() ? v : null;
+  if (v?.command.trim()) return v;
+  const main = await new Promise<string | null>((resolve) => execFile('git', ['-C', resolvePath(cwd), 'rev-parse', '--path-format=absolute', '--git-common-dir'], { timeout: 5000 }, (err, out) => resolve(err ? null : path.dirname(String(out).trim()))));
+  if (!main) return null;
+  const real = (p: string) => fs.realpath(p).catch(() => p);
+  const target = await real(main);
+  if (target === await real(resolvePath(cwd))) return null;
+  for (const p of (await loadConfig()).projects) {
+    if (p.verify?.command.trim() && await real(p.path) === target) return p.verify;
+  }
+  return null;
 }
 
 const exists = (p: string) => fs.access(p).then(() => true, () => false);

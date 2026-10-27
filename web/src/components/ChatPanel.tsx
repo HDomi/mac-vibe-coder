@@ -480,7 +480,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         {onCrossReview && <button onClick={() => onCrossReview()} className="shrink-0 flex items-center gap-1 rounded-md px-1.5 py-1 text-zinc-500 hover:text-zinc-200 hover:bg-white/5" title={t('review.headerHint', { agent: session.agent === 'claude' ? 'Codex' : 'Claude' })}>
           <Icon name="sparkle" size={13} /><span className="@max-[600px]:hidden">{t('review.short')}</span>
         </button>}
-        {onVerify && session.cwd && <VerifyButton cwd={session.cwd} running={running} onRun={onVerify} />}
+        {onVerify && session.cwd && <VerifyButton cwd={session.worktree?.origin ?? session.cwd} running={running} onRun={onVerify} />}
         {session.agentSessionId && <button className="text-zinc-600 hover:text-zinc-300" title={t('chat.copySessionIdTitle', { id: session.agentSessionId })} onClick={() => navigator.clipboard.writeText(session.agentSessionId!)}>id</button>}
         {session.agent === 'claude' && <span className="text-zinc-500 @max-[440px]:hidden">${session.totalCostUsd.toFixed(3)}</span>}
         <button className="w-7 h-7 -mr-2 shrink-0 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={close} title={t('chat.closeSession')}><Icon name="close" /></button>
