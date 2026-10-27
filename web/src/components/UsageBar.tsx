@@ -68,7 +68,7 @@ export default function UsageBar({ mode, onMode, companions, onCompanions }: Pro
   const [loadError, setLoadError] = useState<string>();
   const [fullScreen, setFullScreen] = useState(false);
   useEffect(() => window.vibe?.onFullScreen?.(setFullScreen), []);
-  const windowButtons = !!window.vibe?.isElectron && !fullScreen;
+  const windowButtons = typeof window !== 'undefined' && !!window.vibe?.isElectron && !fullScreen;
 
   const load = (force = false) => {
     setLoading(true);
