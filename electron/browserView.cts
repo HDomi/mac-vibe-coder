@@ -161,8 +161,19 @@ export function registerBrowserIpc(fromApp: (e: Electron.IpcMainInvokeEvent) => 
     if (!c) throw new Error('Browser is not open');
     if (picking) return null;
     c.focus();
+    // A navigation or a crashed page drops the injected script without settling its promise.
+    let release = () => {};
+    const abandoned = new Promise<null>((resolve) => {
+      const nav = (_e: unknown, _url: string, _inPlace: boolean, isMainFrame: boolean) => { if (isMainFrame) resolve(null); };
+      const gone = () => resolve(null);
+      const timer = setTimeout(gone, 125000);
+      c.on('did-start-navigation', nav);
+      c.on('render-process-gone', gone);
+      c.once('destroyed', gone);
+      release = () => { clearTimeout(timer); c.off('did-start-navigation', nav); c.off('render-process-gone', gone); c.off('destroyed', gone); };
+    });
     try {
-      picking = c.executeJavaScript(PICK_SCRIPT, true);
+      picking = Promise.race([c.executeJavaScript(PICK_SCRIPT, true), abandoned]);
       const info = await picking as null | { rect: { x: number; y: number; width: number; height: number }; viewport: { width: number; height: number }; url: string };
       if (!info) return null;
       // Page CSS pixels to view pixels; padded a little and kept inside the viewport.
@@ -182,7 +193,7 @@ export function registerBrowserIpc(fromApp: (e: Electron.IpcMainInvokeEvent) => 
         shot = { path: file, name };
       }
       return { info, shot };
-    } finally { picking = null; }
+    } finally { picking = null; release(); }
   });
   handle('browser:capture', async () => {
     const c = wc();

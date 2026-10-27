@@ -16,8 +16,11 @@ export async function saveAttachment(file: File): Promise<string> {
 }
 
 const IMAGE_EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/avif': 'avif' };
-/** Images over this size are not written; the card keeps its "[image]" placeholder. */
-const MAX_TOOL_IMAGE = 40 * 1024 * 1024;
+/**
+ * Images over this size are not written; the card keeps its "[image]" placeholder. Writing is synchronous
+ * so the tool result keeps its place among the agent's events; image blocks are a few MB at most.
+ */
+const MAX_TOOL_IMAGE = 10 * 1024 * 1024;
 
 /**
  * Write a base64 image a tool returned (Read of a picture, a screenshot, a generated image) so the chat
