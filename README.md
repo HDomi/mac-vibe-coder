@@ -46,6 +46,18 @@ Mac Vibe Coder 는 그걸 한 창에 모은다. 폴더를 고르면 그 폴더�
 
 ## 설치
 
+[Releases](https://github.com/HDomi/mac-vibe-coder/releases/latest) 에서 `Mac-Vibe-Coder-<버전>-arm64.dmg` 를 받아 앱을 `응용 프로그램` 폴더로 끌어 놓는다. 레포 · git · Node 없이 혼자 돈다.
+
+Apple 개발자 서명이 없는(ad-hoc) 앱이라 처음 한 번은 macOS 가 막는다. 시스템 설정 › 개인정보 보호 및 보안 › "그래도 열기" 를 누르거나, 터미널에서 격리 표시를 지운다.
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Mac Vibe Coder.app"
+```
+
+이후 업데이트는 앱이 알아서 받는다(아래 [업데이트](#업데이트)). 예전 `install.sh` 런처를 쓰고 있었다면 DMG 의 앱으로 덮어쓰면 된다. 설정 · 세션은 그대로 남는다.
+
+### 소스에서 설치 (개발용)
+
 ```bash
 git clone https://github.com/HDomi/mac-vibe-coder.git
 cd mac-vibe-coder
@@ -53,7 +65,7 @@ cd mac-vibe-coder
 ```
 
 `install.sh` 가 하는 일: Node 확인(없으면 `runtime/` 에 내려받음) → 의존성 설치 → 빌드 → Electron 런타임에 이름·아이콘·번들 id 입히기 → `/Applications/Mac Vibe Coder.app` 생성 → 실행.
-앱 번들은 이 체크아웃을 가리키는 작은 런처라서, 이후 업데이트는 재설치 없이 `git pull` + 빌드만으로 끝난다.
+이 앱 번들은 체크아웃을 가리키는 작은 런처라서, 업데이트는 재설치 없이 `git pull` + 빌드로 끝난다.
 
 | 옵션 | 설명 |
 |------|------|
@@ -65,7 +77,7 @@ cd mac-vibe-coder
 ### 요구 사항
 
 - macOS 14 이상 (Apple Silicon 에서 개발 · 검증)
-- git. Node.js 는 없어도 된다: `install.sh` 가 없으면 standalone Node 를 `runtime/` 에 내려받고, 앱 자체는 Electron 에 내장된 Node 로도 서버를 띄운다
+- Node.js 는 없어도 된다: 서버는 시스템 node(20 이상)가 있으면 그걸, 없으면 Electron 에 내장된 Node 로 뜬다. 소스 설치는 git 이 필요하고, `install.sh` 가 Node 가 없으면 `runtime/` 에 내려받는다
 - Claude Code CLI(`claude`) 와/또는 Codex CLI(`codex`). 없으면 앱 안 Settings 에서 설치 가능. 로그인은 앱 안 터미널 탭에서 `claude` → `/login`, `codex login`.
 
 첫 실행 때 macOS 가 "Mac Vibe Coder 가 데스크탑 폴더에 접근하려 합니다" 를 물으면 허용한다.
@@ -136,8 +148,18 @@ cd mac-vibe-coder
 
 ## 업데이트
 
+**DMG 로 설치한 앱**: 버전 배지 → 커밋 목록 확인 → 업데이트 적용. GitHub 최신 릴리스의 zip 을 받아 `SHA256SUMS.txt` 와 대조하고, 번들 id · 버전 · 서명을 확인한 뒤 `~/Library/Caches/com.hdomi.mac-vibe-coder/update/` 에 풀어 둔다. 앱이 종료되면 보조 스크립트가 `/Applications` 의 앱을 새 것으로 바꾸고(실패하면 원래 앱 복구) 다시 연다. 활성 세션이 있으면 보류한다. 결과는 같은 폴더의 `install.log`. `응용 프로그램` 폴더 밖(DMG 안, 다운로드 폴더에서 바로 실행)에서는 자기 교체가 안 돼서 옮기라고 안내한다.
+
+**소스 설치(런처)**:
+
 - **앱 안에서**: 버전 배지 → 커밋 목록 확인 → Apply. 임시 폴더에서 clone → `npm ci` → build 후, 빌드한 커밋으로 체크아웃을 fast-forward 한다. 교체 또는 fast-forward 실패 시 기존 빌드 폴더를 복원한다. 활성 세션이 있으면 보류하며 강제 옵션을 제공한다. Electron 런타임 자체가 바뀌거나 `npm run app`으로 실행 중이면 터미널 업데이트를 안내한다.
 - **터미널에서**: `scripts/update.sh`. 앱과 서버가 끝난 뒤 임시 폴더에서 빌드·교체하고 설치된 앱 번들도 다시 만든다. 설치 경로는 `runtime/install-location`에 보관한다.
+
+## 릴리스
+
+`vX.Y.Z` 태그가 push 되면 `.github/workflows/release.yml` 이 macOS 러너에서 타입체크 · 테스트 · 빌드(`npm run dist`, electron-builder) 후 GitHub 릴리스에 DMG · zip · `SHA256SUMS.txt` 를 올린다. 태그와 `package.json` 버전이 다르면 실패한다. 버전 커밋 제목이 `(vX.Y.Z)` 로 끝나면 `.githooks/post-commit` 이 태그를 단다.
+
+로컬 빌드는 `npm run dist` → `release/`. 앱 번들에는 SDK 가 딸려 보내는 Claude Code 바이너리를 넣지 않는다(설치된 `claude` 를 쓴다).
 
 ## 안정성 검증
 
@@ -174,7 +196,8 @@ server/            Hono 서버 · 에이전트 어댑터 · PTY · git · 사용
   agents/types.ts  통합 이벤트 스키마 (web/src/lib/agent.ts 와 수동 동기화)
 web/               React + Vite + Tailwind
 electron/          메인 프로세스(CommonJS) · preload
-scripts/           brand-electron · launchd · update · uninstall · 아이콘 생성
+scripts/           brand-electron · launchd · update · uninstall · 아이콘 생성 · after-pack(ad-hoc 서명)
+.github/workflows/ 태그 push → DMG 릴리스
 docs/              가능성 조사 보고서 · 로드맵
 ```
 
