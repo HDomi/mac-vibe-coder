@@ -32,7 +32,11 @@ export type AgentEvent =
   | { kind: 'task'; task: TaskInfo }
   /** The CLI process (re)started: every remembered task belongs to a process that is gone. */
   | { kind: 'task.reset' }
+  /** Project verification run after a turn (see server/verify.ts). Upsert by id. */
+  | { kind: 'verify'; id: string; status: VerifyStatus; command: string; output?: string; exitCode?: number; durationMs?: number }
   | { kind: 'log'; text: string };
+
+export type VerifyStatus = 'running' | 'passed' | 'failed' | 'cancelled';
 
 export interface TodoItem { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }
 
@@ -90,7 +94,9 @@ export type ClientCommand =
   | { type: 'session.stopTask'; sessionId: string; taskId: string }
   | { type: 'session.mode'; sessionId: string; mode: PermissionModeId }
   | { type: 'session.model'; sessionId: string; model: string | null }
-  | { type: 'session.close'; sessionId: string };
+  | { type: 'session.close'; sessionId: string }
+  /** Run the project's verification command now, whether or not the last turn changed files. */
+  | { type: 'session.verify'; sessionId: string };
 
 type Listener = (m: ServerMessage) => void;
 

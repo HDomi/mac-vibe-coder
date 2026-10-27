@@ -323,7 +323,8 @@ function AppInner() {
                   onClose={() => { if (session) { S.close(session.id); setActiveSession(null); } }}
                   pendingAttachments={pendingAttachments} onConsumeAttachments={() => setPendingAttachments([])}
                   background={backgroundSessions(S.sessions, session?.id)} onFocusSession={(id) => focusSession.current(id)}
-                  onRewind={(id, dry) => session ? S.rewind(session.id, id, dry) : Promise.resolve({ canRewind: false })} />
+                  onRewind={(id, dry) => session ? S.rewind(session.id, id, dry) : Promise.resolve({ canRewind: false })}
+                  onVerify={() => session && S.verify(session.id)} />
               </div>
             </div>
             {!rightCollapsed && <Splitter onStart={() => setDragging(true)} onEnd={() => setDragging(false)} onDrag={(dx) => right.setWidth(right.width - dx)} />}

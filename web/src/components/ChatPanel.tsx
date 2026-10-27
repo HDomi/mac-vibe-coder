@@ -11,6 +11,7 @@ import { t, useLang } from '../lib/i18n';
 import ProjectIcon from './ProjectIcon';
 import AgentIcon from './AgentIcon';
 import Icon from './Icon';
+import { VerifyButton, VerifyItem } from './Verify';
 
 export interface StartOptions { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null; title?: string }
 
@@ -36,6 +37,8 @@ interface Props {
   /** Other live sessions that are working or waiting; the composer lists them so they stay visible. */
   background?: BackgroundSession[];
   onFocusSession?: (id: string) => void;
+  /** Run the project's verification command now. */
+  onVerify?: () => void;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -66,7 +69,7 @@ export function ModelSelect({ agent, value, onChange, compact }: { agent: AgentI
   );
 }
 
-function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: { approve: Props['onApprove']; answer: Props['onAnswer']; cwd: string; rewind?: (messageId: string) => void }): React.ReactNode {
+function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: { approve: Props['onApprove']; answer: Props['onAnswer']; cwd: string; rewind?: (messageId: string) => void; latestVerify?: string; verify?: () => void }): React.ReactNode {
   switch (it.kind) {
     case 'user': return <UserItem key={it.id} item={it} onRewind={actions.rewind && UUID_RE.test(it.id) && !it.compact ? () => actions.rewind!(it.id) : undefined} />;
     case 'assistant': return <AssistantItem key={it.id} item={it} baseDir={actions.cwd} />;
@@ -79,6 +82,7 @@ function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: 
     case 'result': return <ResultItem key={it.id} item={it} />;
     case 'error': return <div key={it.id} className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[13px] text-red-200 whitespace-pre-wrap">{it.message}</div>;
     case 'system': return <div key={it.id} className="text-xs text-zinc-500 text-center py-1">{it.text}</div>;
+    case 'verify': return <VerifyItem key={it.id} item={it} latest={it.id === actions.latestVerify} onRerun={it.id === actions.latestVerify ? actions.verify : undefined} />;
   }
 }
 
@@ -190,7 +194,7 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
   );
 }
 
-export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onSend, onApprove, onAnswer, onInterrupt, onStopTask, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind }: Props) {
+export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onSend, onApprove, onAnswer, onInterrupt, onStopTask, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind, onVerify }: Props) {
   useLang();
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -217,6 +221,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
     }
     return { top, childrenOf };
   }, [session?.items]);
+  const latestVerify = useMemo(() => { const items = session?.items ?? []; for (let i = items.length - 1; i >= 0; i--) if (items[i].kind === 'verify') return items[i].id; return undefined; }, [session?.items]);
 
   const scrollToBottom = () => {
     const el = scroller.current; if (!el) return;
@@ -320,6 +325,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         <span className="text-zinc-500 truncate" title={session.cwd}>{session.cwd.split('/').slice(-2).join('/')}</span>
         {session.status === 'compacting' && <span className="text-amber-300">{t('chat.compacting')}</span>}
         <div className="flex-1" />
+        {onVerify && session.cwd && <VerifyButton cwd={session.cwd} running={running} onRun={onVerify} />}
         {session.agentSessionId && <button className="text-zinc-600 hover:text-zinc-300" title={t('chat.copySessionIdTitle', { id: session.agentSessionId })} onClick={() => navigator.clipboard.writeText(session.agentSessionId!)}>id</button>}
         {session.agent === 'claude' && <span className="text-zinc-500">${session.totalCostUsd.toFixed(3)}</span>}
         <button className="w-7 h-7 -mr-2 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={close} title={t('chat.closeSession')}><Icon name="close" /></button>
@@ -330,7 +336,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         <div ref={scroller} className="absolute inset-0 overflow-y-auto" onScroll={onScroll} onWheel={onWheel}>
           <div ref={content} className="px-5 py-4 space-y-3">
             {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.restoring ? t('chat.restoring') : session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}
-            {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd, rewind: canRewind ? rewind : undefined }))}
+            {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd, rewind: canRewind ? rewind : undefined, latestVerify, verify: running ? undefined : onVerify }))}
           </div>
         </div>
         {!atBottom && (

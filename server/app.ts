@@ -27,6 +27,7 @@ import { lockBeat, type LockBeat } from './lockWatch.js';
 import { gitBranches, gitCheckout, gitCommit, gitCommitDiff, gitCommitFiles, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
 import { displayableIcon, findProjectIcon } from './icons.js';
 import { convertImage, imageInfo, renderPng, writeImageBytes } from './image.js';
+import { projectSettings, suggestVerifyCommands, updateProjectSettings } from './verify.js';
 import { killProcess, listeningPorts, netInfo, proxyHttp, type ProxyRequest } from './net.js';
 
 const WEB_DIST = path.join(REPO_ROOT, 'web', 'dist');
@@ -376,6 +377,20 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   });
 
   app.get('/api/sessions', (c) => c.json(registry?.list() ?? []));
+
+  // Per-project verification command (run after agent turns that changed files, see verify.ts).
+  app.get('/api/project/verify', async (c) => {
+    const cwd = c.req.query('cwd') ?? '~';
+    const [settings, suggestions] = await Promise.all([projectSettings(cwd), suggestVerifyCommands(cwd)]);
+    return c.json({ command: settings.verify?.command ?? '', auto: settings.verify?.auto ?? false, suggestions });
+  });
+  app.put('/api/project/verify', async (c) => {
+    const b = await c.req.json<{ cwd: string; command: string; auto: boolean }>();
+    if (!b.cwd) return c.json({ error: 'cwd required', code: 'BAD_REQUEST' }, 400);
+    const command = String(b.command ?? '').trim().slice(0, 2000);
+    const next = await updateProjectSettings(b.cwd, (p) => ({ ...p, verify: command ? { command, auto: !!b.auto } : undefined }));
+    return c.json({ command: next.verify?.command ?? '', auto: next.verify?.auto ?? false });
+  });
 
   // Open a folder in the native Terminal / iTerm / Finder / VS Code.
   // The path is passed to AppleScript as argv and shell-quoted with `quoted form of`, so folder names

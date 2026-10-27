@@ -155,6 +155,9 @@ export const api = {
   gitRemote: (cwd: string, op: 'fetch' | 'pull' | 'push') => post<{ ok: boolean; output: string }>('/api/git/remote', { cwd, op }),
   gitCommit: (cwd: string, message: string) =>
     req<{ ok: boolean; output: string }>('/api/git/commit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, message }) }),
+  projectVerify: (cwd: string) => req<{ command: string; auto: boolean; suggestions: string[] }>(`/api/project/verify?cwd=${q(cwd)}`),
+  saveProjectVerify: (cwd: string, command: string, auto: boolean) =>
+    req<{ command: string; auto: boolean }>('/api/project/verify', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, command, auto }) }),
   // Bounded: a request that never settles would leave a remembered session blank until the next reload.
   historyMessages: (cwd: string, id: string) => req<HistoryMessage[]>(`/api/history/${q(id)}?cwd=${q(cwd)}`, { signal: AbortSignal.timeout(30000) }),
 };

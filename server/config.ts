@@ -29,6 +29,13 @@ export interface SavedPrompt {
   text: string;
 }
 
+/** Per-project settings, keyed by absolute folder path. */
+export interface ProjectSettings {
+  path: string;
+  /** Command run after an agent turn that changed files (typecheck, tests). */
+  verify?: { command: string; auto: boolean };
+}
+
 export interface Config {
   favorites: Favorite[];
   groups: FavoriteGroup[];
@@ -36,9 +43,10 @@ export interface Config {
   /** "agent:sessionId" keys of pinned sessions; pinned sessions cannot be deleted. */
   pinnedSessions: string[];
   prompts: SavedPrompt[];
+  projects: ProjectSettings[];
 }
 
-const DEFAULT: Config = { favorites: [], groups: [], recent: [], pinnedSessions: [], prompts: [] };
+const DEFAULT: Config = { favorites: [], groups: [], recent: [], pinnedSessions: [], prompts: [], projects: [] };
 
 export class ConfigStore {
   private pending: Promise<unknown> = Promise.resolve();

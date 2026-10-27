@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentId, Attachment, PermissionModeId, Question, TaskInfo, TodoItem } from './agent';
+import type { AgentEvent, AgentId, Attachment, PermissionModeId, Question, TaskInfo, TodoItem, VerifyStatus } from './agent';
 
 export type ChatItem =
   | { kind: 'user'; id: string; text: string; attachments: Attachment[]; pending?: boolean; /** Compaction summary injected by the CLI, not typed by the user. */ compact?: boolean }
@@ -8,7 +8,8 @@ export type ChatItem =
   | { kind: 'question'; id: string; questions: Question[]; resolved: boolean }
   | { kind: 'result'; id: string; ok: boolean; text: string; costUsd: number; numTurns: number; durationMs: number }
   | { kind: 'error'; id: string; message: string }
-  | { kind: 'system'; id: string; text: string };
+  | { kind: 'system'; id: string; text: string }
+  | { kind: 'verify'; id: string; status: VerifyStatus; command: string; output?: string; exitCode?: number; durationMs?: number };
 
 const COMPACT_PREFIX = 'This session is being continued from a previous conversation';
 /** Claude Code injects its compaction summary as a user turn; it must not be shown or titled as the user's words. */
@@ -271,6 +272,12 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       }
       items.push({ kind: 'error', id: uid(), message: e.message });
       return next;
+    case 'verify': {
+      const item = { kind: 'verify' as const, id: e.id, status: e.status, command: e.command, output: e.output, exitCode: e.exitCode, durationMs: e.durationMs };
+      const i = items.findIndex((it) => it.kind === 'verify' && it.id === e.id);
+      if (i >= 0) items[i] = item; else items.push(item);
+      return next;
+    }
     case 'log':
       return s;
   }

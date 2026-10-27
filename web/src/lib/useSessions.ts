@@ -16,7 +16,7 @@ function sessionName(s: ChatSession) { return displayTitle(s, 24) ?? s.cwd.split
  * Notify when the user is not looking at this session: the window is unfocused or hidden, or
  * another session/view is on screen. Native (Electron) when available, web Notification otherwise.
  */
-function notifyIfAway(s: ChatSession, e: { kind: string; text?: string; toolName?: string; ok?: boolean; requestId?: string; canAlwaysAllow?: boolean }) {
+function notifyIfAway(s: ChatSession, e: { kind: string; text?: string; toolName?: string; ok?: boolean; requestId?: string; canAlwaysAllow?: boolean; status?: string; command?: string }) {
   if (e.kind === 'approval.resolved' && e.requestId) { window.vibe?.closeNotification?.(e.requestId); return; }
   if (document.hasFocus() && document.visibilityState === 'visible' && onScreenSession === s.id) return;
   const name = sessionName(s);
@@ -24,6 +24,7 @@ function notifyIfAway(s: ChatSession, e: { kind: string; text?: string; toolName
   if (e.kind === 'result') { title = t(e.ok ? 'notif.sessionDone' : 'notif.sessionFailed', { name }); body = (e.text ?? '').slice(0, 120); }
   else if (e.kind === 'approval.request') { title = t('notif.approval'); body = `${name} · ${t('notif.allow', { tool: e.toolName ?? '' })}`; }
   else if (e.kind === 'question.request') { title = t('notif.question'); body = `${name} · ${t('notif.waiting')}`; }
+  else if (e.kind === 'verify' && e.status === 'failed') { title = t('notif.verifyFailed', { name }); body = e.command ?? ''; }
   if (!title) return;
   if (window.vibe?.notify) {
     const approval = e.kind === 'approval.request' && e.requestId
@@ -247,6 +248,8 @@ export function useSessions() {
     });
     agentClient.send({ type: 'session.rewind', sessionId, requestId, messageId, dryRun });
   }), []);
+  /** Run the project's verification command now (results arrive as `verify` events). */
+  const verify = useCallback((sessionId: string) => agentClient.send({ type: 'session.verify', sessionId }), []);
   const setPinned = useCallback((sessionId: string, pinned: boolean) => {
     setSessions((prev) => prev[sessionId] ? { ...prev, [sessionId]: { ...prev[sessionId], pinned: pinned || undefined } } : prev);
   }, []);
@@ -255,5 +258,5 @@ export function useSessions() {
     setSessions((prev) => { const n = { ...prev }; delete n[sessionId]; return n; });
   }, []);
 
-  return { sessions, replaced, start, send, approve, answer, interrupt, stopTask, setMode, setModel, setPinned, rewind, close };
+  return { sessions, replaced, start, send, approve, answer, interrupt, stopTask, setMode, setModel, setPinned, rewind, verify, close };
 }

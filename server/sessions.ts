@@ -3,12 +3,15 @@ import type { AgentEvent, AgentSession, ClientCommand, ServerMessage } from './a
 import { ClaudeSession } from './agents/claude.js';
 import { CodexSession } from './agents/codex.js';
 import { which } from './shell.js';
+import { runVerify, verifySettings } from './verify.js';
 
 const BUFFER_LIMIT = 5000;
 const BUFFER_BYTES = 16 * 1024 * 1024;
 /** Sessions nobody is watching and that have been idle this long are closed to free their CLI process. */
 const ORPHAN_TTL_MS = 6 * 60 * 60 * 1000;
 const REAP_EVERY_MS = 10 * 60 * 1000;
+/** Tools that can change files; a turn that used one is verified afterwards. */
+const MUTATING_TOOLS = /^(Edit|MultiEdit|Write|NotebookEdit|Bash|FileChange)$/;
 
 interface Entry {
   session: AgentSession;
@@ -20,6 +23,10 @@ interface Entry {
   running: boolean;
   closed: boolean;
   bufferBytes: number;
+  /** The current turn ran a tool that can change files. */
+  touched: boolean;
+  /** Verification in flight; a new turn cancels it because its result would be stale. */
+  verifying?: { id: string; cancel: () => void };
 }
 
 export class SessionRegistry {
@@ -66,7 +73,7 @@ export class SessionRegistry {
       throw new Error(`Unknown agent: ${cmd.agent}`);
     }
     if (this.closing || ws.readyState !== ws.OPEN) throw new Error('Connection closed before session started');
-    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set([ws]), createdAt: Date.now(), lastActivity: Date.now(), running: false, closed: false, bufferBytes: 0 };
+    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set([ws]), createdAt: Date.now(), lastActivity: Date.now(), running: false, closed: false, bufferBytes: 0, touched: false };
     this.entries.set(session.id, entry);
     session.onEvent((event) => this.broadcast(entry, event));
     return session;
@@ -95,12 +102,41 @@ export class SessionRegistry {
     const e = this.entries.get(id);
     if (!e) return;
     this.entries.delete(id);
+    e.verifying?.cancel();
     await e.session.close();
+  }
+
+  /**
+   * Run the project's verification command and report it into the session as `verify` events.
+   * Automatic runs (after a turn) need the project's auto flag and a turn that touched files.
+   */
+  async verify(id: string, manual = false) {
+    const e = this.entries.get(id);
+    if (!e || e.closed) return;
+    const settings = await verifySettings(e.session.cwd);
+    if (!settings) { if (manual) throw new Error('No verification command is set for this project.'); return; }
+    if (!manual && !settings.auto) return;
+    if (e.running) { if (manual) throw new Error('The session is still working; verify after the turn ends.'); return; }
+    if (e.closed || this.closing) return;
+    e.verifying?.cancel();
+    const vid = `verify-${Date.now().toString(36)}`;
+    const run = runVerify(e.session.cwd, settings.command);
+    e.verifying = { id: vid, cancel: run.cancel };
+    this.broadcast(e, { kind: 'verify', id: vid, status: 'running', command: settings.command });
+    const r = await run.done;
+    if (e.verifying?.id === vid) e.verifying = undefined;
+    if (!this.entries.has(id)) return;
+    this.broadcast(e, { kind: 'verify', id: vid, status: r.cancelled ? 'cancelled' : r.exitCode === 0 ? 'passed' : 'failed', command: settings.command, output: r.output, exitCode: r.exitCode, durationMs: r.durationMs });
   }
 
   private broadcast(e: Entry, event: AgentEvent) {
     const msg: ServerMessage = { sessionId: e.session.id, seq: ++e.seq, ts: Date.now(), event };
     e.lastActivity = msg.ts;
+    if (event.kind === 'status') {
+      const running = event.status === 'running' || event.status === 'compacting';
+      if (running && !e.running) { e.touched = false; e.verifying?.cancel(); }
+    }
+    if (event.kind === 'tool.start' && MUTATING_TOOLS.test(event.name)) e.touched = true;
     if (event.kind === 'status') e.running = event.status === 'running' || event.status === 'compacting';
     if (event.kind === 'status' && event.status === 'closed') e.closed = true;
     // Shutdown (update, restart) closes every session; clients must keep them remembered so they
@@ -112,6 +148,11 @@ export class SessionRegistry {
       while (e.buffer.length > 1 && (e.buffer.length > BUFFER_LIMIT || e.bufferBytes > BUFFER_BYTES)) e.bufferBytes -= Buffer.byteLength(JSON.stringify(e.buffer.shift()!));
     }
     for (const ws of e.subscribers) safeSend(ws, msg);
+    // Verify once the turn has settled; the adapters send `status: idle` right after `result`.
+    if (event.kind === 'result' && e.touched) {
+      e.touched = false;
+      setTimeout(() => void this.verify(e.session.id).catch((err) => console.warn(`[mac-vibe-coder] verify failed to start: ${(err as Error).message}`)), 50);
+    }
   }
 }
 
@@ -196,6 +237,10 @@ async function handle(cmd: ClientCommand, ws: WebSocket, registry: SessionRegist
       return;
     case 'session.close':
       await registry.close(cmd.sessionId);
+      return;
+    case 'session.verify':
+      must(registry, cmd.sessionId);
+      await registry.verify(cmd.sessionId, true);
       return;
   }
 }
