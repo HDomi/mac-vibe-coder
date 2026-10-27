@@ -1,7 +1,7 @@
 import { memo, useState } from 'react';
 import MarkdownView, { CopyButton } from './MarkdownView';
 import type { ChatItem } from '../lib/chatStore';
-import { api } from '../lib/api';
+import { imageSrc } from '../lib/api';
 import { openLightbox } from './Lightbox';
 import { t, useLang } from '../lib/i18n';
 
@@ -45,7 +45,7 @@ export function UserItem({ item, onRewind }: { item: Extract<ChatItem, { kind: '
         {item.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
             {item.attachments.map((a) => a.kind === 'image'
-              ? <img key={a.path} src={api.rawUrl(a.path)} alt={a.name} className="h-20 rounded-md object-cover cursor-zoom-in hover:opacity-90 transition-opacity" title={a.path} onClick={() => openLightbox(api.rawUrl(a.path), a.name)} />
+              ? <img key={a.path} src={imageSrc(a.path, a.name.slice(a.name.lastIndexOf('.')))} alt={a.name} className="h-20 rounded-md object-cover cursor-zoom-in hover:opacity-90 transition-opacity" title={a.path} onClick={() => openLightbox(imageSrc(a.path, a.name.slice(a.name.lastIndexOf('.'))), a.name)} />
               : <span key={a.path} className="text-xs bg-white/10 rounded px-2 py-1" title={a.path}>📎 {a.name}</span>)}
           </div>
         )}
@@ -80,6 +80,29 @@ export const AssistantItem = memo(function AssistantItem({ item, baseDir }: { it
 });
 
 const SUBAGENT_TOOLS = new Set(['Agent', 'Task', 'SubAgent', 'SubAgentActivity']);
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic|heif|tiff?|ico)$/i;
+
+/** Pictures to show under a tool card: what the tool returned, else the image file a Read / ImageView opened. */
+function toolImages(item: Extract<ChatItem, { kind: 'tool' }>): { src: string; label: string }[] {
+  const toSrc = (p: string) => (p.startsWith('data:') ? p : imageSrc(p, p.slice(p.lastIndexOf('.'))));
+  if (item.images?.length) return item.images.map((p) => ({ src: toSrc(p), label: p.startsWith('data:') ? item.name : p }));
+  if (!item.done || item.isError) return [];
+  const i = (item.input ?? {}) as Record<string, unknown>;
+  const file = item.name === 'Read' ? i.file_path : item.name === 'ImageView' ? i.path : null;
+  return typeof file === 'string' && IMAGE_FILE.test(file) ? [{ src: toSrc(file), label: file }] : [];
+}
+
+function ToolImages({ images }: { images: { src: string; label: string }[] }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {images.map((im, n) => (
+        <img key={n} src={im.src} alt={im.label} title={im.label} loading="lazy"
+          className="max-h-56 max-w-full rounded-md border border-white/10 bg-black/30 object-contain cursor-zoom-in hover:border-white/25 transition-colors"
+          onClick={(e) => { e.stopPropagation(); openLightbox(im.src, im.label); }} />
+      ))}
+    </div>
+  );
+}
 
 export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: 'tool' }>; children?: React.ReactNode }) {
   useLang();
@@ -88,6 +111,9 @@ export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: '
   const summary = summarizeInput(item.name, item.input);
   const isSubagent = SUBAGENT_TOOLS.has(item.name);
   const i = (item.input ?? {}) as Record<string, unknown>;
+  const images = toolImages(item);
+  // "[image]" placeholders say nothing once the picture itself is on screen.
+  const output = images.length && item.output !== null ? item.output.split('\n').filter((l) => l.trim() !== '[image]').join('\n').trim() : item.output;
   return (
     <div data-tool-use={item.id} className={`rounded-lg border ${item.isError ? 'border-red-500/30' : isSubagent && !item.done ? 'border-violet-400/40' : 'border-white/10'} ${isSubagent ? 'bg-violet-500/[0.04]' : 'bg-white/[0.03]'} text-[13px] ${item.parent ? 'ml-6' : ''}`}>
       <button className="w-full flex items-center gap-2 px-3 py-1.5 text-left" onClick={() => setOpen((v) => !v)}>
@@ -101,11 +127,13 @@ export function ToolItem({ item, children }: { item: Extract<ChatItem, { kind: '
       {open && (
         <div className="border-t border-white/10 px-3 py-2 space-y-2">
           <pre className="text-[12px] text-zinc-400 whitespace-pre-wrap break-all max-h-48 overflow-auto">{JSON.stringify(item.input, null, 2)}</pre>
-          {item.output !== null && (
-            <pre className={`text-[12px] whitespace-pre-wrap break-all max-h-72 overflow-auto rounded bg-black/40 p-2 ${item.isError ? 'text-red-300' : 'text-zinc-300'}`}>{item.output.slice(0, 20000)}{item.output.length > 20000 ? '\n…' : ''}</pre>
+          {output !== null && (!images.length || output) && (
+            <pre className={`text-[12px] whitespace-pre-wrap break-all max-h-72 overflow-auto rounded bg-black/40 p-2 ${item.isError ? 'text-red-300' : 'text-zinc-300'}`}>{output.slice(0, 20000)}{output.length > 20000 ? '\n…' : ''}</pre>
           )}
+          {images.length > 0 && <ToolImages images={images} />}
         </div>
       )}
+      {!open && images.length > 0 && <div className="border-t border-white/10 px-3 py-2"><ToolImages images={images} /></div>}
       {children && (
         <div className="border-t border-white/10">
           <button className="w-full text-left px-3 py-1 text-[11px] text-zinc-500 hover:text-zinc-300" onClick={() => setShowKids((v) => !v)}>

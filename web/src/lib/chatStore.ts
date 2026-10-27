@@ -3,7 +3,7 @@ import type { AgentEvent, AgentId, Attachment, PermissionModeId, Question, TaskI
 export type ChatItem =
   | { kind: 'user'; id: string; text: string; attachments: Attachment[]; pending?: boolean; /** Compaction summary injected by the CLI, not typed by the user. */ compact?: boolean }
   | { kind: 'assistant'; id: string; text: string; thinking: string; parent: string | null; streaming: boolean }
-  | { kind: 'tool'; id: string; name: string; input: unknown; output: string | null; isError: boolean; parent: string | null; elapsed: number; done: boolean }
+  | { kind: 'tool'; id: string; name: string; input: unknown; output: string | null; isError: boolean; parent: string | null; elapsed: number; done: boolean; /** Images the tool returned: absolute paths, or data: URIs from saved history. */ images?: string[] }
   | { kind: 'approval'; id: string; toolName: string; input: unknown; canAlwaysAllow: boolean; decision: string | null }
   | { kind: 'question'; id: string; questions: Question[]; resolved: boolean }
   | { kind: 'result'; id: string; ok: boolean; text: string; costUsd: number; numTurns: number; durationMs: number }
@@ -205,7 +205,7 @@ export function reduceEvent(s: ChatSession, e: AgentEvent, seq: number): ChatSes
       return next;
     case 'tool.result': {
       const i = items.findIndex((it) => it.kind === 'tool' && it.id === e.toolUseId);
-      if (i >= 0) items[i] = { ...(items[i] as Extract<ChatItem, { kind: 'tool' }>), output: e.content, isError: e.isError, done: true };
+      if (i >= 0) items[i] = { ...(items[i] as Extract<ChatItem, { kind: 'tool' }>), output: e.content, isError: e.isError, done: true, ...(e.images?.length ? { images: e.images } : {}) };
       return next;
     }
     case 'tool.output': {
@@ -298,8 +298,10 @@ export function itemsFromHistory(messages: Array<{ type: string; uuid: string; m
         else if (b.type === 'tool_result') {
           const i = out.findIndex((it) => it.kind === 'tool' && it.id === b.tool_use_id);
           const c = b.content;
-          const text = typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) => (x as { text?: string }).text ?? '').join('\n') : '';
-          if (i >= 0) out[i] = { ...(out[i] as Extract<ChatItem, { kind: 'tool' }>), output: text, isError: Boolean(b.is_error), done: true };
+          const text = typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) => (x as { type?: string; text?: string }).type === 'image' ? '[image]' : (x as { text?: string }).text ?? '').join('\n') : '';
+          const images = Array.isArray(c) ? (c as Array<{ type?: string; source?: { type?: string; data?: string; media_type?: string } }>)
+            .filter((x) => x.type === 'image' && x.source?.type === 'base64' && x.source.data).map((x) => `data:${x.source!.media_type ?? 'image/png'};base64,${x.source!.data}`) : [];
+          if (i >= 0) out[i] = { ...(out[i] as Extract<ChatItem, { kind: 'tool' }>), output: text, isError: Boolean(b.is_error), done: true, ...(images.length ? { images } : {}) };
         }
       }
       if (texts.length && !m.parent_tool_use_id) { const s = splitAttachments(texts.join('\n')); out.push({ kind: 'user', id: m.uuid, text: s.text, attachments: s.attachments, compact: isCompactSummary(s.text) || undefined }); }

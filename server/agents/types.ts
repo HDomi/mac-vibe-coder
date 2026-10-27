@@ -20,7 +20,7 @@ export type AgentEvent =
   | { kind: 'thinking.delta'; text: string; parent: string | null }
   | { kind: 'assistant.message'; id: string; parent: string | null; blocks: AssistantBlock[] }
   | { kind: 'tool.start'; toolUseId: string; name: string; input: unknown; parent: string | null }
-  | { kind: 'tool.result'; toolUseId: string; content: string; isError: boolean; parent: string | null }
+  | { kind: 'tool.result'; toolUseId: string; content: string; isError: boolean; parent: string | null; /** Images the tool returned or produced, as absolute file paths. */ images?: string[] }
   | { kind: 'tool.output'; toolUseId: string; chunk: string }
   | { kind: 'tool.progress'; toolUseId: string; name: string; elapsed: number }
   | { kind: 'approval.request'; requestId: string; toolUseId: string | null; toolName: string; input: unknown; canAlwaysAllow: boolean }

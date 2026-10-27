@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { query, type Options, type PermissionResult, type PermissionUpdate, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { saveToolImage } from '../attachments.js';
 import type { AgentEvent, AgentSession, AssistantBlock, Attachment, PermissionModeId, Question, RewindResult, TaskInfo } from './types.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -216,7 +217,10 @@ export class ClaudeSession implements AgentSession {
           const text = typeof c === 'string' ? c
             : Array.isArray(c) ? c.map((x) => (x as { type?: string; text?: string }).type === 'text' ? (x as { text: string }).text : `[${(x as { type?: string }).type}]`).join('\n')
             : '';
-          this.emit({ kind: 'tool.result', toolUseId: String(b.tool_use_id), content: text, isError: Boolean(b.is_error), parent: m.parent_tool_use_id });
+          // Image blocks (Read of a picture, screenshot tools) are written to disk so the card can show them.
+          const images = Array.isArray(c) ? (c as Array<{ type?: string; source?: { type?: string; data?: string; media_type?: string } }>)
+            .filter((x) => x.type === 'image' && x.source?.type === 'base64').map((x) => saveToolImage(x.source!.data, x.source!.media_type)).filter((p): p is string => !!p) : [];
+          this.emit({ kind: 'tool.result', toolUseId: String(b.tool_use_id), content: text, isError: Boolean(b.is_error), parent: m.parent_tool_use_id, ...(images.length ? { images } : {}) });
         }
         return;
       }

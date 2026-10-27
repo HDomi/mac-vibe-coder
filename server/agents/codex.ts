@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { saveToolImage } from '../attachments.js';
 import type { AgentEvent, AgentSession, Attachment, PermissionModeId, Question } from './types.js';
 
 /*
@@ -205,7 +206,7 @@ export class CodexSession implements AgentSession {
       case 'imageView': return { name: 'ImageView', input: { path: item.path } };
       case 'collabAgentToolCall': return { name: 'SubAgent', input: { tool: item.tool, prompt: item.prompt } };
       case 'subAgentActivity': return { name: 'SubAgentActivity', input: { kind: item.kind, agentPath: item.agentPath } };
-      case 'imageGeneration': return { name: 'ImageGeneration', input: item };
+      case 'imageGeneration': return { name: 'ImageGeneration', input: { prompt: item.revisedPrompt ?? null, status: item.status } };
       default: return null;
     }
   }
@@ -247,10 +248,23 @@ export class CodexSession implements AgentSession {
       }
       case 'mcpToolCall': {
         const r = item.result as Json | null; const e = item.error as Json | null;
-        this.emit({ kind: 'tool.result', toolUseId: item.id, content: e ? JSON.stringify(e) : JSON.stringify(r?.content ?? r ?? ''), isError: Boolean(e), parent: null });
+        // MCP image content ({ type: 'image', data, mimeType }) is saved for the card and left out of the JSON text.
+        const parts = Array.isArray(r?.content) ? (r!.content as Json[]) : [];
+        const images = parts.filter((p) => p?.type === 'image').map((p) => saveToolImage(p.data, p.mimeType)).filter((p): p is string => !!p);
+        const shown = images.length ? parts.map((p) => (p?.type === 'image' ? { type: 'image' } : p)) : (r?.content ?? r ?? '');
+        this.emit({ kind: 'tool.result', toolUseId: item.id, content: e ? JSON.stringify(e) : JSON.stringify(shown), isError: Boolean(e), parent: null, ...(images.length ? { images } : {}) });
         return;
       }
-      case 'dynamicToolCall': case 'webSearch': case 'imageView': case 'collabAgentToolCall': case 'subAgentActivity': case 'imageGeneration':
+      case 'imageView':
+        this.emit({ kind: 'tool.result', toolUseId: item.id, content: String(item.path ?? ''), isError: false, parent: null, ...(item.path ? { images: [String(item.path)] } : {}) });
+        return;
+      case 'imageGeneration': {
+        const saved = typeof item.savedPath === 'string' ? item.savedPath : saveToolImage(item.result, 'image/png');
+        const failure = item.failure as Json | null;
+        this.emit({ kind: 'tool.result', toolUseId: item.id, content: failure ? JSON.stringify(failure) : String(item.revisedPrompt ?? saved ?? item.status ?? ''), isError: !!failure, parent: null, ...(saved ? { images: [saved] } : {}) });
+        return;
+      }
+      case 'dynamicToolCall': case 'webSearch': case 'collabAgentToolCall': case 'subAgentActivity':
         this.emit({ kind: 'tool.result', toolUseId: item.id, content: JSON.stringify(item.contentItems ?? item.status ?? '', null, 1).slice(0, 4000), isError: item.success === false, parent: null });
         return;
       case 'contextCompaction':
