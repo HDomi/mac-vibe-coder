@@ -48,6 +48,11 @@ function ScreencastBrowserPanel({ visible, onCapture }: Props) {
   const send = useCallback((msg: Record<string, unknown>) => {
     if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(msg));
   }, []);
+  useEffect(() => {
+    const h = (ev: Event) => { const url = (ev as CustomEvent<{ url: string }>).detail?.url; if (url) setTimeout(() => send({ type: 'navigate', url }), 600); };
+    window.addEventListener('vibe:browser-open', h);
+    return () => window.removeEventListener('vibe:browser-open', h);
+  }, [send]);
   const request = useCallback((msg: Record<string, unknown>) => new Promise<Record<string, unknown>>((resolve) => {
     const requestId = crypto.randomUUID();
     pending.current.set(requestId, resolve);
@@ -247,6 +252,12 @@ function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: Na
   const lastRect = useRef('');
 
   useEffect(() => native.onState(setState), [native]);
+  // Run panel "open URL": the app switches to this tab first; navigate once the view is placed.
+  useEffect(() => {
+    const h = (ev: Event) => { const url = (ev as CustomEvent<{ url: string }>).detail?.url; if (url) setTimeout(() => void native.navigate(url), 250); };
+    window.addEventListener('vibe:browser-open', h);
+    return () => window.removeEventListener('vibe:browser-open', h);
+  }, [native]);
   useEffect(() => native.onShortcut((k) => {
     if (k.key === 'l') { addressInput.current?.focus(); addressInput.current?.select(); return; }
     // App shortcuts typed while the page has focus: replay them on the app window.

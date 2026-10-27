@@ -17,6 +17,7 @@ import type { BackgroundSession } from './components/Composer';
 import TerminalPanel from './components/TerminalPanel';
 import BrowserPanel from './components/BrowserPanel';
 import GitPanel from './components/GitPanel';
+import RunPanel from './components/RunPanel';
 import Splitter, { usePaneWidth } from './components/Splitter';
 import { ContextMenuProvider, useContextMenu, type MenuItem } from './components/ContextMenu';
 import QuickOpen from './components/QuickOpen';
@@ -62,7 +63,8 @@ function AppInner() {
   const [selected, setSelected] = useState<Entry | null>(null);
   const [showTools, setShowTools] = useState(false);
   const [toolsFocusLock, setToolsFocusLock] = useState(false);
-  const [rightTab, setRightTab] = useState<'files' | 'preview' | 'browser' | 'terminal' | 'git'>('files');
+  const [rightTab, setRightTab] = useState<'files' | 'preview' | 'browser' | 'terminal' | 'git' | 'run'>('files');
+  const [runStatus, setRunStatus] = useState({ running: 0, errors: false });
   // Remembered so an update/relaunch comes back to the tab that was on screen, not the new-session view.
   const [activeSession, setActiveSession] = useState<string | 'new' | null>(() => { try { return localStorage.getItem(LS_ACTIVE_SESSION); } catch { return null; } });
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(LS_SIDEBAR) === '1'; } catch { return false; } });
@@ -215,7 +217,14 @@ function AppInner() {
     if (!session && project) setActiveSession(null);
   };
 
-  const rightTabs = [['files', t('app.tab.files')], ['preview', t('app.tab.preview')], ['browser', t('app.tab.browser')], ['terminal', t('app.tab.terminal')], ['git', t('app.tab.git')]] as const;
+  const rightTabs = [['files', t('app.tab.files')], ['preview', t('app.tab.preview')], ['browser', t('app.tab.browser')], ['terminal', t('app.tab.terminal')], ['git', t('app.tab.git')], ['run', t('app.tab.run')]] as const;
+  const TAB_KEYS = ['1', '2', '3', '4', '5', '6'];
+  // "Open in the Browser tab" (Run panel URLs): bring the tab up; BrowserPanel navigates.
+  useEffect(() => {
+    const h = () => { setRightTab('browser'); setRightCollapsed(false); };
+    window.addEventListener('vibe:browser-open', h);
+    return () => window.removeEventListener('vibe:browser-open', h);
+  }, []);
 
   // Global keyboard shortcuts.
   useEffect(() => {
@@ -235,7 +244,7 @@ function AppInner() {
         if (k === 'w') { e.preventDefault(); if (editor.active) editor.close(editor.active); return; }
         if (k === 's') { e.preventDefault(); if (editor.active) void editor.save(editor.active); return; }
         if (k === 'b') { e.preventDefault(); window.dispatchEvent(new Event('vibe:toggle-tree')); return; }
-        if (k === 'n' || k === 'j' || k === 'k' || ['1', '2', '3', '4', '5'].includes(e.key)) return;
+        if (k === 'n' || k === 'j' || k === 'k' || TAB_KEYS.includes(e.key)) return;
       }
       if (k === 'p' && !e.shiftKey) { e.preventDefault(); if (project) setQuickOpen((v) => !v); }
       else if (k === 'b') { e.preventDefault(); setCollapsed((v) => !v); }
@@ -253,7 +262,7 @@ function AppInner() {
         }
       }
       else if (k === '/') { e.preventDefault(); setShowTools(true); }
-      else if (['1', '2', '3', '4', '5'].includes(e.key) && !inText) { e.preventDefault(); setRightTab(rightTabs[Number(e.key) - 1][0]); setRightCollapsed(false); }
+      else if (TAB_KEYS.includes(e.key) && !inText) { e.preventDefault(); setRightTab(rightTabs[Number(e.key) - 1][0]); setRightCollapsed(false); }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -341,7 +350,10 @@ function AppInner() {
               <div data-companion-floor="right-tabs" data-companion-edge="bottom" className="h-10 shrink-0 flex items-stretch border-b border-white/10 text-xs" style={{ minWidth: right.width }}>
                 <div className="flex-1 min-w-0 flex items-stretch overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {rightTabs.map(([t, label]) => (
-                    <button key={t} className={`shrink-0 px-3 ${rightTab === t ? 'text-white border-b-2 border-blue-400' : 'text-zinc-500 hover:text-zinc-300'}`} onClick={() => setRightTab(t)}>{label}</button>
+                    <button key={t} className={`shrink-0 px-3 flex items-center gap-1.5 ${rightTab === t ? 'text-white border-b-2 border-blue-400' : 'text-zinc-500 hover:text-zinc-300'}`} onClick={() => setRightTab(t)}>
+                      {label}
+                      {t === 'run' && runStatus.running > 0 && <span className={`w-1.5 h-1.5 rounded-full ${runStatus.errors ? 'bg-red-400' : 'bg-emerald-400'}`} />}
+                    </button>
                   ))}
                 </div>
                 {project && (
@@ -368,6 +380,7 @@ function AppInner() {
                 <div className={`absolute inset-0 ${rightTab === 'browser' ? '' : 'invisible'}`}><BrowserPanel visible={rightTab === 'browser' && !rightCollapsed} onCapture={(a) => setPendingAttachments((prev) => [...prev, a])} /></div>
                 <div className={`absolute inset-0 ${rightTab === 'terminal' ? '' : 'invisible'}`}><TerminalPanel cwd={project} visible={rightTab === 'terminal'} /></div>
                 <div className={`absolute inset-0 ${rightTab === 'git' ? '' : 'invisible'}`}><GitPanel cwd={project} visible={rightTab === 'git'} /></div>
+                <div className={`absolute inset-0 ${rightTab === 'run' ? '' : 'invisible'}`}><RunPanel cwd={project} visible={rightTab === 'run' && !rightCollapsed} onStatus={setRunStatus} /></div>
               </div>
             </div>
           </main>

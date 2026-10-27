@@ -9,6 +9,7 @@ import { rejectReason } from './guard.js';
 import { setShutdownHandler } from './lifecycle.js';
 import { attachBrowser, browser } from './browser.js';
 import { RESTART_EXIT_CODE } from './updater.js';
+import { stopAllRuns } from './runner.js';
 
 export async function startServer(port = PORT): Promise<ServerType> {
   await syncLoginShellPath();
@@ -36,6 +37,7 @@ export async function startServer(port = PORT): Promise<ServerType> {
       http.close();
       const timer = setTimeout(() => process.exit(code), 4000);
       killAllPtys();
+      stopAllRuns();
       // Quitting closes the headless Chrome we started; an update restart keeps it (and its logins) for the new server.
       void browser.shutdown(code !== RESTART_EXIT_CODE);
       registry.closeAll().finally(() => { clearTimeout(timer); process.exit(code); });

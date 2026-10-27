@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import { listRuns, projectScripts, removeRun, startRun, stopRun, subscribeRun, type RunLine } from '../server/runner';
+
+const until = async (cond: () => boolean, ms = 8000) => { const end = Date.now() + ms; while (!cond()) { if (Date.now() > end) throw new Error('timeout'); await new Promise((r) => setTimeout(r, 30)); } };
+
+test('runner: scripts listed dev-first, output and URL captured, stop kills the group', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mvc-run-'));
+  try {
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ scripts: { lint: 'x', dev: 'vite', test: 'y', predev: 'z' } }));
+    const { scripts } = await projectScripts(dir);
+    assert.deepEqual(scripts.map((s) => s.command), ['npm run dev', 'npm run lint', 'npm test']);
+
+    const info = startRun(dir, 'srv', 'echo "  Local: \\033[36mhttp://0.0.0.0:5173/\\033[0m"; echo oops >&2; sleep 30');
+    const lines: RunLine[] = [];
+    let url: string | null = null; let status = 'running';
+    const off = subscribeRun(info.id, -1, { line: (l) => lines.push(l), info: (i) => { url = i.url; status = i.status; }, removed: () => {} })!;
+    await until(() => lines.length >= 2 && !!url);
+    assert.equal(url, 'http://localhost:5173/');
+    assert.deepEqual(lines.map((l) => [l.text.trim(), l.err]), [['Local: http://0.0.0.0:5173/', false], ['oops', true]]);
+    assert.equal(listRuns(dir).length, 1);
+    stopRun(info.id);
+    await until(() => status === 'exited');
+    off();
+    // A late subscriber gets the backlog after its cursor.
+    const late: RunLine[] = [];
+    subscribeRun(info.id, 0, { line: (l) => late.push(l), info: () => {}, removed: () => {} });
+    assert.deepEqual(late.map((l) => l.n), [1]);
+    removeRun(info.id);
+    assert.equal(listRuns(dir).length, 0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

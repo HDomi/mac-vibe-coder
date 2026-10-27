@@ -29,6 +29,7 @@ import { displayableIcon, findProjectIcon } from './icons.js';
 import { convertImage, imageInfo, renderPng, writeImageBytes } from './image.js';
 import { projectSettings, suggestVerifyCommands, updateProjectSettings } from './verify.js';
 import { revertTurn, turnDiff } from './turns.js';
+import { listRuns, projectScripts, removeRun, startRun, stopRun, subscribeRun, type RunInfo, type RunLine } from './runner.js';
 import { killProcess, listeningPorts, netInfo, proxyHttp, type ProxyRequest } from './net.js';
 
 const WEB_DIST = path.join(REPO_ROOT, 'web', 'dist');
@@ -378,6 +379,38 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   });
 
   app.get('/api/sessions', (c) => c.json(registry?.list() ?? []));
+
+  // Run panel (runner.ts): project scripts and long-running dev servers owned by the server.
+  app.get('/api/run/scripts', async (c) => c.json(await projectScripts(c.req.query('cwd') ?? '~')));
+  app.get('/api/run/list', (c) => c.json(listRuns(c.req.query('cwd'))));
+  app.post('/api/run/start', async (c) => {
+    const b = await c.req.json<{ cwd: string; name?: string; command: string }>();
+    const command = String(b.command ?? '').trim();
+    if (!b.cwd || !command) return c.json({ error: 'cwd and command required', code: 'BAD_REQUEST' }, 400);
+    return c.json(startRun(b.cwd, String(b.name || command).slice(0, 120), command.slice(0, 4000)));
+  });
+  app.post('/api/run/stop', async (c) => { const b = await c.req.json<{ id: string }>(); return c.json({ ok: stopRun(String(b.id)) }); });
+  app.post('/api/run/remove', async (c) => { const b = await c.req.json<{ id: string }>(); removeRun(String(b.id)); return c.json({ ok: true }); });
+  app.get('/api/run/stream', (c) => streamSSE(c, async (stream) => {
+    const id = c.req.query('id') ?? '';
+    const after = Number(c.req.query('after') ?? -1);
+    let resolveDone: () => void = () => {};
+    const done = new Promise<void>((r) => { resolveDone = r; });
+    // Lines are batched per tick: a chatty build would otherwise send thousands of tiny SSE frames.
+    let batch: RunLine[] = [];
+    let timer: NodeJS.Timeout | null = null;
+    const flush = () => { timer = null; if (batch.length) { void stream.writeSSE({ event: 'lines', data: JSON.stringify(batch) }).catch(() => {}); batch = []; } };
+    const off = subscribeRun(id, Number.isFinite(after) ? after : -1, {
+      line: (l) => { batch.push(l); timer ??= setTimeout(flush, 50); },
+      info: (i: RunInfo) => { flush(); void stream.writeSSE({ event: 'info', data: JSON.stringify(i) }).catch(() => {}); },
+      removed: () => { flush(); void stream.writeSSE({ event: 'removed', data: '1' }).catch(() => {}); resolveDone(); },
+    });
+    if (!off) { await stream.writeSSE({ event: 'removed', data: '1' }); return; }
+    const ping = setInterval(() => { void stream.write(': ping\n\n').catch(() => {}); }, 30000);
+    stream.onAbort(resolveDone);
+    await done;
+    clearInterval(ping); if (timer) clearTimeout(timer); off();
+  }));
 
   // Turn change cards (snapshots from turns.ts): one file's diff, and putting files or hunks back.
   app.get('/api/turns/diff', async (c) => c.text(await turnDiff(c.req.query('root') ?? '', c.req.query('from') ?? '', c.req.query('to') ?? '', c.req.query('path') ?? '')));

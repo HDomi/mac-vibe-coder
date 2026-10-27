@@ -38,3 +38,17 @@ test('verify suggestions follow the project kind and package manager', async () 
     assert.ok((await suggestVerifyCommands(dir)).includes('cargo check'));
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test('run log error blocks: stack frames grouped, false positives skipped', async () => {
+  const { findErrors, isErrorLine } = await import('../web/src/lib/runLog');
+  const text = [
+    'VITE v5 ready in 300 ms', '  ➜  Local:   http://localhost:5173/', 'Found 0 errors. Watching for file changes.',
+    '[vite] Internal server error: Transform failed', '  src/App.tsx:3:7', '    at foo (x.js:1:1)', '',
+    'hmr update /src/App.tsx', 'TypeError: Cannot read properties of undefined', '    at bar (y.js:2:2)',
+  ];
+  const lines = text.map((t, n) => ({ n, text: t, err: false }));
+  const blocks = findErrors(lines);
+  assert.deepEqual(blocks.map((b) => [b.start, b.lines.length]), [[3, 3], [8, 2]]);
+  assert.deepEqual(findErrors(lines, 7).map((b) => b.start), [8]);
+  assert.equal(isErrorLine('import ErrorBoundary from "./ErrorBoundary"'), false);
+});

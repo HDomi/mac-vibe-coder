@@ -60,6 +60,9 @@ export type ProxyResult =
 export interface NetInfo { hostname: string; lan: string | null; interfaces: { name: string; address: string; family: 'IPv4' | 'IPv6'; internal: boolean; mac: string; cidr: string | null }[] }
 export interface ListeningPort { pid: number; command: string; user: string; address: string; port: number; cwd: string | null; self: boolean }
 
+export interface RunScript { name: string; command: string }
+export interface RunInfo { id: string; cwd: string; name: string; command: string; status: 'running' | 'exited'; exitCode: number | null; startedAt: number; endedAt?: number; url: string | null }
+
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status: number) { super(message); }
 }
@@ -155,6 +158,12 @@ export const api = {
   gitRemote: (cwd: string, op: 'fetch' | 'pull' | 'push') => post<{ ok: boolean; output: string }>('/api/git/remote', { cwd, op }),
   gitCommit: (cwd: string, message: string) =>
     req<{ ok: boolean; output: string }>('/api/git/commit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, message }) }),
+  runScripts: (cwd: string) => req<{ manager: string; scripts: RunScript[] }>(`/api/run/scripts?cwd=${q(cwd)}`),
+  runList: (cwd: string) => req<RunInfo[]>(`/api/run/list?cwd=${q(cwd)}`),
+  runStart: (cwd: string, name: string, command: string) => post<RunInfo>('/api/run/start', { cwd, name, command }),
+  runStop: (id: string) => post<{ ok: boolean }>('/api/run/stop', { id }),
+  runRemove: (id: string) => post<{ ok: boolean }>('/api/run/remove', { id }),
+  runStreamUrl: (id: string, after = -1) => `/api/run/stream?id=${q(id)}&after=${after}`,
   turnDiff: (root: string, from: string, to: string, path: string) =>
     fetch(`/api/turns/diff?root=${q(root)}&from=${q(from)}&to=${q(to)}&path=${q(path)}`).then(async (r) => { const text = await r.text(); if (!r.ok) throw new Error(text || r.statusText); return text; }),
   turnRevert: (body: { root: string; from: string; to: string; files?: string[]; hunk?: { file: string; index: number }; force?: boolean }) =>
