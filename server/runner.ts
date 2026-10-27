@@ -49,10 +49,10 @@ export function listRuns(cwd?: string): RunInfo[] {
   return [...procs.values()].map((p) => p.info).filter((i) => !abs || i.cwd === abs).sort((a, b) => a.startedAt - b.startedAt);
 }
 
-export function startRun(cwd: string, name: string, command: string): RunInfo {
+export async function startRun(cwd: string, name: string, command: string): Promise<RunInfo> {
   const dir = resolvePath(cwd);
-  // One instance per script: starting it again replaces the old process.
-  for (const p of procs.values()) if (p.info.cwd === dir && p.info.name === name) removeRun(p.info.id);
+  // One instance per script: starting it again replaces the old process, once it has let go of its port.
+  await Promise.all([...procs.values()].filter((p) => p.info.cwd === dir && p.info.name === name).map((p) => removeRun(p.info.id)));
   const id = `run-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const child = spawn('/bin/zsh', ['-lc', command], { cwd: dir, detached: true, env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', BROWSER: 'none' } });
   const proc: Proc = { info: { id, cwd: dir, name, command, status: 'running', exitCode: null, startedAt: Date.now(), url: null }, child, lines: [], next: 0, events: new EventEmitter() };
@@ -105,17 +105,25 @@ export function stopRun(id: string): boolean {
   return true;
 }
 
-/** Stop (if needed) and forget a run. */
-export function removeRun(id: string) {
+/** Stop (if needed) and forget a run; resolves when its process has exited (SIGKILL after 5s). */
+export function removeRun(id: string): Promise<void> {
   const p = procs.get(id);
-  if (!p) return;
+  if (!p) return Promise.resolve();
+  const exited = p.info.status !== 'running' ? Promise.resolve() : new Promise<void>((resolve) => {
+    p.child.once('close', () => resolve());
+    setTimeout(resolve, 6000).unref();
+  });
   stopRun(id);
   procs.delete(id);
   p.events.emit('removed');
+  return exited;
 }
 
+/** Server shutdown: TERM every group now, KILL whatever is left shortly after (detached groups outlive us otherwise). */
 export function stopAllRuns() {
-  for (const p of procs.values()) if (p.info.status === 'running') killGroup(p, 'SIGTERM');
+  const live = [...procs.values()].filter((p) => p.info.status === 'running');
+  for (const p of live) killGroup(p, 'SIGTERM');
+  if (live.length) setTimeout(() => { for (const p of live) if (p.info.status === 'running') killGroup(p, 'SIGKILL'); }, 1500);
 }
 
 /** Backlog after line `after`, then live lines and status changes until `onClose`. */

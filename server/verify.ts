@@ -93,7 +93,11 @@ export function runVerify(cwd: string, command: string): { done: Promise<VerifyO
   };
   const child = spawn('/bin/zsh', ['-lc', command], { cwd: resolvePath(cwd), env: { ...process.env, CI: '1', FORCE_COLOR: '0', NO_COLOR: '1' }, detached: true });
   const killGroup = (sig: NodeJS.Signals) => { try { if (child.pid) process.kill(-child.pid, sig); } catch { /* exited */ } };
-  const timer = setTimeout(() => { push('\nVerification exceeded 15 minutes; stopped.\n'); killGroup('SIGTERM'); }, TIMEOUT_MS);
+  const timer = setTimeout(() => {
+    push('\nVerification exceeded 15 minutes; stopped.\n');
+    killGroup('SIGTERM');
+    setTimeout(() => killGroup('SIGKILL'), 5000).unref();
+  }, TIMEOUT_MS);
   child.stdout.on('data', (d: Buffer) => push(d.toString()));
   child.stderr.on('data', (d: Buffer) => push(d.toString()));
   const done = new Promise<VerifyOutcome>((resolve) => {

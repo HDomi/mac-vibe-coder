@@ -411,10 +411,10 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
     const b = await c.req.json<{ cwd: string; name?: string; command: string }>();
     const command = String(b.command ?? '').trim();
     if (!b.cwd || !command) return c.json({ error: 'cwd and command required', code: 'BAD_REQUEST' }, 400);
-    return c.json(startRun(b.cwd, String(b.name || command).slice(0, 120), command.slice(0, 4000)));
+    return c.json(await startRun(b.cwd, String(b.name || command).slice(0, 120), command.slice(0, 4000)));
   });
   app.post('/api/run/stop', async (c) => { const b = await c.req.json<{ id: string }>(); return c.json({ ok: stopRun(String(b.id)) }); });
-  app.post('/api/run/remove', async (c) => { const b = await c.req.json<{ id: string }>(); removeRun(String(b.id)); return c.json({ ok: true }); });
+  app.post('/api/run/remove', async (c) => { const b = await c.req.json<{ id: string }>(); void removeRun(String(b.id)); return c.json({ ok: true }); });
   app.get('/api/run/stream', (c) => streamSSE(c, async (stream) => {
     const id = c.req.query('id') ?? '';
     const after = Number(c.req.query('after') ?? -1);

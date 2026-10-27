@@ -30,17 +30,25 @@ function useRunLog(id: string | null) {
     setLines([]); setInfo(null);
     if (!id) return;
     let last = -1;
-    const es = new EventSource(api.runStreamUrl(id, last));
-    es.addEventListener('lines', (e) => {
-      const batch = JSON.parse((e as MessageEvent).data) as LogLine[];
-      const fresh = batch.filter((l) => l.n > last);
-      if (!fresh.length) return;
-      last = fresh[fresh.length - 1].n;
-      setLines((prev) => { const next = prev.concat(fresh); return next.length > 3000 ? next.slice(-3000) : next; });
-    });
-    es.addEventListener('info', (e) => setInfo(JSON.parse((e as MessageEvent).data) as RunInfo));
-    es.addEventListener('removed', () => es.close());
-    return () => es.close();
+    let es: EventSource | null = null;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let done = false;
+    // Reconnects by hand so the server resumes after the last line instead of replaying the whole backlog.
+    const open = () => {
+      es = new EventSource(api.runStreamUrl(id, last));
+      es.addEventListener('lines', (e) => {
+        const batch = JSON.parse((e as MessageEvent).data) as LogLine[];
+        const fresh = batch.filter((l) => l.n > last);
+        if (!fresh.length) return;
+        last = fresh[fresh.length - 1].n;
+        setLines((prev) => { const next = prev.concat(fresh); return next.length > 3000 ? next.slice(-3000) : next; });
+      });
+      es.addEventListener('info', (e) => setInfo(JSON.parse((e as MessageEvent).data) as RunInfo));
+      es.addEventListener('removed', () => { done = true; es?.close(); });
+      es.onerror = () => { es?.close(); if (!done) retry = setTimeout(open, 2000); };
+    };
+    open();
+    return () => { done = true; clearTimeout(retry); es?.close(); };
   }, [id]);
   return { lines, info };
 }
@@ -80,7 +88,7 @@ export default function RunPanel({ cwd, visible, onStatus }: Props) {
   const running = runs.filter((r) => r.status === 'running').length;
   useEffect(() => { onStatus?.({ running, errors: errors.length > 0 }); }, [running, errors.length, onStatus]);
 
-  useEffect(() => { const el = logRef.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [lines, selected]);
+  useEffect(() => { const el = logRef.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [lines, selected, visible]);
 
   const start = async (name: string, command: string) => {
     if (!cwd) return;
@@ -171,7 +179,8 @@ export default function RunPanel({ cwd, visible, onStatus }: Props) {
           <div ref={logRef} className="flex-1 min-h-0 overflow-auto bg-black/30 py-1.5 font-mono text-[11.5px] leading-[1.5]"
             onScroll={(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 30; }}>
             {lines.length > SHOW_LINES && <div className="px-3 text-zinc-600">… {lines.length - SHOW_LINES} {t('run.earlier')}</div>}
-            {shown.map((l) => (
+            {/* Hidden panel: keep counting errors for the tab dot, but skip rendering hundreds of rows per batch. */}
+            {visible && shown.map((l) => (
               <div key={l.n} className={`px-3 whitespace-pre-wrap break-all ${errorStarts.has(l.n) ? 'bg-red-500/10 text-red-200' : l.err ? 'text-amber-200/80' : 'text-zinc-300'}`}>{l.text || ' '}</div>
             ))}
             {!lines.length && <div className="px-3 text-zinc-600">{info.status === 'running' ? t('run.waiting') : t('run.noOutput')}</div>}

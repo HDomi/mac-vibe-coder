@@ -14,7 +14,7 @@ test('runner: scripts listed dev-first, output and URL captured, stop kills the 
     const { scripts } = await projectScripts(dir);
     assert.deepEqual(scripts.map((s) => s.command), ['npm run dev', 'npm run lint', 'npm test']);
 
-    const info = startRun(dir, 'srv', 'echo "  Local: \\033[36mhttp://0.0.0.0:5173/\\033[0m"; echo oops >&2; sleep 30');
+    const info = await startRun(dir, 'srv', 'echo "  Local: \\033[36mhttp://0.0.0.0:5173/\\033[0m"; echo oops >&2; sleep 30');
     const lines: RunLine[] = [];
     let url: string | null = null; let status = 'running';
     const off = subscribeRun(info.id, -1, { line: (l) => lines.push(l), info: (i) => { url = i.url; status = i.status; }, removed: () => {} })!;
@@ -29,7 +29,17 @@ test('runner: scripts listed dev-first, output and URL captured, stop kills the 
     const late: RunLine[] = [];
     subscribeRun(info.id, 0, { line: (l) => late.push(l), info: () => {}, removed: () => {} });
     assert.deepEqual(late.map((l) => l.n), [1]);
-    removeRun(info.id);
+    await removeRun(info.id);
     assert.equal(listRuns(dir).length, 0);
+
+    // Restarting a script waits until the old process is gone (it may still hold the port).
+    const a = await startRun(dir, 'dev', 'trap "" INT; sleep 30');
+    let aExited = false;
+    subscribeRun(a.id, -1, { line: () => {}, info: (i) => { if (i.status === 'exited') aExited = true; }, removed: () => {} });
+    await new Promise((r) => setTimeout(r, 500)); // let the login shell set its trap
+    const b = await startRun(dir, 'dev', 'sleep 30');
+    assert.equal(aExited, true, 'old process exited before the new one started');
+    assert.deepEqual(listRuns(dir).map((r) => r.id), [b.id]);
+    await removeRun(b.id);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
