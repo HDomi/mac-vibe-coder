@@ -106,6 +106,27 @@ function TextView({ path, markdown, name, ext }: { path: string; markdown: boole
   );
 }
 
+/** Copies the Markdown file as written on disk (the full source, not the rendered or truncated view). */
+function CopySourceButton({ path }: { path: string }) {
+  useLang();
+  const [state, setState] = useState<'idle' | 'done' | 'error'>('idle');
+  useEffect(() => { setState('idle'); }, [path]);
+  const copy = async () => {
+    try {
+      const res = await fetch(api.rawUrl(path), { cache: 'no-store' });
+      if (!res.ok) throw new Error(String(res.status));
+      await navigator.clipboard.writeText(await res.text());
+      setState('done');
+    } catch { setState('error'); }
+    setTimeout(() => setState('idle'), 1400);
+  };
+  return (
+    <button className={`text-xs ${state === 'error' ? 'text-red-300' : state === 'done' ? 'text-emerald-300' : 'text-zinc-400 hover:text-white'}`} onClick={() => void copy()} title={t('preview.copySourceHint')}>
+      {state === 'done' ? t('common.copied') : state === 'error' ? t('preview.copySourceFailed') : t('preview.copySource')}
+    </button>
+  );
+}
+
 export default function Preview({ entry }: Props) {
   useLang();
   const [converting, setConverting] = useState(false);
@@ -124,6 +145,7 @@ export default function Preview({ entry }: Props) {
         {entry.kind === 'image' && (
           <button className="text-xs px-2 py-1 rounded-md border border-white/10 text-zinc-300 hover:text-white hover:bg-white/10" onClick={() => setConverting(true)}>{t('image.convertButton')}</button>
         )}
+        {entry.kind === 'markdown' && <CopySourceButton path={entry.path} />}
         <button className="text-xs text-zinc-400 hover:text-white" onClick={() => navigator.clipboard.writeText(entry.path)} title={entry.path}>{t('preview.copyPath')}</button>
       </div>
       {converting && (
