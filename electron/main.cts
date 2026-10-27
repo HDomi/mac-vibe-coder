@@ -290,9 +290,13 @@ ipcMain.handle('login-item', (e, enable: boolean | null) => {
 // Native notifications (task finished, approval needed) so the user is reached while in another app.
 // Approval notifications carry buttons (macOS shows the first, the rest under its chevron) that answer the
 // request without bringing the window forward; the renderer closes them once the request is settled.
+// The app registers the "alert" style so those stay on screen; informational ones (turn finished, verify failed)
+// have nothing to act on, so they are closed here after a short while instead of piling up until dismissed.
+// A `requestId` without buttons (a question waiting in the chat) also stays until the renderer reports it settled.
 type ApprovalDecision = 'allow' | 'allow_always' | 'deny';
+const INFO_NOTIFICATION_MS = 8000;
 const approvalNotes = new Map<string, Notification>();
-ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?: unknown; approval?: unknown }) => {
+ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?: unknown; approval?: unknown; requestId?: unknown }) => {
   // While locked nothing is shown: banners would leak session names and their buttons could approve tool use.
   if (!fromApp(e) || isLocked() || !Notification.isSupported() || !payload || typeof payload !== 'object') return;
   const title = String(payload.title ?? '').slice(0, 200);
@@ -301,7 +305,7 @@ ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?:
   if (!title) return;
   const sender = e.sender;
   const raw = payload.approval && typeof payload.approval === 'object' ? payload.approval as { requestId?: unknown; canAlwaysAllow?: unknown; labels?: unknown } : null;
-  const requestId = raw && typeof raw.requestId === 'string' ? raw.requestId : '';
+  const requestId = raw && typeof raw.requestId === 'string' ? raw.requestId : typeof payload.requestId === 'string' ? payload.requestId : '';
   const labels = raw && Array.isArray(raw.labels) && raw.labels.length === 3 && raw.labels.every((l) => typeof l === 'string') ? raw.labels as string[] : null;
   const choices: { decision: ApprovalDecision; text: string }[] = requestId && labels
     ? [{ decision: 'allow', text: labels[0] }, ...(raw!.canAlwaysAllow === true ? [{ decision: 'allow_always' as const, text: labels[1] }] : []), { decision: 'deny', text: labels[2] }]
@@ -314,7 +318,7 @@ ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?:
     app.focus({ steal: true });
     if (sessionId && !sender.isDestroyed()) sender.send('notify-click', sessionId);
   });
-  if (choices.length) {
+  if (requestId) {
     approvalNotes.get(requestId)?.close();
     approvalNotes.set(requestId, n);
     n.on('action', (_ev, index) => {
@@ -323,6 +327,9 @@ ipcMain.on('notify', (e, payload: { title?: unknown; body?: unknown; sessionId?:
       if (choice && !sender.isDestroyed()) sender.send('notify-approval', { sessionId, requestId, decision: choice.decision });
     });
     n.on('close', () => { if (approvalNotes.get(requestId) === n) approvalNotes.delete(requestId); });
+  } else {
+    const timer = setTimeout(() => n.close(), INFO_NOTIFICATION_MS);
+    n.on('close', () => clearTimeout(timer));
   }
   n.show();
 });

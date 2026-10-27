@@ -17,7 +17,7 @@ function sessionName(s: ChatSession) { return displayTitle(s, 24) ?? s.cwd.split
  * another session/view is on screen. Native (Electron) when available, web Notification otherwise.
  */
 function notifyIfAway(s: ChatSession, e: { kind: string; text?: string; toolName?: string; ok?: boolean; requestId?: string; canAlwaysAllow?: boolean; status?: string; command?: string }) {
-  if (e.kind === 'approval.resolved' && e.requestId) { window.vibe?.closeNotification?.(e.requestId); return; }
+  if ((e.kind === 'approval.resolved' || e.kind === 'question.resolved') && e.requestId) { window.vibe?.closeNotification?.(e.requestId); return; }
   if (document.hasFocus() && document.visibilityState === 'visible' && onScreenSession === s.id) return;
   const name = sessionName(s);
   let title: string | null = null; let body = '';
@@ -30,7 +30,9 @@ function notifyIfAway(s: ChatSession, e: { kind: string; text?: string; toolName
     const approval = e.kind === 'approval.request' && e.requestId
       ? { requestId: e.requestId, canAlwaysAllow: !!e.canAlwaysAllow, labels: [t('items.allow'), t('items.alwaysAllow'), t('items.deny')] as [string, string, string] }
       : undefined;
-    window.vibe.notify({ title, body, sessionId: s.id, approval });
+    // Approval and question notifications wait for the user; the rest are closed by the main process after a moment.
+    const requestId = e.kind === 'question.request' && e.requestId ? e.requestId : undefined;
+    window.vibe.notify({ title, body, sessionId: s.id, approval, requestId });
     return;
   }
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;

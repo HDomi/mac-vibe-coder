@@ -59,8 +59,11 @@ declare global {
       setLanguage: (lang: string) => void;
       /** Receive language changes made from the macOS menu bar. */
       onLanguage: (cb: (lang: string) => void) => void;
-      /** Show a native notification; the click handler receives the session id passed here. */
-      notify: (payload: { title: string; body: string; sessionId: string; approval?: { requestId: string; canAlwaysAllow: boolean; labels: [string, string, string] } }) => void;
+      /**
+       * Show a native notification; the click handler receives the session id passed here.
+       * Approval notifications and ones carrying a `requestId` stay until closed; others fade after a few seconds.
+       */
+      notify: (payload: { title: string; body: string; sessionId: string; approval?: { requestId: string; canAlwaysAllow: boolean; labels: [string, string, string] }; requestId?: string }) => void;
       onNotificationClick: (cb: (sessionId: string) => void) => void;
       /** Allow / always allow / deny chosen on an approval notification's buttons. */
       onNotificationApproval?: (cb: (answer: { sessionId: string; requestId: string; decision: 'allow' | 'allow_always' | 'deny' }) => void) => void;
