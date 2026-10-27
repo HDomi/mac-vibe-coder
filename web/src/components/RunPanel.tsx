@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type RunInfo, type RunScript } from '../lib/api';
 import { findErrors, type LogLine } from '../lib/runLog';
 import { fencedTerminalText } from '../lib/textSearch';
+import { pollWhileActive } from '../lib/poll';
 import { t, useLang } from '../lib/i18n';
 import Icon from './Icon';
 
@@ -65,8 +66,10 @@ export default function RunPanel({ cwd, visible, onStatus }: Props) {
     setScripts([]); setSelected(null); refresh();
     if (cwd) api.runScripts(cwd).then((r) => setScripts(r.scripts)).catch(() => {});
   }, [cwd, refresh]);
-  // Status for the tab dot even while the panel is hidden; slower then.
-  useEffect(() => { const timer = setInterval(refresh, visible ? 2500 : 8000); return () => clearInterval(timer); }, [refresh, visible]);
+  // Status for the tab dot even while the panel is hidden: slower then, and only while something runs.
+  // Ticks are skipped while the app window is in the background (pollWhileActive).
+  const anyRunning = runs.some((r) => r.status === 'running');
+  useEffect(() => (visible || anyRunning ? pollWhileActive(refresh, visible ? 2500 : 10000) : undefined), [refresh, visible, anyRunning]);
   useEffect(() => { if (!selected && runs.length) setSelected(runs[runs.length - 1].id); else if (selected && !runs.some((r) => r.id === selected)) setSelected(runs[runs.length - 1]?.id ?? null); }, [runs, selected]);
   useEffect(() => { if (!note) return; const timer = setTimeout(() => setNote(null), 3000); return () => clearTimeout(timer); }, [note]);
 

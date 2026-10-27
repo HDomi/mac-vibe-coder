@@ -79,9 +79,11 @@ export function TurnChangesItem({ item, onReview, reviewer }: { item: ChangesIte
   const dels = item.files.reduce((n, f) => n + f.deletions, 0);
   const shown = all ? item.files : item.files.slice(0, SHOWN);
   const left = item.files.filter((f) => !reverted.has(f.path));
+  // Files another session or the user changed meanwhile are not part of "undo turn".
+  const own = left.filter((f) => !f.external);
 
   const revert = async (files?: string[]) => {
-    const targets = files ?? left.map((f) => f.path);
+    const targets = files ?? own.map((f) => f.path);
     if (!targets.length) return;
     if (!files && !window.confirm(t('changes.confirmAll', { n: targets.length }))) return;
     setBusy(true);
@@ -107,11 +109,11 @@ export function TurnChangesItem({ item, onReview, reviewer }: { item: ChangesIte
         {onReview && <button onClick={onReview} className="flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] text-zinc-400 hover:text-sky-200 hover:bg-white/5" title={t('review.cardHint', { agent: reviewer ?? '' })}>
           <Icon name="sparkle" size={11} />{t('review.card', { agent: reviewer ?? '' })}
         </button>}
-        {left.length > 0
+        {own.length > 0
           ? <button disabled={busy} onClick={() => void revert()} className="flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] text-zinc-400 hover:text-amber-200 hover:bg-white/5 disabled:opacity-40" title={t('changes.revertAllHint')}>
               <Icon name="undo" size={11} />{t('changes.revertAll')}
             </button>
-          : <span className="text-[11px] text-zinc-500">{t('changes.allReverted')}</span>}
+          : !left.length && <span className="text-[11px] text-zinc-500">{t('changes.allReverted')}</span>}
       </div>
       {shown.map((f) => {
         const isOpen = open === f.path;
@@ -125,6 +127,7 @@ export function TurnChangesItem({ item, onReview, reviewer }: { item: ChangesIte
               <span className={`min-w-0 truncate font-mono text-[11.5px] ${gone ? 'line-through' : ''}`} title={f.path}>
                 {slash >= 0 && <span className="text-zinc-500">{f.path.slice(0, slash + 1)}</span>}<span className="text-zinc-200">{f.path.slice(slash + 1)}</span>
               </span>
+              {f.external && <span className="shrink-0 rounded bg-white/5 px-1 text-[9.5px] text-zinc-500" title={t('changes.externalHint')}>{t('changes.external')}</span>}
               <span className="shrink-0 tabular-nums text-[11px]">
                 {f.binary ? <span className="text-zinc-500">bin</span> : <><span className="text-emerald-300/80">+{f.additions}</span> <span className="text-red-300/80">−{f.deletions}</span></>}
               </span>

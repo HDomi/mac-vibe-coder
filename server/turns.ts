@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { copyFile, mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { FsError, resolvePath } from './fs.js';
@@ -13,7 +13,7 @@ import { FsError, resolvePath } from './fs.js';
 
 const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 
-export interface TurnFile { path: string; status: 'A' | 'M' | 'D'; additions: number; deletions: number; binary: boolean }
+export interface TurnFile { path: string; status: 'A' | 'M' | 'D'; additions: number; deletions: number; binary: boolean; /** Not edited by the session's own file tools (another session or the user, most likely). */ external?: boolean }
 export interface Snapshot { root: string; tree: string }
 
 function git(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; timeout?: number; input?: string } = {}): Promise<{ ok: boolean; stdout: string; stderr: string }> {
@@ -139,23 +139,39 @@ export async function revertTurn(root: string, from: string, to: string, opts: {
   const wanted = opts.files ? all.filter((f) => opts.files!.includes(f.path)) : all;
   const now = opts.force ? null : await snapshot(abs);
   const reverted: string[] = []; const conflicts: string[] = [];
+  const restore: string[] = [];
   for (const f of wanted) {
     checkArgs(abs, from, to, f.path);
     if (now) {
       const [cur, after] = await Promise.all([blobOf(abs, now.tree, f.path), blobOf(abs, to, f.path)]);
       if (cur !== after) { conflicts.push(f.path); continue; }
     }
-    const target = path.join(abs, f.path);
-    const before = await blobOf(abs, from, f.path);
-    if (!before) {
-      // Created by the turn: removing it is the undo (its content stays in the `to` snapshot).
-      await rm(target, { force: true });
-    } else {
-      const content = await new Promise<Buffer>((resolve, reject) => execFile('git', ['-C', abs, 'cat-file', 'blob', before], { encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 }, (err, out) => (err ? reject(err) : resolve(out))));
-      await mkdir(path.dirname(target), { recursive: true });
-      await writeFile(target, content);
+    if (await blobOf(abs, from, f.path)) restore.push(f.path);
+    else {
+      // Created by the turn: removing it is the undo (its content stays in the `to` snapshot). rm unlinks a symlink itself.
+      await rm(path.join(abs, f.path), { force: true });
+      reverted.push(f.path);
     }
-    reverted.push(f.path);
+  }
+  if (restore.length) {
+    // git writes the old entries itself: file mode, symlinks and binary content come back exactly, and an
+    // existing symlink at the path is replaced rather than written through.
+    const dir = await mkdtemp(path.join(tmpdir(), 'mvc-restore-'));
+    try {
+      const env = { GIT_INDEX_FILE: path.join(dir, 'index') };
+      const read = await git(abs, ['read-tree', from], { env });
+      if (!read.ok) throw new FsError('GIT', read.stderr || 'git read-tree failed', 500);
+      const out = await git(abs, ['checkout-index', '-f', '--', ...restore], { env });
+      if (!out.ok) throw new FsError('GIT', out.stderr || 'git checkout-index failed', 500);
+      reverted.push(...restore);
+    } finally { await rm(dir, { recursive: true, force: true }); }
   }
   return { ok: conflicts.length === 0, reverted, conflicts };
+}
+
+/** Repository-relative form of a path a tool reported (macOS reports /tmp and /var through /private). */
+export function repoRelative(root: string, p: string): string | null {
+  const strip = (x: string) => x.replace(/^\/private(?=\/(?:tmp|var)\/)/, '');
+  const rel = path.relative(strip(root), strip(path.resolve(root, p)));
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : null;
 }

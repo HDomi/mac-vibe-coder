@@ -1151,6 +1151,8 @@ const en: Record<string, string> = {
   'transfer.sendTo': 'Send to session',
   'transfer.noTargets': 'No other open session to send to',
   'transfer.dragHint': 'Drag onto another session\'s tab to put this in its message box',
+  'changes.external': 'external',
+  'changes.externalHint': 'Changed during this turn, but not by this session\'s edits (another session or you). "Undo turn" skips it; undo it per file if you mean to.',
 };
 
 const ko: Record<string, string> = {
@@ -2283,6 +2285,8 @@ const ko: Record<string, string> = {
   'transfer.sendTo': '다른 세션으로 보내기',
   'transfer.noTargets': '보낼 다른 세션이 없어',
   'transfer.dragHint': '다른 세션 탭에 끌어다 놓으면 그 세션 입력창에 들어가',
+  'changes.external': '외부',
+  'changes.externalHint': '이번 턴 동안 바뀌었지만 이 세션이 고친 파일은 아니야 (다른 세션이나 직접 수정). "턴 되돌리기" 에서 빠지고, 필요하면 파일별로 되돌려.',
 };
 
 const dict: Record<Lang, Record<string, string>> = { en, ko };

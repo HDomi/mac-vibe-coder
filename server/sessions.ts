@@ -1,10 +1,11 @@
+import path from 'node:path';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AgentEvent, AgentSession, ClientCommand, ServerMessage } from './agents/types.js';
 import { ClaudeSession } from './agents/claude.js';
 import { CodexSession } from './agents/codex.js';
 import { which } from './shell.js';
 import { runVerify, verifySettings } from './verify.js';
-import { changedFiles, snapshot, type Snapshot } from './turns.js';
+import { changedFiles, repoRelative, snapshot, type Snapshot } from './turns.js';
 
 const BUFFER_LIMIT = 5000;
 const BUFFER_BYTES = 16 * 1024 * 1024;
@@ -30,6 +31,9 @@ interface Entry {
   verifying?: { id: string; cancel: () => void };
   /** Working tree snapshot taken before the current turn (git projects only). */
   turnBase?: Snapshot | null;
+  /** Files the session's own edit tools touched this turn, and whether it ran shell commands (which can touch anything). */
+  turnPaths: Set<string>;
+  turnShell: boolean;
   /** Sends are serialized: a message waiting for its snapshot must not be overtaken by the next one. */
   sendChain: Promise<void>;
 }
@@ -78,7 +82,7 @@ export class SessionRegistry {
       throw new Error(`Unknown agent: ${cmd.agent}`);
     }
     if (this.closing || ws.readyState !== ws.OPEN) throw new Error('Connection closed before session started');
-    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set([ws]), createdAt: Date.now(), lastActivity: Date.now(), running: false, closed: false, bufferBytes: 0, touched: false, sendChain: Promise.resolve() };
+    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set([ws]), createdAt: Date.now(), lastActivity: Date.now(), running: false, closed: false, bufferBytes: 0, touched: false, sendChain: Promise.resolve(), turnPaths: new Set(), turnShell: false };
     this.entries.set(session.id, entry);
     session.onEvent((event) => this.broadcast(entry, event));
     return session;
@@ -134,12 +138,19 @@ export class SessionRegistry {
   private async finishTurn(e: Entry) {
     const base = e.turnBase;
     const touched = e.touched;
-    e.turnBase = undefined; e.touched = false;
+    const own = e.turnPaths; const shell = e.turnShell;
+    e.turnBase = undefined; e.touched = false; e.turnPaths = new Set(); e.turnShell = false;
     let changed = touched;
     if (base) {
       const after = await snapshot(base.root).catch(() => null);
       if (after) {
-        const files = await changedFiles(base.root, base.tree, after.tree).catch(() => []);
+        let files = await changedFiles(base.root, base.tree, after.tree).catch(() => []);
+        // Without shell commands, a changed file the session never edited came from elsewhere (another
+        // session in this folder, the user). It is flagged so "undo turn" leaves it alone.
+        if (!shell) {
+          const mine = new Set([...own].map((p) => repoRelative(base.root, p)).filter(Boolean));
+          files = files.map((f) => (mine.has(f.path) ? f : { ...f, external: true }));
+        }
         changed = files.length > 0;
         if (files.length && this.entries.has(e.session.id)) this.broadcast(e, { kind: 'changes', id: `changes-${Date.now().toString(36)}`, root: base.root, from: base.tree, to: after.tree, files });
         // A queued message may already have started the next turn; it begins where this one ended.
@@ -179,7 +190,13 @@ export class SessionRegistry {
       const running = event.status === 'running' || event.status === 'compacting';
       if (running && !e.running) e.verifying?.cancel();
     }
-    if (event.kind === 'tool.start' && MUTATING_TOOLS.test(event.name)) e.touched = true;
+    if (event.kind === 'tool.start' && MUTATING_TOOLS.test(event.name)) {
+      e.touched = true;
+      const i = (event.input ?? {}) as { file_path?: unknown; notebook_path?: unknown; changes?: unknown };
+      if (event.name === 'Bash') e.turnShell = true;
+      else if (event.name === 'FileChange' && Array.isArray(i.changes)) { for (const c of i.changes as Array<{ path?: unknown }>) if (typeof c?.path === 'string') e.turnPaths.add(path.resolve(e.session.cwd, c.path)); }
+      else { const f = i.file_path ?? i.notebook_path; if (typeof f === 'string') e.turnPaths.add(path.resolve(e.session.cwd, f)); }
+    }
     if (event.kind === 'status') e.running = event.status === 'running' || event.status === 'compacting';
     if (event.kind === 'status' && event.status === 'closed') e.closed = true;
     // Shutdown (update, restart) closes every session; clients must keep them remembered so they
