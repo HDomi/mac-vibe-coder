@@ -1127,6 +1127,10 @@ const en: Record<string, string> = {
   'context.none.skills': 'No skills in .claude/skills, ~/.claude/skills or ~/.codex/skills.',
   'context.none.hooks': 'No hooks in .claude/settings*.json or ~/.claude/settings.json.',
   'context.none.mcp': 'No MCP servers in .mcp.json, ~/.claude.json or ~/.codex/config.toml.',
+  'git.suggest': 'AI message',
+  'git.suggesting': 'Writing…',
+  'git.suggestHint': 'Write the message from the staged diff with your CLI, following this repository\'s conventions',
+  'git.suggestNothing': 'Stage changes first',
 };
 
 const ko: Record<string, string> = {
@@ -2235,6 +2239,10 @@ const ko: Record<string, string> = {
   'context.none.skills': '.claude/skills, ~/.claude/skills, ~/.codex/skills 에 스킬이 없어.',
   'context.none.hooks': '.claude/settings*.json, ~/.claude/settings.json 에 훅이 없어.',
   'context.none.mcp': '.mcp.json, ~/.claude.json, ~/.codex/config.toml 에 MCP 서버가 없어.',
+  'git.suggest': 'AI 메시지',
+  'git.suggesting': '작성 중…',
+  'git.suggestHint': '스테이지된 diff 로 이 레포 컨벤션에 맞는 커밋 메시지를 CLI 가 작성',
+  'git.suggestNothing': '먼저 변경을 스테이지해',
 };
 
 const dict: Record<Lang, Record<string, string>> = { en, ko };

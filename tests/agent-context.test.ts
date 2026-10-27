@@ -29,3 +29,23 @@ test('agent context: docs, skills, hooks and MCP from project and user level', a
     assert.deepEqual(skillMeta('no front matter'), {});
   } finally { rmSync(proj, { recursive: true, force: true }); rmSync(home, { recursive: true, force: true }); }
 });
+
+test('commit message: prompt carries rules, subjects and staged diff; output is cleaned', async () => {
+  const { commitPrompt, cleanMessage } = await import('../server/commitMessage');
+  const { execFileSync } = await import('node:child_process');
+  const repo = mkdtempSync(join(tmpdir(), 'mvc-msg-'));
+  const git = (...a: string[]) => execFileSync('git', ['-C', repo, ...a], { stdio: 'pipe' });
+  try {
+    git('init', '-q'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't');
+    writeFileSync(join(repo, 'AGENTS.md'), 'Commit subjects use feat:/fix: in Korean.\n');
+    writeFileSync(join(repo, 'a.txt'), 'one\n'); git('add', '-A'); git('commit', '-qm', 'feat: 처음');
+    assert.equal(await commitPrompt(repo), null, 'nothing staged');
+    writeFileSync(join(repo, 'a.txt'), 'two\n'); git('add', 'a.txt');
+    const p = (await commitPrompt(repo))!;
+    assert.match(p, /feat:\/fix: in Korean/);
+    assert.match(p, /feat: 처음/);
+    assert.match(p, /\+two/);
+    assert.equal(cleanMessage('```\nfix: 고침\n\nCo-Authored-By: X <x@y>\n```'), 'fix: 고침');
+    assert.equal(cleanMessage('"feat: 추가"'), 'feat: 추가');
+  } finally { rmSync(repo, { recursive: true, force: true }); }
+});

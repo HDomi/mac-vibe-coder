@@ -171,6 +171,7 @@ export const api = {
   gitBranches: (cwd: string) => req<GitBranch[]>(`/api/git/branches?cwd=${q(cwd)}`),
   gitCheckout: (cwd: string, branch: string, create = false) => post<{ ok: boolean; output: string }>('/api/git/checkout', { cwd, branch, create }),
   gitRemote: (cwd: string, op: 'fetch' | 'pull' | 'push') => post<{ ok: boolean; output: string }>('/api/git/remote', { cwd, op }),
+  gitSuggestMessage: (cwd: string) => post<{ message: string; agent: 'claude' | 'codex' }>('/api/git/suggest-message', { cwd }),
   gitCommit: (cwd: string, message: string) =>
     req<{ ok: boolean; output: string }>('/api/git/commit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, message }) }),
   agentContext: (cwd: string) => req<AgentContext>(`/api/agent-context?cwd=${q(cwd)}`),

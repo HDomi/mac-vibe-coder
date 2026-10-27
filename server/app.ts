@@ -30,6 +30,7 @@ import { convertImage, imageInfo, renderPng, writeImageBytes } from './image.js'
 import { allBacklogs, cleanBacklog, projectSettings, suggestVerifyCommands, updateProjectSettings } from './verify.js';
 import { revertTurn, turnDiff } from './turns.js';
 import { agentContext } from './agentContext.js';
+import { suggestCommitMessage } from './commitMessage.js';
 import { checkWorktree, createWorktree, mergeWorktree, removeWorktree, worktreeStatus } from './worktree.js';
 import { listRuns, projectScripts, removeRun, startRun, stopRun, subscribeRun, type RunInfo, type RunLine } from './runner.js';
 import { killProcess, listeningPorts, netInfo, proxyHttp, type ProxyRequest } from './net.js';
@@ -496,6 +497,11 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   app.post('/api/git/remote', async (c) => {
     const b = await c.req.json<{ cwd: string; op: 'fetch' | 'pull' | 'push' }>();
     return c.json(await gitRemoteOp(b.cwd, b.op));
+  });
+  app.post('/api/git/suggest-message', async (c) => {
+    const b = await c.req.json<{ cwd: string }>();
+    try { return c.json(await suggestCommitMessage(b.cwd)); }
+    catch (err) { const e = err as Error & { code?: string }; return c.json({ error: e.message, code: e.code ?? 'SUGGEST_FAILED' }, e.code === 'NOTHING_STAGED' ? 400 : 500); }
   });
   app.post('/api/git/commit', async (c) => {
     const b = await c.req.json<{ cwd: string; message: string }>();

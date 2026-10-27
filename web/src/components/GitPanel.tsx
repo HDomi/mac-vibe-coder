@@ -160,6 +160,15 @@ export default function GitPanel({ cwd, visible }: Props) {
     operationRef.current = true; setBusy(true);
     api.gitStage(cwd, files.map((f) => f.path), action).then(() => { if (projectRef.current === project) refresh(); }).catch((e) => { if (projectRef.current === project) setNote(e.message); }).finally(() => { if (projectRef.current === project) { operationRef.current = false; setBusy(false); } });
   };
+  const [suggesting, setSuggesting] = useState(false);
+  // Commit message from the staged diff, written by the local CLI following the repo's conventions.
+  const suggest = () => {
+    if (!cwd || suggesting) return;
+    setSuggesting(true);
+    api.gitSuggestMessage(cwd).then((r) => { if (projectRef.current === project) setMsg(r.message); })
+      .catch((e) => { if (projectRef.current === project) setNote(e.message); })
+      .finally(() => setSuggesting(false));
+  };
   const commit = (push = false) => {
     if (!msg.trim() || !staged.length || operationRef.current || remoteBusy) return;
     operationRef.current = true; setBusy(true); setNote(null);
@@ -275,6 +284,12 @@ export default function GitPanel({ cwd, visible }: Props) {
             <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
             <span className="font-medium tracking-wide text-zinc-300">{t('git.commitTitle')}</span>
             {st?.branch && <span className="font-mono text-[10px] text-zinc-500 truncate">· {st.branch}</span>}
+            <div className="flex-1" />
+            <button disabled={suggesting || !staged.length} onClick={suggest} title={staged.length ? t('git.suggestHint') : t('git.suggestNothing')}
+              className="shrink-0 flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] text-zinc-400 hover:text-sky-200 hover:bg-white/5 disabled:opacity-40">
+              {suggesting ? <span className="inline-block w-2.5 h-2.5 rounded-full border-[1.5px] border-sky-300/70 border-t-transparent animate-spin" /> : <Icon name="sparkle" size={11} />}
+              {suggesting ? t('git.suggesting') : t('git.suggest')}
+            </button>
           </div>
           <div className="px-2 pb-2 space-y-2">
             <textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={2} placeholder={t('git.commitPlaceholder')}
