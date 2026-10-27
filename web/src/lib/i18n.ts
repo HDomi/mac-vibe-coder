@@ -1092,6 +1092,16 @@ const en: Record<string, string> = {
   'backlog.empty': 'Add prompts to run one after another in fresh sessions. Start the queue and walk away; each finished session stays in its tab with a notification.',
   'backlog.placeholder': 'Add a task (Enter adds, Shift+Enter new line)',
   'backlog.finished': 'Task queue finished · {name}',
+  'usage.forecast': 'At this rate, used up in {time}',
+  'limit.near': '{agent} 5-hour limit {pct}% used',
+  'limit.handoff': 'Continue with {agent}',
+  'limit.otherLeft': '{agent} has {pct}% left in its 5-hour window',
+  'handoff.intro': 'You are taking over a coding session from another agent ({author}) that is close to its usage limit. Task: {title}',
+  'handoff.asks': 'What the user asked (oldest first):',
+  'handoff.last': 'The previous agent\'s last answer:',
+  'handoff.files': 'Files changed so far:',
+  'handoff.todos': 'Open checklist items:',
+  'handoff.outro': 'Check the current state of the files yourself (git status / diff) before continuing, then carry on where it left off.',
 };
 
 const ko: Record<string, string> = {
@@ -2165,6 +2175,16 @@ const ko: Record<string, string> = {
   'backlog.empty': '프롬프트를 쌓아 두면 새 세션에서 하나씩 차례로 돌려. 큐를 켜 두고 자리를 비워도 돼. 끝난 세션은 탭에 남고 알림이 와.',
   'backlog.placeholder': '할 일 추가 (Enter 추가 · Shift+Enter 줄바꿈)',
   'backlog.finished': '작업 백로그 완료 · {name}',
+  'usage.forecast': '이 속도면 {time} 뒤 소진',
+  'limit.near': '{agent} 5시간 한도 {pct}% 사용',
+  'limit.handoff': '{agent} 로 이어가기',
+  'limit.otherLeft': '{agent} 5시간 한도 {pct}% 남음',
+  'handoff.intro': '사용량 한도에 가까워진 다른 에이전트({author})의 코딩 세션을 이어받아줘. 작업: {title}',
+  'handoff.asks': '사용자가 요청한 것 (오래된 순):',
+  'handoff.last': '이전 에이전트의 마지막 답변:',
+  'handoff.files': '지금까지 바뀐 파일:',
+  'handoff.todos': '남은 체크리스트:',
+  'handoff.outro': '이어서 하기 전에 파일 현재 상태를 직접 확인해 (git status / diff). 그다음 멈춘 곳부터 계속해.',
 };
 
 const dict: Record<Lang, Record<string, string>> = { en, ko };

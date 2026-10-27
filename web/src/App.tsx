@@ -23,6 +23,8 @@ import { ContextMenuProvider, useContextMenu, type MenuItem } from './components
 import QuickOpen from './components/QuickOpen';
 import { t, useLang } from './lib/i18n';
 import { fencedTerminalText } from './lib/textSearch';
+import { handoffText } from './lib/handoff';
+import { draftKey, writeDraft } from './lib/draft';
 import AgentIcon from './components/AgentIcon';
 import Lightbox from './components/Lightbox';
 import Toaster from './components/Toast';
@@ -400,7 +402,8 @@ function AppInner() {
                   background={backgroundSessions(S.sessions, session?.id)} onFocusSession={(id) => focusSession.current(id)}
                   onRewind={(id, dry) => session ? S.rewind(session.id, id, dry) : Promise.resolve({ canRewind: false })}
                   onVerify={() => session && S.verify(session.id)}
-                  onCrossReview={(changes) => { if (session) startCrossReview(S, session, changes).then(setActiveSession).catch((e) => window.alert((e as Error).message)); }} />
+                  onCrossReview={(changes) => { if (session) startCrossReview(S, session, changes).then(setActiveSession).catch((e) => window.alert((e as Error).message)); }}
+                  onHandoff={() => { if (session) startHandoff(S, session).then(setActiveSession).catch((e) => window.alert((e as Error).message)); }} />
               </div>
             </div>
             {!rightCollapsed && <Splitter onStart={() => setDragging(true)} onEnd={() => setDragging(false)} onDrag={(dx) => right.setWidth(right.width - dx)} />}
@@ -513,7 +516,8 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
           background={backgroundSessions(S.sessions, session?.id)} onFocusSession={setActive}
           onRewind={(id, dry) => session ? S.rewind(session.id, id, dry) : Promise.resolve({ canRewind: false })}
           onVerify={() => session && S.verify(session.id)}
-          onCrossReview={(changes) => { if (session) startCrossReview(S, session, changes).then(setActive).catch((e) => window.alert((e as Error).message)); }} />
+          onCrossReview={(changes) => { if (session) startCrossReview(S, session, changes).then(setActive).catch((e) => window.alert((e as Error).message)); }}
+          onHandoff={() => { if (session) startHandoff(S, session).then(setActive).catch((e) => window.alert((e as Error).message)); }} />
       </div>
     </div>
   );
@@ -539,6 +543,15 @@ async function startCrossReview(S: ReturnType<typeof useSessions>, s: ChatSessio
   }
   const id = await S.start(s.cwd, { agent: other, permissionMode: 'plan', worktree: s.worktree, title: t('review.title', { author }) });
   S.send(id, t('review.prompt', { author, body }), []);
+  return id;
+}
+
+/** Continue a session with the other agent: same folder (and worktree), briefing put into its composer to edit and send. */
+async function startHandoff(S: ReturnType<typeof useSessions>, s: ChatSession): Promise<string> {
+  const other = s.agent === 'claude' ? 'codex' : 'claude';
+  const mode = other === 'codex' && s.permissionMode === 'auto' ? 'default' : s.permissionMode;
+  const id = await S.start(s.cwd, { agent: other, permissionMode: mode, model: localStorage.getItem(`vibe.model.${other}`), worktree: s.worktree, title: displayTitle(s, 40) ?? undefined });
+  writeDraft(draftKey(id), { text: handoffText(s), attachments: [] });
   return id;
 }
 

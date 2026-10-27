@@ -15,6 +15,8 @@ import Icon from './Icon';
 import { VerifyButton, VerifyItem } from './Verify';
 import { TurnChangesItem } from './TurnChanges';
 import WorktreeChip from './WorktreeChip';
+import { useUsage } from '../lib/usageStore';
+import { minutesLabel } from './UsageBar';
 
 /** Same prompt to Claude and Codex, each in its own worktree, to compare and keep the better result. */
 export interface PairOptions { prompt: string; branch?: string; permissionMode: PermissionModeId; models: { claude: string | null; codex: string | null } }
@@ -54,6 +56,8 @@ interface Props {
   partner?: ChatSession | null;
   onFocusPartner?: (id: string) => void;
   onClosePartner?: (id: string) => void;
+  /** Continue this conversation with the other agent (usage limit close). */
+  onHandoff?: () => void;
   /** Ask the other agent to review a turn's changes (or the uncommitted work). */
   onCrossReview?: (changes?: Extract<ChatItem, { kind: 'changes' }>) => void;
 }
@@ -102,6 +106,33 @@ function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: 
     case 'changes': return <TurnChangesItem key={it.id} item={it} onReview={actions.review ? () => actions.review!(it) : undefined} reviewer={actions.otherAgent} />;
     case 'verify': return <VerifyItem key={it.id} item={it} latest={it.id === actions.latestVerify} onRerun={it.id === actions.latestVerify ? actions.verify : undefined} />;
   }
+}
+
+/** Above the composer when this agent's 5-hour window is nearly used up: offer to continue with the other one. */
+function LimitBanner({ agent, sessionId, onHandoff }: { agent: AgentId; sessionId: string; onHandoff: () => void }) {
+  useLang();
+  const { usage, forecast } = useUsage();
+  const [hidden, setHidden] = useState<string | null>(null);
+  const win = usage?.[agent]?.fiveHour ?? null;
+  const empty = forecast(`${agent}.fiveHour`, win);
+  if (!win || hidden === sessionId) return null;
+  const near = win.usedPct >= 90 || (empty !== null && empty <= 20);
+  if (!near) return null;
+  const name = agent === 'claude' ? 'Claude' : 'Codex';
+  const other = agent === 'claude' ? 'Codex' : 'Claude';
+  const otherWin = usage?.[agent === 'claude' ? 'codex' : 'claude']?.fiveHour;
+  return (
+    <div className="shrink-0 mx-4 mb-1 flex items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-400/[0.07] px-3 py-1.5 text-[11.5px]">
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+      <span className="text-amber-100 truncate min-w-0">
+        {t('limit.near', { agent: name, pct: win.usedPct })}{empty !== null ? ` · ${t('usage.forecast', { time: minutesLabel(empty) })}` : ''}
+      </span>
+      <div className="flex-1" />
+      <button onClick={onHandoff} className="shrink-0 rounded-md bg-amber-400/20 hover:bg-amber-400/30 px-2 py-0.5 text-amber-50 whitespace-nowrap"
+        title={otherWin ? t('limit.otherLeft', { agent: other, pct: 100 - otherWin.usedPct }) : undefined}>{t('limit.handoff', { agent: other })}</button>
+      <button onClick={() => setHidden(sessionId)} className="shrink-0 text-amber-200/60 hover:text-amber-100"><Icon name="close" size={11} /></button>
+    </div>
+  );
 }
 
 const MODE_IDS: { id: PermissionModeId; key: string }[] = [
@@ -267,7 +298,7 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onB
   );
 }
 
-export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onStartPair, backlog, onBacklogChange, onOpenBacklogSession, onSend, onApprove, onAnswer, onInterrupt, onStopTask, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind, onVerify, onCrossReview, partner, onFocusPartner, onClosePartner }: Props) {
+export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onStartPair, backlog, onBacklogChange, onOpenBacklogSession, onSend, onApprove, onAnswer, onInterrupt, onStopTask, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind, onVerify, onCrossReview, partner, onFocusPartner, onClosePartner, onHandoff }: Props) {
   useLang();
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -429,6 +460,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
           <span className="truncate">{activity}</span>
         </div>
       )}
+      {onHandoff && <LimitBanner agent={session.agent} sessionId={session.id} onHandoff={onHandoff} />}
       <TodoPanel todos={currentTodos(session)} running={running} />
       <Composer key={session.id} draftKey={session.id} cwd={session.cwd} agent={session.agent} disabled={session.status === 'closed'} running={running} mode={session.permissionMode} commands={session.commands}
         onSend={(text, atts) => { stick.current = true; setAtBottom(true); onSend(text, atts); requestAnimationFrame(scrollToBottom); }}

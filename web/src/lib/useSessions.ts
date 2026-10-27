@@ -123,7 +123,7 @@ export function useSessions() {
       const live = sessionsRef.current[m.sessionId];
       if (live) notifyIfAway(live, m.event);
       // The CLI writes its generated title a moment after a turn ends; pick it up so tabs match the history list.
-      if (m.event.kind === 'result') setTimeout(() => refreshTitle(m.sessionId), 3000);
+      if (m.event.kind === 'result') { setTimeout(() => refreshTitle(m.sessionId), 3000); window.dispatchEvent(new Event('vibe:usage-refresh')); }
       setSessions((prev) => {
         const s = prev[m.sessionId];
         if (!s) return prev;
