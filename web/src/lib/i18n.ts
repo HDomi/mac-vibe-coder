@@ -1158,6 +1158,12 @@ const en: Record<string, string> = {
   'worktree.inUse': '{n} other open session(s) work in this folder; close them before merging or discarding.',
   'worktree.leftover': 'Worktrees without a session',
   'worktree.openSession': 'Open session',
+  'update.recentReleases': 'Recent releases',
+  'update.current': 'Installed',
+  'update.rollback': 'Roll back to this',
+  'update.installThis': 'Install',
+  'update.rollbackConfirm': 'Roll back from v{cur} to v{v}? The app restarts to install it. Settings and sessions stay, but features added after v{v} disappear until you update again.',
+  'update.installConfirm': 'Install v{v}? The app restarts to install it.',
 };
 
 const ko: Record<string, string> = {
@@ -2297,6 +2303,12 @@ const ko: Record<string, string> = {
   'worktree.inUse': '다른 세션 {n}개가 이 폴더를 쓰는 중이야. 닫은 뒤에 머지하거나 버려.',
   'worktree.leftover': '세션 없이 남은 worktree',
   'worktree.openSession': '세션 열기',
+  'update.recentReleases': '최근 릴리스',
+  'update.current': '설치됨',
+  'update.rollback': '이 버전으로 내리기',
+  'update.installThis': '설치',
+  'update.rollbackConfirm': 'v{cur} 에서 v{v} 로 내릴까? 설치하려고 앱이 다시 시작돼. 설정과 세션은 남지만 v{v} 이후 기능은 다시 업데이트할 때까지 사라져.',
+  'update.installConfirm': 'v{v} 를 설치할까? 설치하려고 앱이 다시 시작돼.',
 };
 
 const dict: Record<Lang, Record<string, string>> = { en, ko };

@@ -2,7 +2,7 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { run, streamShell } from './shell.js';
 import { REPO_ROOT } from './paths.js';
-import { bundleOf, bundleProblem, latestRelease, releaseCommits, stageRelease, type Release } from './releaseUpdate.js';
+import { bundleOf, bundleProblem, latestRelease, recentReleases, releaseByTag, releaseCommits, stageRelease, type Release, type ReleaseSummary } from './releaseUpdate.js';
 export { REPO_ROOT };
 
 /**
@@ -32,6 +32,8 @@ export interface UpdateStatus {
   commits: { hash: string; subject: string }[];
   checkedAt: number;
   error: string | null;
+  /** Standalone app: the last few releases, any of which can be installed (also older ones, to roll back). */
+  releases?: ReleaseSummary[];
 }
 
 let cached: UpdateStatus | null = null;
@@ -84,8 +86,9 @@ async function readReleaseUpdate(status: UpdateStatus): Promise<UpdateStatus> {
   try {
     const problem = bundleProblem(APP_BUNDLE!);
     if (problem) throw new Error(problem);
-    const release = await latestRelease();
+    const [release, releases] = await Promise.all([latestRelease(), recentReleases(3).catch(() => [])]);
     latest = release;
+    status.releases = releases;
     const version = release.tag_name.replace(/^v/, '');
     status.remote = { version, commit: '', builtAt: null };
     status.available = compareVersions(version, status.installed.version) > 0;
@@ -154,14 +157,16 @@ async function readUpdate(force: boolean): Promise<UpdateStatus> {
  * (node_modules, dist, web/dist) swapped in. The temp directory is always removed.
  * A failure anywhere leaves the running installation untouched.
  */
-export function applyUpdate(onLine: (line: string, stream: 'stdout' | 'stderr') => void): Promise<number> {
+export function applyUpdate(onLine: (line: string, stream: 'stdout' | 'stderr') => void, version?: string): Promise<number> {
   if (UPDATE_SOURCE === 'release') {
     if (applying) return Promise.reject(new Error('An update is already running'));
     applying = true;
-    // Always the latest release (also for "reinstall latest"), fetched again so a stale check is not applied.
-    return (checking ?? Promise.resolve()).then(async () => stageRelease(latest = await latestRelease(), onLine))
+    // The latest release (also for "reinstall latest"), or a chosen one to roll back to, fetched again so a stale check is not applied.
+    const pick = version ? () => releaseByTag(`v${version}`) : async () => (latest = await latestRelease());
+    return (checking ?? Promise.resolve()).then(async () => stageRelease(await pick(), onLine))
       .finally(() => { applying = false; cached = null; });
   }
+  if (version) return Promise.reject(new Error('Installing a specific release needs the standalone app'));
   const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
   const cmd = `/bin/zsh ${quote(path.join(REPO_ROOT, 'scripts/apply-update.sh'))}`;
   if (applying) return Promise.reject(new Error('An update is already running'));

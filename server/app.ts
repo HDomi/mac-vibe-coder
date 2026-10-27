@@ -523,10 +523,16 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
       await stream.writeSSE({ event: 'done', data: '1' });
       return;
     }
+    const version = c.req.query('version');
+    if (version && !/^\d+\.\d+\.\d+$/.test(version)) {
+      await stream.writeSSE({ event: 'stderr', data: 'Invalid version.' });
+      await stream.writeSSE({ event: 'done', data: '1' });
+      return;
+    }
     await stream.writeSSE({ event: 'start', data: UPDATE_SOURCE === 'release'
-      ? 'Download the latest release, verify it, and install it when the app restarts'
+      ? (version ? `Download release v${version}, verify it, and install it when the app restarts` : 'Download the latest release, verify it, and install it when the app restarts')
       : 'Clone, install and build in a temporary directory, then replace the installed build' });
-    const code = await applyUpdate((line, src) => { stream.writeSSE({ event: src, data: line }).catch(() => {}); }).catch((e) => { stream.writeSSE({ event: 'stderr', data: String((e as Error).message) }).catch(() => {}); return 1; });
+    const code = await applyUpdate((line, src) => { stream.writeSSE({ event: src, data: line }).catch(() => {}); }, version || undefined).catch((e) => { stream.writeSSE({ event: 'stderr', data: String((e as Error).message) }).catch(() => {}); return 1; });
     await stream.writeSSE({ event: 'done', data: String(code) });
     if (code === 0) {
       await stream.writeSSE({ event: 'restart', data: String(RESTART_EXIT_CODE) });

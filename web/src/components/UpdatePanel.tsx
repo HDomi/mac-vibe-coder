@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, type UpdateStatus } from '../lib/api';
+import { api, type ReleaseSummary, type UpdateStatus } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
 import Icon from './Icon';
 
@@ -45,11 +45,12 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const apply = (force = false) => {
+  const [lastVersion, setLastVersion] = useState<string | undefined>();
+  const apply = (force = false, version?: string) => {
     if (locked) return;
     sourceRef.current?.close();
-    setPhase('running'); setLog([]);
-    const es = new EventSource(api.updateApplyUrl(force));
+    setPhase('running'); setLog([]); setLastVersion(version);
+    const es = new EventSource(api.updateApplyUrl(force, version));
     sourceRef.current = es;
     es.addEventListener('start', (e) => setLog((l) => [...l, { line: `$ ${(e as MessageEvent).data}`, err: false }]));
     es.addEventListener('stdout', (e) => setLog((l) => [...l, { line: (e as MessageEvent).data, err: false }]));
@@ -113,8 +114,12 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
               onClick={() => { if (window.confirm(t(release ? 'update.reinstallReleaseConfirm' : 'update.reinstallConfirm', { v: status?.remote?.version ?? '' }))) apply(false); }}>
               {t('update.reinstall')}
             </button>
-            {phase === 'failed' && <button className="rounded bg-white/5 hover:bg-white/10 px-3 py-1.5 text-xs" onClick={() => apply(true)}>{t('update.force')}</button>}
+            {phase === 'failed' && <button className="rounded bg-white/5 hover:bg-white/10 px-3 py-1.5 text-xs" onClick={() => apply(true, lastVersion)}>{t('update.force')}</button>}
           </div>
+          {release && !!status?.releases?.length && (
+            <RecentReleases releases={status.releases} installed={status.installed.version} disabled={locked}
+              onInstall={(r, older) => { if (window.confirm(t(older ? 'update.rollbackConfirm' : 'update.installConfirm', { v: r.version, cur: status.installed.version }))) apply(false, r.version); }} />
+          )}
           {locked && <div className="text-amber-200/80 text-[11px]">{t('update.locked')}</div>}
           {phase === 'restarting' && <div className="text-emerald-300 text-xs animate-pulse">{t('update.restarting')}</div>}
           {log.length > 0 && (
@@ -123,6 +128,45 @@ function UpdateModal({ status, checking, onClose, onRefresh }: { status: UpdateS
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Standalone app: the last releases with their notes; any one can be installed, older ones to roll back. */
+export function RecentReleases({ releases, installed, disabled, onInstall }: { releases: ReleaseSummary[]; installed: string; disabled: boolean; onInstall: (r: ReleaseSummary, older: boolean) => void }) {
+  useLang();
+  const [open, setOpen] = useState<string | null>(null);
+  const cmp = (a: string, b: string) => {
+    const pa = a.split('.').map(Number); const pb = b.split('.').map(Number);
+    for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
+    return 0;
+  };
+  return (
+    <div>
+      <div className="text-xs text-zinc-500 mb-1.5">{t('update.recentReleases')}</div>
+      <div className="rounded-lg border border-white/10 divide-y divide-white/5">
+        {releases.map((r) => {
+          const order = cmp(r.version, installed);
+          return (
+            <div key={r.tag} className="text-xs">
+              <div className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/[0.03]" onClick={() => setOpen(open === r.tag ? null : r.tag)}>
+                <span className="text-zinc-600 text-[10px] w-2">{r.notes ? (open === r.tag ? '▾' : '▸') : ''}</span>
+                <span className="font-mono text-zinc-100">v{r.version}</span>
+                {r.name && r.name !== r.tag && <span className="truncate min-w-0 text-zinc-400">{r.name}</span>}
+                <span className="shrink-0 text-zinc-600">{r.publishedAt ? new Date(r.publishedAt).toLocaleDateString() : ''}</span>
+                <div className="flex-1" />
+                {order === 0
+                  ? <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10.5px] text-emerald-200">{t('update.current')}</span>
+                  : <button disabled={disabled} onClick={(e) => { e.stopPropagation(); onInstall(r, order < 0); }}
+                      className={`shrink-0 rounded px-2 py-0.5 disabled:opacity-40 ${order < 0 ? 'bg-white/5 hover:bg-white/10 text-zinc-300' : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200'}`}>
+                      {order < 0 ? t('update.rollback') : t('update.installThis')}
+                    </button>}
+              </div>
+              {open === r.tag && r.notes && <div className="px-8 pb-2.5 whitespace-pre-wrap text-[11.5px] leading-relaxed text-zinc-400 max-h-48 overflow-y-auto">{r.notes}</div>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -35,7 +35,10 @@ export function bundleProblem(bundle: string): string | null {
 }
 
 export interface ReleaseAsset { name: string; browser_download_url: string; size: number }
-export interface Release { tag_name: string; name?: string | null; body?: string | null; draft?: boolean; prerelease?: boolean; assets: ReleaseAsset[] }
+export interface Release { tag_name: string; name?: string | null; body?: string | null; draft?: boolean; prerelease?: boolean; published_at?: string | null; assets: ReleaseAsset[] }
+
+/** One installable release as the update dialog lists it. */
+export interface ReleaseSummary { version: string; tag: string; name: string; publishedAt: string | null; notes: string }
 
 /** The zip for this machine's architecture and the checksum list, as published by the release workflow. */
 export function pickAssets(release: Release, arch: string = process.arch): { zip: ReleaseAsset | null; sums: ReleaseAsset | null } {
@@ -65,6 +68,15 @@ async function getJson<T>(url: string): Promise<T> {
 }
 
 export const latestRelease = () => getJson<Release>(`${FEED}/releases/latest`);
+export const releaseByTag = (tag: string) => getJson<Release>(`${FEED}/releases/tags/${encodeURIComponent(tag)}`);
+
+/** The newest published releases that carry a zip for this machine, newest first. */
+export async function recentReleases(limit = 3): Promise<ReleaseSummary[]> {
+  const list = await getJson<Release[]>(`${FEED}/releases?per_page=15`);
+  return list.filter((r) => !r.draft && !r.prerelease && pickAssets(r).zip && pickAssets(r).sums).slice(0, limit).map((r) => ({
+    version: r.tag_name.replace(/^v/, ''), tag: r.tag_name, name: r.name || r.tag_name, publishedAt: r.published_at ?? null, notes: (r.body ?? '').trim().slice(0, 1500),
+  }));
+}
 
 /** Commit subjects between two tags, newest first (empty when GitHub cannot compare them). */
 export async function releaseCommits(fromTag: string, toTag: string): Promise<{ hash: string; subject: string }[]> {

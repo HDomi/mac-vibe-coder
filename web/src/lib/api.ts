@@ -41,7 +41,8 @@ export interface HistorySession { agent: 'claude' | 'codex'; sessionId: string; 
 export interface HistoryMessage { type: string; uuid: string; message: unknown; parent_tool_use_id: string | null }
 
 export interface BuildInfo { version: string; commit: string; builtAt: string | null }
-export interface UpdateStatus { source: 'release' | 'git'; repo: string; branch: string | null; installed: BuildInfo; remote: BuildInfo | null; available: boolean; commits: { hash: string; subject: string }[]; checkedAt: number; error: string | null }
+export interface ReleaseSummary { version: string; tag: string; name: string; publishedAt: string | null; notes: string }
+export interface UpdateStatus { source: 'release' | 'git'; repo: string; branch: string | null; installed: BuildInfo; remote: BuildInfo | null; available: boolean; commits: { hash: string; subject: string }[]; checkedAt: number; error: string | null; releases?: ReleaseSummary[] }
 
 export interface GitFile { path: string; index: string; worktree: string; staged: boolean; untracked: boolean }
 export interface GitCommit { hash: string; parents: string[]; refs: string[]; subject: string; author: string; date: string }
@@ -158,7 +159,7 @@ export const api = {
   search: (cwd: string, query: string) => req<{ path: string; rel: string; isDir: boolean }[]>(`/api/fs/search?cwd=${q(cwd)}&q=${q(query)}`),
   health: () => req<{ ok: boolean; version: string; commit: string; builtAt: string | null }>('/api/health'),
   updateStatus: (force = false) => req<UpdateStatus>(`/api/update/status${force ? '?force=1' : ''}`),
-  updateApplyUrl: (force = false) => `/api/update/apply${force ? '?force=1' : ''}`,
+  updateApplyUrl: (force = false, version?: string) => `/api/update/apply?${[force ? 'force=1' : '', version ? `version=${q(version)}` : ''].filter(Boolean).join('&')}`,
   open: (path: string, app: 'terminal' | 'iterm' | 'finder' | 'vscode' | 'cursor' = 'terminal') =>
     req<{ ok: true }>('/api/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, app }) }),
   gitStatus: (cwd: string) => req<GitStatus>(`/api/git/status?cwd=${q(cwd)}`),
