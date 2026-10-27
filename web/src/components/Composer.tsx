@@ -252,12 +252,12 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
           disabled={disabled} onKeyDown={onKeyDown}
           placeholder={disabled ? t('composer.startFirst') : running ? t('composer.queueHint') : t('composer.placeholder')}
           className="w-full bg-transparent px-4 pt-3 pb-2 text-[14px] outline-none resize-none min-h-11" rows={1} />
-        <div className="flex items-center gap-2 px-2 pb-2">
+        <div className="flex items-center gap-2 px-2 pb-2 whitespace-nowrap">
           <select value={mode} onChange={(e) => onMode(e.target.value as PermissionModeId)} disabled={disabled}
-            className="bg-white/5 rounded-md text-xs px-2 py-1 outline-none" title={modeHint}>
+            className="bg-white/5 rounded-md text-xs px-2 py-1 outline-none min-w-0 shrink" title={modeHint}>
             {modes.map((m) => <option key={m.id} value={m.id}>{t(m.key)}</option>)}
           </select>
-          <label className="text-xs text-zinc-400 hover:text-white cursor-pointer px-2">
+          <label className="shrink-0 text-xs text-zinc-400 hover:text-white cursor-pointer px-2">
             📎 {t('composer.attach')}
             <input type="file" multiple className="hidden" onChange={(e) => { void addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
           </label>
@@ -278,8 +278,8 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
             </div>
           )}
           <div className="flex-1" />
-          {running && <button className="rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs px-3 py-1.5" onClick={onStop}>{t('composer.stop')}</button>}
-          <button className="rounded-md bg-blue-500/30 hover:bg-blue-500/40 text-xs px-3 py-1.5 disabled:opacity-40" disabled={disabled || uploading || (!text.trim() && !attachments.length)} onClick={submit}>{running ? t('composer.queue') : t('composer.send')}</button>
+          {running && <button className="shrink-0 rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs px-3 py-1.5" onClick={onStop}>{t('composer.stop')}</button>}
+          <button className="shrink-0 rounded-md bg-blue-500/30 hover:bg-blue-500/40 text-xs px-3 py-1.5 disabled:opacity-40" disabled={disabled || uploading || (!text.trim() && !attachments.length)} onClick={submit}>{running ? t('composer.queue') : t('composer.send')}</button>
         </div>
       </div>
     </div>

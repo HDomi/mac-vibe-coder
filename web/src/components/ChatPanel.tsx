@@ -61,7 +61,7 @@ export function ModelSelect({ agent, value, onChange, compact }: { agent: AgentI
   const known = value && models.some((m) => m.id === value || m.name === value);
   return (
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} title={t('chat.model')}
-      className={`bg-white/5 rounded-md outline-none ${compact ? 'text-[11px] px-1.5 py-0.5 max-w-45' : 'text-xs px-2 py-1.5'}`}>
+      className={`bg-white/5 rounded-md outline-none ${compact ? 'text-[11px] px-1.5 py-0.5 max-w-45 min-w-0' : 'text-xs px-2 py-1.5'}`}>
       <option value="">{t('chat.defaultModel')}</option>
       {value && !known && <option value={value}>{value}</option>}
       {models.map((m) => <option key={m.id} value={m.id}>{m.name}{m.isDefault ? t('chat.defaultSuffix') : ''}</option>)}
@@ -317,18 +317,18 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
 
   return (
     <div className="h-full flex flex-col min-w-0">
-      <div data-companion-floor="chat-header" data-companion-edge="bottom" className="h-10 shrink-0 flex items-center gap-3 px-4 border-b border-white/10 text-xs">
+      <div data-companion-floor="chat-header" data-companion-edge="bottom" className="@container h-10 shrink-0 flex items-center gap-3 px-4 border-b border-white/10 text-xs whitespace-nowrap">
         <span className={`w-2 h-2 rounded-full ${running ? 'bg-amber-400 animate-pulse' : session.status === 'closed' ? 'bg-zinc-600' : 'bg-emerald-400'}`} />
         <AgentIcon agent={session.agent} size={16} />
         <span className="font-medium text-zinc-200">{session.agent === 'codex' ? 'Codex' : 'Claude'}</span>
         <ModelSelect agent={session.agent} value={session.model ?? null} onChange={onModel} compact />
-        <span className="text-zinc-500 truncate" title={session.cwd}>{session.cwd.split('/').slice(-2).join('/')}</span>
+        <span className="text-zinc-500 truncate min-w-0 @max-[560px]:hidden" title={session.cwd}>{session.cwd.split('/').slice(-2).join('/')}</span>
         {session.status === 'compacting' && <span className="text-amber-300">{t('chat.compacting')}</span>}
         <div className="flex-1" />
         {onVerify && session.cwd && <VerifyButton cwd={session.cwd} running={running} onRun={onVerify} />}
         {session.agentSessionId && <button className="text-zinc-600 hover:text-zinc-300" title={t('chat.copySessionIdTitle', { id: session.agentSessionId })} onClick={() => navigator.clipboard.writeText(session.agentSessionId!)}>id</button>}
-        {session.agent === 'claude' && <span className="text-zinc-500">${session.totalCostUsd.toFixed(3)}</span>}
-        <button className="w-7 h-7 -mr-2 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={close} title={t('chat.closeSession')}><Icon name="close" /></button>
+        {session.agent === 'claude' && <span className="text-zinc-500 @max-[440px]:hidden">${session.totalCostUsd.toFixed(3)}</span>}
+        <button className="w-7 h-7 -mr-2 shrink-0 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={close} title={t('chat.closeSession')}><Icon name="close" /></button>
       </div>
       <div className="flex-1 min-h-0 relative">
         {searching && <ChatSearch content={content} scroller={scroller} version={session.items} onClose={() => setSearching(false)}

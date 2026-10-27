@@ -31,33 +31,33 @@ export function VerifyItem({ item, latest, onRerun }: { item: VerifyItemData; la
     return (
       <div className="flex items-center gap-2 text-[11.5px] text-zinc-400 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
         <span className="inline-block w-3 h-3 rounded-full border-2 border-sky-400/70 border-t-transparent animate-spin" />
-        <span>{t('verify.running')}</span>
-        <code className="truncate text-zinc-500 font-mono text-[11px]">{item.command}</code>
+        <span className="whitespace-nowrap shrink-0">{t('verify.running')}</span>
+        <code className="truncate min-w-0 text-zinc-500 font-mono text-[11px]">{item.command}</code>
       </div>
     );
   }
   if (item.status === 'passed' || item.status === 'cancelled') {
     return (
       <div className={`flex items-center gap-2 text-[11.5px] ${item.status === 'passed' ? 'text-emerald-300/90' : 'text-zinc-500'}`}>
-        <span className={`w-4 h-4 rounded-full flex items-center justify-center ${item.status === 'passed' ? 'bg-emerald-400/15' : 'bg-white/5'}`}>
+        <span className={`w-4 h-4 shrink-0 rounded-full flex items-center justify-center ${item.status === 'passed' ? 'bg-emerald-400/15' : 'bg-white/5'}`}>
           <Icon name={item.status === 'passed' ? 'check' : 'close'} size={10} />
         </span>
-        <span>{t(item.status === 'passed' ? 'verify.passed' : 'verify.cancelled')}</span>
-        <code className="truncate text-zinc-500 font-mono text-[11px]">{item.command}</code>
-        <span className="text-zinc-600 tabular-nums">{seconds(item.durationMs)}</span>
+        <span className="whitespace-nowrap shrink-0">{t(item.status === 'passed' ? 'verify.passed' : 'verify.cancelled')}</span>
+        <code className="truncate min-w-0 text-zinc-500 font-mono text-[11px]">{item.command}</code>
+        <span className="text-zinc-600 tabular-nums shrink-0">{seconds(item.durationMs)}</span>
       </div>
     );
   }
   return (
     <div className="rounded-lg border border-red-500/30 bg-red-500/[0.06] text-[12px]">
       <div className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none" onClick={() => setOpen((v) => !v)}>
-        <span className="w-4 h-4 rounded-full bg-red-400/20 text-red-300 flex items-center justify-center"><Icon name="close" size={10} /></span>
-        <span className="text-red-200 font-medium">{t('verify.failed')}</span>
-        <code className="truncate text-zinc-400 font-mono text-[11px]">{item.command}</code>
+        <span className="w-4 h-4 shrink-0 rounded-full bg-red-400/20 text-red-300 flex items-center justify-center"><Icon name="close" size={10} /></span>
+        <span className="text-red-200 font-medium whitespace-nowrap shrink-0">{t('verify.failed')}</span>
+        <code className="truncate min-w-0 text-zinc-400 font-mono text-[11px]">{item.command}</code>
         <span className="text-zinc-500 tabular-nums shrink-0">exit {item.exitCode} · {seconds(item.durationMs)}</span>
         <div className="flex-1" />
         <button className="shrink-0 flex items-center gap-1 rounded-md bg-red-400/15 hover:bg-red-400/25 text-red-100 px-2 py-0.5 text-[11px]"
-          onClick={(e) => { e.stopPropagation(); sendFailure(); }} title={t('verify.sendHint')}><Icon name="send" size={11} />{t('verify.send')}</button>
+          onClick={(e) => { e.stopPropagation(); sendFailure(); }} title={t('verify.sendHint')}><Icon name="send" size={11} /><span className="whitespace-nowrap">{t('verify.send')}</span></button>
         {onRerun && <button className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10"
           onClick={(e) => { e.stopPropagation(); onRerun(); }} title={t('verify.rerun')}><Icon name="reload" size={12} /></button>}
       </div>
@@ -105,10 +105,10 @@ export function VerifyButton({ cwd, running, onRun }: { cwd: string; running: bo
 
   return (
     <div ref={root} className="relative">
-      <button className={`flex items-center gap-1 rounded-md px-1.5 py-1 ${active ? (saved?.auto ? 'text-sky-300 hover:bg-sky-400/10' : 'text-zinc-300 hover:bg-white/10') : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'}`}
+      <button className={`flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-1 ${active ? (saved?.auto ? 'text-sky-300 hover:bg-sky-400/10' : 'text-zinc-300 hover:bg-white/10') : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'}`}
         onClick={() => setOpen((v) => !v)} title={active ? `${t('verify.title')}: ${saved?.command}` : t('verify.title')}>
         <Icon name="shieldCheck" size={14} />
-        <span>{t('verify.short')}</span>
+        <span className="@max-[520px]:hidden">{t('verify.short')}</span>
         {saved?.auto && <span className="text-[9px] uppercase tracking-wide rounded bg-sky-400/15 px-1">auto</span>}
       </button>
       {open && (
