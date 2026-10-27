@@ -290,7 +290,9 @@ function AppInner() {
           <main className="flex-1 min-w-0 flex">
             <div data-companion-zone="prompt" className="flex-1 min-w-0 flex flex-col">
               {project && projectSessions.length > 0 && (
-                <div data-companion-floor="session-tabs" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs overflow-x-auto">
+                <div data-companion-floor="session-tabs" data-companion-edge="bottom" className="h-9 shrink-0 flex items-center gap-1 px-2 border-b border-white/10 text-xs">
+                  {/* Only the tabs scroll; the new-session button stays pinned at the right end. */}
+                  <div className="flex-1 min-w-0 h-full flex items-center gap-1 overflow-x-auto">
                   {projectSessions.map((s) => (
                     <div key={s.id} onClick={() => setActiveSession(s.id)} onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeSession(s.id); } }}
                       onContextMenu={(e) => menu.open(e, sessionMenu(s, S.setPinned, () => closeSession(s.id)))}
@@ -304,7 +306,8 @@ function AppInner() {
                         onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}><Icon name="close" size={11} /></button>
                     </div>
                   ))}
-                  <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => setActiveSession('new')} title={t('app.newSession')}><Icon name="plus" /></button>
+                  </div>
+                  <button className="w-7 h-7 shrink-0 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => setActiveSession('new')} title={t('app.newSession')}><Icon name="plus" /></button>
                 </div>
               )}
               <div className="flex-1 min-h-0">
