@@ -3,11 +3,15 @@ import test from 'node:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { FsError } from '../server/fs';
 import { convertImage, imageInfo, renderPng, writeImageBytes } from '../server/image';
 
 const SRC = path.join(import.meta.dirname, '..', 'web', 'public', 'icon.png'); // 1024×1024 with alpha
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+// What ImageIO can write depends on the macOS version (AVIF writing is missing on macOS 15, used by CI).
+const WRITABLE = new Set(execFileSync('sips', ['--formats'], { encoding: 'utf8' }).split('\n')
+  .map((l) => l.trim().split(/\s+/)).filter((c) => c[2] === 'Writable').map((c) => c[1]));
 
 async function scratch() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mvc-image-'));
@@ -28,7 +32,13 @@ test('convertImage writes the new format at the requested size, without leftover
   assert.equal(info.format, 'jpeg');
   assert.deepEqual([info.width, info.height], [300, 200]);
   for (const format of ['heic', 'avif', 'tiff', 'gif', 'bmp', 'jp2', 'psd', 'tga']) {
-    const p = await convertImage({ path: src, dest: path.join(dir, `pic.${format}`), format, width: 64, height: 64 });
+    const dest = path.join(dir, `pic.${format}`);
+    if (!WRITABLE.has(format)) {
+      // Unsupported on this OS: a clean 422, and no file left behind.
+      await assert.rejects(convertImage({ path: src, dest, format, width: 64, height: 64 }), (e: unknown) => e instanceof FsError && e.status === 422, format);
+      continue;
+    }
+    const p = await convertImage({ path: src, dest, format, width: 64, height: 64 });
     assert.ok((await fs.stat(p)).size > 0, format);
   }
   assert.deepEqual((await fs.readdir(dir)).filter((n) => n.includes('mvc-tmp')), []);
