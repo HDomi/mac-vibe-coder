@@ -14,6 +14,8 @@ test('backlog: an item is done only when its session is idle again with a result
   assert.equal(itemOutcome(session('idle', [{ kind: 'result', id: 'r', ok: true, text: '', costUsd: 0, numTurns: 1, durationMs: 1 }])), 'done');
   assert.equal(itemOutcome(session('idle', [{ kind: 'result', id: 'r', ok: false, text: '', costUsd: 0, numTurns: 1, durationMs: 1 }])), 'failed');
   assert.equal(itemOutcome(session('closed')), 'failed');
+  assert.equal(itemOutcome(session('idle', [{ kind: 'user', id: 'u', text: 'x', attachments: [] }, { kind: 'system', id: 'revived-s2', text: '' }])), 'stopped', 'cut off by a server restart');
+  assert.equal(itemOutcome(session('idle', [{ kind: 'result', id: 'r0', ok: true, text: '', costUsd: 0, numTurns: 1, durationMs: 1 }, { kind: 'user', id: 'u', text: 'x', attachments: [] }])), 'running', 'an older result does not finish a newer turn');
 
   const b = { ...EMPTY_BACKLOG, items: [{ id: 'a', text: 'x', status: 'done' as const, createdAt: 1 }, { id: 'b', text: 'y', status: 'todo' as const, createdAt: 2 }] };
   assert.equal(nextItem(b)?.id, 'b');
