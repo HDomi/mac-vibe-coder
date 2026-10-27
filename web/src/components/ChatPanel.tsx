@@ -13,8 +13,9 @@ import AgentIcon from './AgentIcon';
 import Icon from './Icon';
 import { VerifyButton, VerifyItem } from './Verify';
 import { TurnChangesItem } from './TurnChanges';
+import WorktreeChip from './WorktreeChip';
 
-export interface StartOptions { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null; title?: string }
+export interface StartOptions { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null; title?: string; /** Start in a new git worktree (optional branch name). */ isolate?: { branch?: string } }
 
 interface Props {
   cwd: string | null;
@@ -107,6 +108,17 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [filter, setFilter] = useState('');
+  // Worktree start: only offered inside a git repository with at least one commit.
+  const [isGit, setIsGit] = useState(false);
+  const [isolate, setIsolate] = useState(false);
+  const [branch, setBranch] = useState('');
+  useEffect(() => {
+    setIsGit(false); setIsolate(false);
+    if (!cwd || scope === 'all') return;
+    let alive = true;
+    api.gitStatus(cwd).then((st) => { if (alive) setIsGit(st.repo); }).catch(() => {});
+    return () => { alive = false; };
+  }, [cwd, scope]);
   useEffect(() => { try { localStorage.setItem('vibe.agent', agent); setModel(localStorage.getItem(`vibe.model.${agent}`)); } catch { /* ignore */ } }, [agent]);
   useEffect(() => { try { localStorage.setItem('vibe.mode', mode); } catch { /* ignore */ } }, [mode]);
   useEffect(() => { try { model ? localStorage.setItem(`vibe.model.${agent}`, model) : localStorage.removeItem(`vibe.model.${agent}`); } catch { /* ignore */ } }, [model, agent]);
@@ -153,12 +165,28 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
         ))}
       </div>
       <div className="flex items-center gap-3 mb-3 flex-wrap">
-        <button className="rounded-lg bg-blue-500/30 hover:bg-blue-500/40 px-4 py-2 text-sm" onClick={() => onStart(cwd, opts())}>{t('chat.newSession', { agent: agentName })} <span className="text-zinc-400 text-xs ml-1">⌘N</span></button>
+        <button className="rounded-lg bg-blue-500/30 hover:bg-blue-500/40 px-4 py-2 text-sm" onClick={() => onStart(cwd, opts(isolate ? { isolate: { branch: branch.trim() || undefined } } : {}))}>{t('chat.newSession', { agent: agentName })} <span className="text-zinc-400 text-xs ml-1">⌘N</span></button>
         <select value={mode} onChange={(e) => setMode(e.target.value as PermissionModeId)} className="bg-white/5 rounded-md text-xs px-2 py-1.5 outline-none">
           {MODE_IDS.filter((m) => m.id !== 'auto' || agent === 'claude').map((m) => <option key={m.id} value={m.id}>{t(m.key)}</option>)}
         </select>
         <ModelSelect agent={agent} value={model} onChange={setModel} />
       </div>
+      {isGit && (
+        <div className={`mb-3 rounded-lg border px-3 py-2 text-xs transition-colors ${isolate ? 'border-violet-400/30 bg-violet-400/[0.06]' : 'border-white/5'}`}>
+          <label className="flex items-center gap-2 cursor-pointer text-zinc-300">
+            <input type="checkbox" checked={isolate} onChange={(e) => setIsolate(e.target.checked)} />
+            <Icon name="branch" size={13} className={isolate ? 'text-violet-300' : 'text-zinc-500'} />
+            {t('worktree.startIn')}
+          </label>
+          {isolate && (
+            <div className="mt-2 pl-6 space-y-1.5">
+              <input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder={t('worktree.branchPlaceholder')} spellCheck={false}
+                className="w-64 rounded-md bg-black/40 border border-white/10 focus:border-violet-400/50 px-2 py-1 font-mono text-[11.5px] outline-none" />
+              <div className="text-[11px] text-zinc-500 leading-relaxed">{t('worktree.startHint')}</div>
+            </div>
+          )}
+        </div>
+      )}
       <div className="text-xs text-zinc-500 mb-6">{agent === 'codex' ? t('chat.codexHint') : t('chat.claudeHint')}</div>
       <div className="flex items-center text-xs text-zinc-500 mb-2 gap-3">
         <span>{scope === 'all' ? t('chat.previousAll', { n: history.length }) : t('chat.previousFolder')}</span>
@@ -325,6 +353,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         <span className="font-medium text-zinc-200">{session.agent === 'codex' ? 'Codex' : 'Claude'}</span>
         <ModelSelect agent={session.agent} value={session.model ?? null} onChange={onModel} compact />
         <span className="text-zinc-500 truncate min-w-0 @max-[560px]:hidden" title={session.cwd}>{session.cwd.split('/').slice(-2).join('/')}</span>
+        {session.worktree && <WorktreeChip info={session.worktree} running={running} onFinished={onClose} />}
         {session.status === 'compacting' && <span className="text-amber-300">{t('chat.compacting')}</span>}
         <div className="flex-1" />
         {onVerify && session.cwd && <VerifyButton cwd={session.cwd} running={running} onRun={onVerify} />}

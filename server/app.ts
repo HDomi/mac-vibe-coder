@@ -29,6 +29,7 @@ import { displayableIcon, findProjectIcon } from './icons.js';
 import { convertImage, imageInfo, renderPng, writeImageBytes } from './image.js';
 import { projectSettings, suggestVerifyCommands, updateProjectSettings } from './verify.js';
 import { revertTurn, turnDiff } from './turns.js';
+import { checkWorktree, createWorktree, mergeWorktree, removeWorktree, worktreeStatus } from './worktree.js';
 import { listRuns, projectScripts, removeRun, startRun, stopRun, subscribeRun, type RunInfo, type RunLine } from './runner.js';
 import { killProcess, listeningPorts, netInfo, proxyHttp, type ProxyRequest } from './net.js';
 
@@ -379,6 +380,12 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   });
 
   app.get('/api/sessions', (c) => c.json(registry?.list() ?? []));
+
+  // Worktree sessions (worktree.ts).
+  app.post('/api/worktree/create', async (c) => { const b = await c.req.json<{ cwd: string; branch?: string }>(); return c.json(await createWorktree(b.cwd, b.branch)); });
+  app.post('/api/worktree/status', async (c) => c.json(await worktreeStatus(checkWorktree((await c.req.json<{ info: unknown }>()).info))));
+  app.post('/api/worktree/merge', async (c) => c.json(await mergeWorktree(checkWorktree((await c.req.json<{ info: unknown }>()).info))));
+  app.post('/api/worktree/remove', async (c) => { const b = await c.req.json<{ info: unknown; force?: boolean }>(); return c.json(await removeWorktree(checkWorktree(b.info), !!b.force)); });
 
   // Run panel (runner.ts): project scripts and long-running dev servers owned by the server.
   app.get('/api/run/scripts', async (c) => c.json(await projectScripts(c.req.query('cwd') ?? '~')));

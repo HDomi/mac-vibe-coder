@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { backgroundState, displayTitle, pendingRequests, sortSessions, type ChatSession } from './lib/chatStore';
+import { backgroundState, displayTitle, inProject, pendingRequests, sortSessions, type ChatSession } from './lib/chatStore';
 import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing, type RecentSession } from './lib/api';
 import { agentClient, type Attachment } from './lib/agent';
 import { reconnectTerminals, terminalsBusy } from './lib/terminals';
@@ -24,6 +24,7 @@ import QuickOpen from './components/QuickOpen';
 import { t, useLang } from './lib/i18n';
 import AgentIcon from './components/AgentIcon';
 import Lightbox from './components/Lightbox';
+import Toaster from './components/Toast';
 import Icon from './components/Icon';
 import SessionCompanions from './components/SessionCompanions';
 
@@ -120,9 +121,11 @@ function AppInner() {
   useEffect(() => { try { project ? localStorage.setItem(LS_PROJECT, project) : localStorage.removeItem(LS_PROJECT); } catch { /* ignore */ } }, [project]);
   useEffect(() => { const h = () => requestNotificationPermission(); window.addEventListener('click', h, { once: true }); return () => window.removeEventListener('click', h); }, []);
 
-  const projectSessions = sortSessions(Object.values(S.sessions).filter((s) => s.cwd === project));
+  const projectSessions = sortSessions(Object.values(S.sessions).filter((s) => inProject(s, project)));
   const session = activeSession === 'new' ? null
-    : (activeSession && S.sessions[activeSession]?.cwd === project ? S.sessions[activeSession] : projectSessions[0]) ?? null;
+    : (activeSession && S.sessions[activeSession] && inProject(S.sessions[activeSession], project) ? S.sessions[activeSession] : projectSessions[0]) ?? null;
+  // A worktree session's files, terminal, Git and Run panels follow its own folder.
+  const panelRoot = session?.worktree ? session.cwd : project;
 
   const navigate = useCallback((p: string) => { setCwd(p); setSelected(null); }, []);
   // Local file links inside markdown (chat or preview) open in the Preview tab.
@@ -153,7 +156,7 @@ function AppInner() {
     const s = S.sessions[id];
     if (!s) return;
     if (view === 'agent') setAgentActive(id);
-    else { if (s.cwd !== project) openProject(s.cwd); setActiveSession(id); }
+    else { if (!inProject(s, project)) openProject(s.worktree?.origin ?? s.cwd); setActiveSession(id); }
   };
   useEffect(() => {
     const h = (ev: Event) => { const id = (ev as CustomEvent<{ sessionId: string }>).detail?.sessionId; if (id) focusSession.current(id); };
@@ -199,7 +202,22 @@ function AppInner() {
     if (window.vibe?.pickFolder) { const p = await window.vibe.pickFolder(); if (p) openProject(p); }
     else { const p = window.prompt(t('app.folderPathPrompt'), listing?.path ?? '~'); if (p) openProject(p); }
   };
-  const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActiveSession).catch((e) => window.alert(e.message));
+  const start = async (c: string, o?: StartOptions) => {
+    try {
+      if (o?.isolate) {
+        const wt = await api.worktreeCreate(c, o.isolate.branch);
+        setActiveSession(await S.start(wt.path, { ...o, worktree: { ...wt, origin: c } }));
+      } else setActiveSession(await S.start(c, o));
+    } catch (e) { window.alert((e as Error).message); }
+  };
+  // Switching to a worktree session shows its folder in the file list; leaving it goes back to the project.
+  const lastPanelRoot = useRef(panelRoot);
+  useEffect(() => {
+    if (panelRoot === lastPanelRoot.current) return;
+    const prev = lastPanelRoot.current;
+    lastPanelRoot.current = panelRoot;
+    if (panelRoot && (cwd === prev || (prev && cwd.startsWith(prev + '/')))) navigate(panelRoot);
+  }, [panelRoot, cwd, navigate]);
   const closeSession = (id: string) => {
     const s = S.sessions[id];
     if (!s) return;
@@ -271,6 +289,7 @@ function AppInner() {
   return (
       <div className="h-full flex flex-col">
         <Lightbox />
+        <Toaster />
         <UsageBar mode={view} onMode={setView} companions={companions} onCompanions={() => setCompanions((v) => !v)} />
         {companions && <SessionCompanions sessions={Object.values(S.sessions)} scene={`${view}:${rightTab}:${rightCollapsed}`} />}
         {view === 'agent' ? (
@@ -310,6 +329,7 @@ function AppInner() {
                       <AgentIcon agent={s.agent} size={14} />
                       {s.pinned && <span className="text-[9px]" title={t('common.pin')}>📌</span>}
                       <span className="text-zinc-500">{displayTitle(s, 18) ?? t('common.new')}</span>
+                      {s.worktree && <span className="flex items-center gap-0.5 rounded bg-violet-400/10 px-1 text-[10px] text-violet-200 max-w-28" title={`${s.worktree.branch} · ${s.worktree.path}`}><Icon name="branch" size={10} /><span className="truncate">{s.worktree.branch}</span></span>}
                       <AttentionBadge s={s} />
                       <button className="ml-1 w-5 h-5 flex items-center justify-center rounded text-zinc-500 hover:text-white hover:bg-white/15 opacity-0 group-hover:opacity-100" title={t('app.closeSession')}
                         onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}><Icon name="close" size={11} /></button>
@@ -378,9 +398,9 @@ function AppInner() {
                 </div>
                 <div className={`absolute inset-0 ${rightTab === 'preview' ? '' : 'invisible'}`}><Preview entry={selected} /></div>
                 <div className={`absolute inset-0 ${rightTab === 'browser' ? '' : 'invisible'}`}><BrowserPanel visible={rightTab === 'browser' && !rightCollapsed} onCapture={(a) => setPendingAttachments((prev) => [...prev, a])} /></div>
-                <div className={`absolute inset-0 ${rightTab === 'terminal' ? '' : 'invisible'}`}><TerminalPanel cwd={project} visible={rightTab === 'terminal'} /></div>
-                <div className={`absolute inset-0 ${rightTab === 'git' ? '' : 'invisible'}`}><GitPanel cwd={project} visible={rightTab === 'git'} /></div>
-                <div className={`absolute inset-0 ${rightTab === 'run' ? '' : 'invisible'}`}><RunPanel cwd={project} visible={rightTab === 'run' && !rightCollapsed} onStatus={setRunStatus} /></div>
+                <div className={`absolute inset-0 ${rightTab === 'terminal' ? '' : 'invisible'}`}><TerminalPanel cwd={panelRoot} visible={rightTab === 'terminal'} /></div>
+                <div className={`absolute inset-0 ${rightTab === 'git' ? '' : 'invisible'}`}><GitPanel cwd={panelRoot} visible={rightTab === 'git'} /></div>
+                <div className={`absolute inset-0 ${rightTab === 'run' ? '' : 'invisible'}`}><RunPanel cwd={panelRoot} visible={rightTab === 'run' && !rightCollapsed} onStatus={setRunStatus} /></div>
               </div>
             </div>
           </main>

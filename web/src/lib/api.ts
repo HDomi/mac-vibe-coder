@@ -63,6 +63,10 @@ export interface ListeningPort { pid: number; command: string; user: string; add
 export interface RunScript { name: string; command: string }
 export interface RunInfo { id: string; cwd: string; name: string; command: string; status: 'running' | 'exited'; exitCode: number | null; startedAt: number; endedAt?: number; url: string | null }
 
+/** A session's own git worktree; `origin` is the project folder it was started from. */
+export interface WorktreeInfo { path: string; branch: string; root: string; baseBranch: string | null; origin?: string }
+export interface WorktreeStatus { exists: boolean; dirty: string[]; ahead: number; branch: string | null }
+
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status: number) { super(message); }
 }
@@ -158,6 +162,10 @@ export const api = {
   gitRemote: (cwd: string, op: 'fetch' | 'pull' | 'push') => post<{ ok: boolean; output: string }>('/api/git/remote', { cwd, op }),
   gitCommit: (cwd: string, message: string) =>
     req<{ ok: boolean; output: string }>('/api/git/commit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, message }) }),
+  worktreeCreate: (cwd: string, branch?: string) => post<WorktreeInfo>('/api/worktree/create', { cwd, branch }),
+  worktreeStatus: (info: WorktreeInfo) => post<WorktreeStatus>('/api/worktree/status', { info }),
+  worktreeMerge: (info: WorktreeInfo) => post<{ ok: boolean; merged: boolean; removed: boolean; message: string; conflicts?: string[]; reason?: string }>('/api/worktree/merge', { info }),
+  worktreeRemove: (info: WorktreeInfo, force: boolean) => post<{ ok: boolean; message: string }>('/api/worktree/remove', { info, force }),
   runScripts: (cwd: string) => req<{ manager: string; scripts: RunScript[] }>(`/api/run/scripts?cwd=${q(cwd)}`),
   runList: (cwd: string) => req<RunInfo[]>(`/api/run/list?cwd=${q(cwd)}`),
   runStart: (cwd: string, name: string, command: string) => post<RunInfo>('/api/run/start', { cwd, name, command }),

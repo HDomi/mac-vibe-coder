@@ -1,3 +1,4 @@
+import type { WorktreeInfo } from './api';
 import type { AgentEvent, AgentId, Attachment, PermissionModeId, Question, TaskInfo, TodoItem, TurnFile, VerifyStatus } from './agent';
 
 export type ChatItem =
@@ -77,6 +78,11 @@ export function liveTasks(s: Pick<ChatSession, 'tasks'>): TaskInfo[] {
   return Object.values(s.tasks ?? {}).filter((t) => t.status === 'running' && !t.ambient).sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id));
 }
 
+/** Whether a session belongs to the project on screen: its folder, or a worktree started from it. */
+export function inProject(s: Pick<ChatSession, 'cwd' | 'worktree'>, project: string | null): boolean {
+  return !!project && (s.cwd === project || s.worktree?.origin === project || s.worktree?.root === project);
+}
+
 /** Tab order: pinned first, then most recent activity. Stable for ties so tabs do not shuffle. */
 export function sortSessions<T extends Pick<ChatSession, 'pinned' | 'lastActivity'>>(list: T[]): T[] {
   return list.map((s, i) => ({ s, i }))
@@ -109,6 +115,8 @@ export interface ChatSession {
   tasks?: Record<string, TaskInfo>;
   /** Pinned tabs stay in front of the activity order. */
   pinned?: boolean;
+  /** Set when the session runs in its own git worktree (cwd is the worktree folder). */
+  worktree?: WorktreeInfo;
   /** Last turn start, turn end or request (server ms); tabs sort by this, newest first. */
   lastActivity?: number;
   status: 'starting' | 'running' | 'idle' | 'compacting' | 'closed';
