@@ -64,7 +64,7 @@ export interface RunScript { name: string; command: string }
 export interface RunInfo { id: string; cwd: string; name: string; command: string; status: 'running' | 'exited'; exitCode: number | null; startedAt: number; endedAt?: number; url: string | null }
 
 /** A session's own git worktree; `origin` is the project folder it was started from. */
-export interface WorktreeInfo { path: string; branch: string; root: string; baseBranch: string | null; origin?: string }
+export interface WorktreeInfo { path: string; branch: string; root: string; baseBranch: string | null; origin?: string; /** A review / handoff session working in another session's worktree: no merge or discard from here. */ shared?: boolean }
 export interface WorktreeStatus { exists: boolean; dirty: string[]; ahead: number; branch: string | null }
 
 export interface BacklogItem { id: string; text: string; status: 'todo' | 'running' | 'done' | 'failed' | 'stopped'; sessionId?: string; createdAt: number; startedAt?: number; endedAt?: number }
@@ -177,6 +177,7 @@ export const api = {
   agentContext: (cwd: string) => req<AgentContext>(`/api/agent-context?cwd=${q(cwd)}`),
   backlogAll: () => req<{ cwd: string; backlog: Backlog }[]>('/api/backlog/all'),
   saveBacklog: (cwd: string, backlog: Backlog) => req<Backlog>('/api/backlog', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, backlog }) }),
+  worktreeList: (cwd: string) => req<WorktreeInfo[]>(`/api/worktree/list?cwd=${q(cwd)}`),
   worktreeCreate: (cwd: string, branch?: string) => post<WorktreeInfo>('/api/worktree/create', { cwd, branch }),
   worktreeStatus: (info: WorktreeInfo) => post<WorktreeStatus>('/api/worktree/status', { info }),
   worktreeMerge: (info: WorktreeInfo, commitMessage?: string) => post<{ ok: boolean; merged: boolean; removed: boolean; message: string; conflicts?: string[]; reason?: string }>('/api/worktree/merge', { info, commitMessage }),

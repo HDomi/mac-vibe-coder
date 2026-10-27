@@ -31,7 +31,7 @@ import { allBacklogs, cleanBacklog, projectSettings, suggestVerifyCommands, upda
 import { revertTurn, turnDiff } from './turns.js';
 import { agentContext } from './agentContext.js';
 import { suggestCommitMessage } from './commitMessage.js';
-import { checkWorktree, createWorktree, mergeWorktree, removeWorktree, worktreeStatus } from './worktree.js';
+import { checkWorktree, createWorktree, listWorktrees, mergeWorktree, removeWorktree, worktreeStatus } from './worktree.js';
 import { listRuns, projectScripts, removeRun, startRun, stopRun, subscribeRun, type RunInfo, type RunLine } from './runner.js';
 import { killProcess, listeningPorts, netInfo, proxyHttp, type ProxyRequest } from './net.js';
 
@@ -398,6 +398,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   });
 
   // Worktree sessions (worktree.ts).
+  app.get('/api/worktree/list', async (c) => c.json(await listWorktrees(c.req.query('cwd') ?? '~')));
   app.post('/api/worktree/create', async (c) => { const b = await c.req.json<{ cwd: string; branch?: string }>(); return c.json(await createWorktree(b.cwd, b.branch)); });
   app.post('/api/worktree/status', async (c) => c.json(await worktreeStatus(checkWorktree((await c.req.json<{ info: unknown }>()).info))));
   app.post('/api/worktree/merge', async (c) => { const b = await c.req.json<{ info: unknown; commitMessage?: string }>(); return c.json(await mergeWorktree(checkWorktree(b.info), typeof b.commitMessage === 'string' ? b.commitMessage : undefined)); });

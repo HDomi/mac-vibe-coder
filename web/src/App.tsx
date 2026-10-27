@@ -404,7 +404,9 @@ function AppInner() {
                 <ChatPanel cwd={project} session={session}
                   onStart={start} onStartPair={startPair}
                   backlog={project ? projectBacklog : undefined} onBacklogChange={(fn) => project && B.update(project, fn)} onOpenBacklogSession={(id) => focusSession.current(S.replaced[id] ?? id)}
-                  partner={partnerOf(session)} onFocusPartner={(id) => setActiveSession(id)} onClosePartner={(id) => S.close(id)}
+                  partner={partnerOf(session)} worktreeUsers={session?.worktree ? Object.values(S.sessions).filter((x) => x.id !== session.id && x.status !== 'closed' && x.worktree?.path === session.worktree!.path).length : 0}
+                  openWorktrees={Object.values(S.sessions).flatMap((x) => (x.worktree ? [x.worktree.path] : []))}
+                  onOpenWorktree={(wt) => { if (project) void S.start(wt.path, { agent: (localStorage.getItem('vibe.agent') as 'claude' | 'codex') || 'claude', permissionMode: (localStorage.getItem('vibe.mode') as StartOptions['permissionMode']) || 'default', worktree: { ...wt, origin: project } }).then(setActiveSession).catch((e) => window.alert((e as Error).message)); }} onFocusPartner={(id) => setActiveSession(id)} onClosePartner={(id) => S.close(id)}
                   onSend={(t, a) => session && S.send(session.id, t, a)}
                   onApprove={(r, d, m) => session && S.approve(session.id, r, d, m)}
                   onAnswer={(r, a) => session && S.answer(session.id, r, a)}
@@ -562,7 +564,7 @@ async function startCrossReview(S: ReturnType<typeof useSessions>, s: ChatSessio
       ? `${t('review.withDiff', { files })}\n\n${fencedTerminalText(diff)}`
       : t('review.tooBig', { files, from: changes.from, to: changes.to });
   }
-  const id = await S.start(s.cwd, { agent: other, permissionMode: 'plan', worktree: s.worktree, title: t('review.title', { author }) });
+  const id = await S.start(s.cwd, { agent: other, permissionMode: 'plan', worktree: s.worktree && { ...s.worktree, shared: true }, title: t('review.title', { author }) });
   S.send(id, t('review.prompt', { author, body }), []);
   return id;
 }
@@ -571,7 +573,7 @@ async function startCrossReview(S: ReturnType<typeof useSessions>, s: ChatSessio
 async function startHandoff(S: ReturnType<typeof useSessions>, s: ChatSession): Promise<string> {
   const other = s.agent === 'claude' ? 'codex' : 'claude';
   const mode = other === 'codex' && s.permissionMode === 'auto' ? 'default' : s.permissionMode;
-  const id = await S.start(s.cwd, { agent: other, permissionMode: mode, model: localStorage.getItem(`vibe.model.${other}`), worktree: s.worktree, title: displayTitle(s, 40) ?? undefined });
+  const id = await S.start(s.cwd, { agent: other, permissionMode: mode, model: localStorage.getItem(`vibe.model.${other}`), worktree: s.worktree && { ...s.worktree, shared: true }, title: displayTitle(s, 40) ?? undefined });
   writeDraft(draftKey(id), { text: handoffText(s), attachments: [] });
   return id;
 }

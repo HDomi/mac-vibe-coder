@@ -4,7 +4,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { checkWorktree, createWorktree, mergeWorktree, removeWorktree, sanitizeBranch, worktreeStatus } from '../server/worktree';
+import { checkWorktree, createWorktree, listWorktrees, mergeWorktree, removeWorktree, sanitizeBranch, worktreeStatus } from '../server/worktree';
 
 test('worktree sessions: create next to the repo, refuse dirty merge, merge with a merge commit, clean up', async () => {
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'mvc-wt-')));
@@ -18,6 +18,7 @@ test('worktree sessions: create next to the repo, refuse dirty merge, merge with
     git(repo, 'add', '-A'); git(repo, 'commit', '-qm', 'init');
 
     const wt = await createWorktree(repo, 'feat/x y');
+    assert.deepEqual((await listWorktrees(repo)).map((w) => [w.branch, w.baseBranch]), [['feat/x-y', 'main']]);
     assert.equal(wt.branch, 'feat/x-y');
     assert.equal(wt.path, join(base, 'proj-wt', 'feat-x-y'));
     assert.equal(wt.baseBranch, 'main');
@@ -35,6 +36,10 @@ test('worktree sessions: create next to the repo, refuse dirty merge, merge with
     assert.match(refused.message, /Uncommitted/);
 
     git(wt.path, 'commit', '-qam', 'change');
+    writeFileSync(join(repo, '.gitignore'), 'node_modules/\n# edited\n');
+    const mainDirty = await mergeWorktree(wt);
+    assert.equal(mainDirty.reason, 'mainDirty');
+    git(repo, 'checkout', '--', '.gitignore');
     const done = await mergeWorktree(wt);
     assert.equal(done.ok, true, done.message);
     assert.equal(done.merged, true);

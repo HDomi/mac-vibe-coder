@@ -41,6 +41,8 @@ export async function createWorktree(cwd: string, wanted?: string): Promise<Work
   await fs.mkdir(path.dirname(dir), { recursive: true });
   const add = await git(root, ['worktree', 'add', '-b', branch, dir, 'HEAD']);
   if (!add.ok) throw fail(add.stderr || 'git worktree add failed');
+  // Remembered on the branch so the worktree list can offer the merge after the session is gone.
+  if (baseBranch) await git(root, ['config', `branch.${branch}.vibeBase`, baseBranch]);
   // Dependencies are not in git; share the main checkout's node_modules so builds and checks work at once.
   const nm = path.join(root, 'node_modules');
   if (await fs.stat(nm).then((s) => s.isDirectory(), () => false)) {
@@ -76,7 +78,7 @@ export async function worktreeStatus(info: WorktreeInfo): Promise<WorktreeStatus
   return { exists: true, dirty: st.ok ? st.stdout.split('\n').filter(Boolean).map((l) => l.slice(3)) : [], ahead: Number(ahead.stdout) || 0, branch: br.ok ? br.stdout : null };
 }
 
-export interface MergeResult { ok: boolean; merged: boolean; removed: boolean; message: string; conflicts?: string[]; reason?: 'missing' | 'dirty' | 'detached' | 'branch' | 'conflict' | 'git' }
+export interface MergeResult { ok: boolean; merged: boolean; removed: boolean; message: string; conflicts?: string[]; reason?: 'missing' | 'dirty' | 'mainDirty' | 'detached' | 'branch' | 'conflict' | 'git' }
 
 /**
  * Merge the worktree's branch into its base branch in the main checkout, then remove the worktree and
@@ -99,6 +101,10 @@ export async function mergeWorktree(info: WorktreeInfo, commitMessage?: string):
   const root = resolvePath(info.root);
   const cur = await git(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
   if (cur.stdout !== info.baseBranch) return { ok: false, merged: false, removed: false, message: `The main checkout is on "${cur.stdout}", not "${info.baseBranch}". Switch back first.`, reason: 'branch' };
+  // A failed merge is aborted, and git cannot always restore uncommitted edits around an abort.
+  const mainSt = await git(root, ['status', '--porcelain=v1', '--untracked-files=no']);
+  const mainDirty = mainSt.stdout.split('\n').filter(Boolean).map((l) => l.slice(3));
+  if (mainDirty.length) return { ok: false, merged: false, removed: false, message: `The main checkout has uncommitted changes (${mainDirty.length}). Commit or stash them first.`, conflicts: mainDirty.slice(0, 20), reason: 'mainDirty' };
   let merged = false;
   if (st.ahead > 0) {
     const m = await git(root, ['merge', '--no-ff', '--no-edit', '-m', `Merge branch '${info.branch}'`, info.branch], 120000);
@@ -127,4 +133,22 @@ export async function removeWorktree(info: WorktreeInfo, force: boolean): Promis
   await git(root, ['worktree', 'prune']);
   const del = await git(root, ['branch', force ? '-D' : '-d', info.branch]);
   return { ok: true, message: del.ok ? '' : `Worktree removed; branch ${info.branch} kept (${del.stderr}).` };
+}
+
+/** Worktrees this app created for the repository of `cwd` (folders under <repo>-wt/), for the start screen. */
+export async function listWorktrees(cwd: string): Promise<WorktreeInfo[]> {
+  let root: string;
+  try { root = await mainRoot(resolvePath(cwd)); } catch { return []; }
+  const parent = path.join(path.dirname(root), `${path.basename(root)}-wt`);
+  const r = await git(root, ['worktree', 'list', '--porcelain']);
+  if (!r.ok) return [];
+  const out: WorktreeInfo[] = [];
+  for (const block of r.stdout.split('\n\n')) {
+    const dir = block.match(/^worktree (.+)$/m)?.[1];
+    const branch = block.match(/^branch refs\/heads\/(.+)$/m)?.[1];
+    if (!dir || !branch || path.dirname(dir) !== parent) continue;
+    const base = (await git(root, ['config', '--get', `branch.${branch}.vibeBase`])).stdout.trim() || null;
+    out.push({ path: dir, branch, root, baseBranch: base });
+  }
+  return out;
 }

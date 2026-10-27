@@ -8,8 +8,10 @@ import { toast } from './Toast';
 /** Chat header badge of a worktree session: branch, state, and "merge and clean up" / "discard". */
 interface Partner { id: string; agent: AgentId; worktree: WorktreeInfo; running: boolean }
 
-export default function WorktreeChip({ info, running, onFinished, commitTitle, partner, onFocusPartner, onClosePartner }: {
+export default function WorktreeChip({ info, running, onFinished, commitTitle, partner, onFocusPartner, onClosePartner, othersUsing = 0 }: {
   info: WorktreeInfo; running: boolean; onFinished: () => void;
+  /** Other open sessions working in this folder; merging or discarding would pull it from under them. */
+  othersUsing?: number;
   /** Commit message used when leftover changes are committed before merging. */
   commitTitle: string;
   /** Comparison partner: adopting this side discards the other worktree and closes its session. */
@@ -91,16 +93,19 @@ export default function WorktreeChip({ info, running, onFinished, commitTitle, p
               {message.list?.length ? <div className="mt-1 font-mono text-zinc-400">{message.list.slice(0, 8).map((f) => <div key={f} className="truncate">{f}</div>)}</div> : null}
             </div>
           )}
+          {info.shared ? <div className="text-[11px] text-zinc-400 leading-relaxed">{t('worktree.shared')}</div> : <>
+          {othersUsing > 0 && <div className="text-[11px] text-amber-300/90">{t('worktree.inUse', { n: othersUsing })}</div>}
           <div className="flex items-center gap-2 pt-0.5">
             {partner
-              ? <button disabled={busy || running || partner.running || !st?.exists} onClick={() => void merge(true, true)} title={t('pair.adoptHint')}
+              ? <button disabled={busy || running || partner.running || othersUsing > 0 || !st?.exists} onClick={() => void merge(true, true)} title={t('pair.adoptHint')}
                   className="rounded-md bg-violet-500/25 hover:bg-violet-500/35 disabled:opacity-40 px-2.5 py-1 text-violet-100">{t('pair.adopt')}</button>
-              : <button disabled={busy || running || !st?.exists} onClick={() => void merge(dirtyBlock)} title={running ? t('verify.busy') : t('worktree.mergeHint')}
+              : <button disabled={busy || running || othersUsing > 0 || !st?.exists} onClick={() => void merge(dirtyBlock)} title={running ? t('verify.busy') : t('worktree.mergeHint')}
                   className="rounded-md bg-violet-500/25 hover:bg-violet-500/35 disabled:opacity-40 px-2.5 py-1 text-violet-100">{dirtyBlock ? t('worktree.commitMerge') : t('worktree.merge')}</button>}
             <button onClick={() => void api.open(info.path, 'finder').catch(() => {})} className="rounded-md px-2 py-1 text-zinc-400 hover:text-white hover:bg-white/5">Finder</button>
             <div className="flex-1" />
-            <button disabled={busy || running} onClick={() => void discard()} className="rounded-md px-2 py-1 text-zinc-500 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-40">{t('worktree.discard')}</button>
+            <button disabled={busy || running || othersUsing > 0} onClick={() => void discard()} className="rounded-md px-2 py-1 text-zinc-500 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-40">{t('worktree.discard')}</button>
           </div>
+          </>}
         </div>
       )}
     </div>

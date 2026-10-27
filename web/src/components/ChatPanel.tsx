@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { currentTodos, displayTitle, type ChatItem, type ChatSession } from '../lib/chatStore';
 import type { AgentId, Attachment, PermissionModeId, RewindResult } from '../lib/agent';
-import { api, type Backlog, type HistorySession, type ModelInfo } from '../lib/api';
+import { api, type Backlog, type HistorySession, type ModelInfo, type WorktreeInfo } from '../lib/api';
+import LeftoverWorktrees from './LeftoverWorktrees';
 import BacklogPanel from './BacklogPanel';
 import Composer, { type BackgroundSession } from './Composer';
 import ChatSearch from './ChatSearch';
@@ -53,6 +54,11 @@ interface Props {
   onFocusSession?: (id: string) => void;
   /** Run the project's verification command now. */
   onVerify?: () => void;
+  /** Other open sessions working in this session's worktree (review, handoff): merge waits for them. */
+  worktreeUsers?: number;
+  /** Worktree folders open in some session, and opening a leftover one (start screen list). */
+  openWorktrees?: string[];
+  onOpenWorktree?: (wt: WorktreeInfo) => void;
   /** The other session of a Claude-vs-Codex comparison, if any. */
   partner?: ChatSession | null;
   onFocusPartner?: (id: string) => void;
@@ -178,7 +184,7 @@ const MODE_IDS: { id: PermissionModeId; key: string }[] = [
   { id: 'auto', key: 'chat.mode.auto' },
 ];
 
-function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onBacklogChange, onOpenBacklogSession }: { cwd: string | null; scope?: 'folder' | 'all'; onStart: Props['onStart']; onStartPair?: Props['onStartPair']; backlog?: Backlog; onBacklogChange?: Props['onBacklogChange']; onOpenBacklogSession?: Props['onOpenBacklogSession'] }) {
+function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onBacklogChange, onOpenBacklogSession, openWorktrees, onOpenWorktree }: { cwd: string | null; scope?: 'folder' | 'all'; onStart: Props['onStart']; onStartPair?: Props['onStartPair']; backlog?: Backlog; onBacklogChange?: Props['onBacklogChange']; onOpenBacklogSession?: Props['onOpenBacklogSession']; openWorktrees?: string[]; onOpenWorktree?: Props['onOpenWorktree'] }) {
   useLang();
   const menu = useContextMenu();
   const [history, setHistory] = useState<HistorySession[]>([]);
@@ -295,6 +301,7 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onB
       )}
       <div className="text-xs text-zinc-500 mb-6">{agent === 'codex' ? t('chat.codexHint') : t('chat.claudeHint')}</div>
       </>}
+      {isGit && onOpenWorktree && scope === 'folder' && <LeftoverWorktrees cwd={cwd} open={openWorktrees ?? []} onOpen={onOpenWorktree} />}
       {backlog && onBacklogChange && scope === 'folder' && (
         <div className="mb-6 rounded-lg border border-white/5 p-3">
           <BacklogPanel compact backlog={backlog} onChange={onBacklogChange} onFocusSession={(id) => onOpenBacklogSession?.(id)} />
@@ -336,7 +343,7 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onB
   );
 }
 
-export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onStartPair, backlog, onBacklogChange, onOpenBacklogSession, onSend, onApprove, onAnswer, onInterrupt, onStopTask, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind, onVerify, onCrossReview, partner, onFocusPartner, onClosePartner, onHandoff }: Props) {
+export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onStartPair, backlog, onBacklogChange, onOpenBacklogSession, onSend, onApprove, onAnswer, onInterrupt, onStopTask, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind, onVerify, onCrossReview, partner, onFocusPartner, onClosePartner, onHandoff, worktreeUsers = 0, openWorktrees, onOpenWorktree }: Props) {
   useLang();
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -387,7 +394,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
     return () => clearInterval(timer);
   }, [session?.turnStartedAt]);
 
-  if (!session) return <StartScreen cwd={cwd} scope={scope} onStart={onStart} onStartPair={onStartPair} backlog={backlog} onBacklogChange={onBacklogChange} onOpenBacklogSession={onOpenBacklogSession} />;
+  if (!session) return <StartScreen cwd={cwd} scope={scope} onStart={onStart} onStartPair={onStartPair} backlog={backlog} onBacklogChange={onBacklogChange} onOpenBacklogSession={onOpenBacklogSession} openWorktrees={openWorktrees} onOpenWorktree={onOpenWorktree} />;
 
   const running = session.status === 'running' || session.status === 'compacting';
   const close = () => {
@@ -465,7 +472,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         <span className="font-medium text-zinc-200">{session.agent === 'codex' ? 'Codex' : 'Claude'}</span>
         <ModelSelect agent={session.agent} value={session.model ?? null} onChange={onModel} compact />
         <span className="text-zinc-500 truncate min-w-0 @max-[560px]:hidden" title={session.cwd}>{session.cwd.split('/').slice(-2).join('/')}</span>
-        {session.worktree && <WorktreeChip info={session.worktree} running={running} onFinished={onClose} commitTitle={displayTitle(session, 60) ?? session.worktree.branch}
+        {session.worktree && <WorktreeChip info={session.worktree} running={running} othersUsing={worktreeUsers} onFinished={onClose} commitTitle={displayTitle(session, 60) ?? session.worktree.branch}
           partner={partner && partner.worktree ? { id: partner.id, agent: partner.agent, worktree: partner.worktree, running: partner.status === 'running' } : undefined}
           onFocusPartner={onFocusPartner} onClosePartner={onClosePartner} />}
         {session.status === 'compacting' && <span className="text-amber-300">{t('chat.compacting')}</span>}

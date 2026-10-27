@@ -1153,6 +1153,11 @@ const en: Record<string, string> = {
   'transfer.dragHint': 'Drag onto another session\'s tab to put this in its message box',
   'changes.external': 'external',
   'changes.externalHint': 'Changed during this turn, but not by this session\'s edits (another session or you). "Undo turn" skips it; undo it per file if you mean to.',
+  'worktree.err.mainDirty': 'The main checkout has uncommitted changes. Commit or stash them before merging:',
+  'worktree.shared': 'This session works in another session\'s worktree. Merge or discard it from that session.',
+  'worktree.inUse': '{n} other open session(s) work in this folder; close them before merging or discarding.',
+  'worktree.leftover': 'Worktrees without a session',
+  'worktree.openSession': 'Open session',
 };
 
 const ko: Record<string, string> = {
@@ -2287,6 +2292,11 @@ const ko: Record<string, string> = {
   'transfer.dragHint': '다른 세션 탭에 끌어다 놓으면 그 세션 입력창에 들어가',
   'changes.external': '외부',
   'changes.externalHint': '이번 턴 동안 바뀌었지만 이 세션이 고친 파일은 아니야 (다른 세션이나 직접 수정). "턴 되돌리기" 에서 빠지고, 필요하면 파일별로 되돌려.',
+  'worktree.err.mainDirty': '원래 폴더에 커밋 안 된 변경이 있어. 머지 전에 커밋하거나 stash 해:',
+  'worktree.shared': '다른 세션의 worktree 를 같이 쓰는 세션이야. 머지나 버리기는 원래 세션에서 해.',
+  'worktree.inUse': '다른 세션 {n}개가 이 폴더를 쓰는 중이야. 닫은 뒤에 머지하거나 버려.',
+  'worktree.leftover': '세션 없이 남은 worktree',
+  'worktree.openSession': '세션 열기',
 };
 
 const dict: Record<Lang, Record<string, string>> = { en, ko };
