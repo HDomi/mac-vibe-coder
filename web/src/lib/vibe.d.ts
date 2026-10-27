@@ -61,6 +61,7 @@ declare global {
       openNotificationSettings?: () => void;
       keepAwake?: (busy: boolean) => void;
       onPowerResume?: (cb: () => void) => void;
+      onFullScreen?: (cb: (on: boolean) => void) => () => void;
       /** Lock screen bridge (Electron only). */
       lock?: LockBridge;
       /** Native browser view for the Browser panel (Electron only). */

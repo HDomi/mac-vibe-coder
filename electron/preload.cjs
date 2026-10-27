@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+// Tracked from preload time: the main process reports full screen on load, possibly before React subscribes.
+let fullScreen = false;
+ipcRenderer.on('full-screen', (_e, on) => { fullScreen = !!on; });
+
 contextBridge.exposeInMainWorld('vibe', {
   isElectron: true,
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
@@ -23,6 +27,8 @@ contextBridge.exposeInMainWorld('vibe', {
   // Hold / release the "no idle sleep" assertion while agents or shells are busy; wake-up signal for reconnects.
   keepAwake: (busy) => ipcRenderer.send('keep-awake', busy),
   onPowerResume: (cb) => { ipcRenderer.on('power-resume', () => cb()); },
+  // Full screen hides the traffic lights, so the title bar drops the space it keeps for them.
+  onFullScreen: (cb) => { cb(fullScreen); const h = (_e, on) => cb(on); ipcRenderer.on('full-screen', h); return () => ipcRenderer.removeListener('full-screen', h); },
   // Lock screen (see electron/lockScreen.cts). App window: settings, password, session counts, lock now.
   // Cover windows: init / unlock / live updates.
   lock: {

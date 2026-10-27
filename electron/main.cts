@@ -252,6 +252,10 @@ async function createWindow() {
   win.webContents.on('before-input-event', (e, input) => { if (isLockShortcut(input)) { e.preventDefault(); lockNow(); } });
   win.webContents.on('will-navigate', keepInApp);
   win.webContents.on('will-redirect', keepInApp);
+  // The title bar leaves room for the window buttons, which macOS hides in full screen.
+  win.on('enter-full-screen', () => win.webContents.send('full-screen', true));
+  win.on('leave-full-screen', () => win.webContents.send('full-screen', false));
+  win.webContents.on('did-finish-load', () => { if (win.isFullScreen()) win.webContents.send('full-screen', true); });
   await win.loadURL(DEV ? URL_DEV : URL_PROD);
 }
 

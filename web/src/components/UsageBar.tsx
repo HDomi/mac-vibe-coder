@@ -66,6 +66,9 @@ export default function UsageBar({ mode, onMode, companions, onCompanions }: Pro
   const [u, setU] = useState<UsageSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string>();
+  const [fullScreen, setFullScreen] = useState(false);
+  useEffect(() => window.vibe?.onFullScreen?.(setFullScreen), []);
+  const windowButtons = !!window.vibe?.isElectron && !fullScreen;
 
   const load = (force = false) => {
     setLoading(true);
@@ -80,28 +83,29 @@ export default function UsageBar({ mode, onMode, companions, onCompanions }: Pro
   }, []);
 
   return (
-    <div className="titlebar-drag h-[45px] shrink-0 grid grid-cols-[1fr_auto_1fr] items-center border-b border-white/10 bg-[#0e1117] text-xs select-none">
-      {/* Left cell: room for the macOS window buttons. Equal side cells keep the switch centered. */}
-      <div />
-      {/* Mode switch, centered */}
-      <div className="titlebar-nodrag flex items-center rounded-md bg-white/5 p-0.5 mx-3">
-        {(['vibe', 'ide', 'agent', 'tools'] as ViewMode[]).map((m) => (
-          <button key={m} onClick={() => onMode(m)}
-            className={`px-3 py-0.5 rounded text-[11px] font-medium transition-colors ${mode === m ? 'bg-white/15 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
-            {t(`usage.${m}`)}
-          </button>
-        ))}
-      </div>
-      {/* Usage batteries, right-aligned. When the cell gets narrow (small window) they compact in steps
-          instead of running under the switch: percentages, then window labels, then agent names. */}
-      <div className="@container min-w-0 h-full flex items-center justify-end">
-      <div className="flex items-center gap-[15px] @max-[660px]:gap-3 pr-3 min-w-0">
-        {onCompanions && <button className={`titlebar-nodrag shrink-0 w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 ${companions ? 'text-amber-300' : 'text-zinc-500'}`}
+    <div className="titlebar-drag h-[45px] shrink-0 flex items-center border-b border-white/10 bg-[#0e1117] text-xs select-none">
+      {/* Left: room for the macOS window buttons, a divider, then the mode switch and the companion toggle. */}
+      <div className={`shrink-0 flex items-center ${windowButtons ? 'pl-[80px]' : 'pl-3'}`}>
+        {windowButtons && <span className="w-px h-[18px] bg-white/10 mr-3" aria-hidden="true" />}
+        <div className="titlebar-nodrag flex items-center rounded-md bg-white/5 p-0.5">
+          {(['vibe', 'ide', 'agent', 'tools'] as ViewMode[]).map((m) => (
+            <button key={m} onClick={() => onMode(m)}
+              className={`px-3 py-0.5 rounded text-[11px] font-medium transition-colors ${mode === m ? 'bg-white/15 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+              {t(`usage.${m}`)}
+            </button>
+          ))}
+        </div>
+        {onCompanions && <button className={`titlebar-nodrag shrink-0 ml-1.5 w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 ${companions ? 'text-amber-300' : 'text-zinc-500'}`}
           aria-pressed={companions} onClick={onCompanions} title={t('usage.companions')} aria-label={t('usage.companions')}>
           <svg width="19" height="22" viewBox="0 0 24 28" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="13" cy="5" r="3" /><path d="m13 8-2 8m1-6-5 4-3-3m8 0 5 3 3-4m-9 6-5 8m5-8 6 4 3 5" />
           </svg>
         </button>}
+      </div>
+      {/* Usage batteries, right-aligned. When the cell gets narrow (small window) they compact in steps
+          instead of running under the switch: percentages, then window labels, then agent names. */}
+      <div className="@container flex-1 min-w-0 h-full flex items-center justify-end">
+      <div className="flex items-center gap-[15px] @max-[660px]:gap-3 pr-3 min-w-0">
           <div className="flex items-center gap-2.5">
             <span className="text-[12.5px] text-zinc-400 font-medium @max-[360px]:hidden">Claude</span>
             <Battery label="5h" win={u?.claude?.fiveHour ?? null} error={loadError ?? u?.errors.find((e) => e.startsWith('claude:'))} loading={loading} />
