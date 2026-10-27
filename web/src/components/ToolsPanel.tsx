@@ -71,6 +71,12 @@ export default function ToolsPanel({ onClose, focusLock }: Props) {
   const refresh = () => api.tools(true).then(setInfo).catch((e) => setLog((l) => [...l, { line: e.message, err: true }]));
   useEffect(() => { refresh(); }, []);
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [log]);
+  // Escape closes, unless it is finishing an IME composition or another layer (menu, dialog) handled it first.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.isComposing && !e.defaultPrevented) { e.preventDefault(); onClose(); } };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
 
   const run = (tool: string, method: string) => {
     if (running) return;
@@ -90,11 +96,11 @@ export default function ToolsPanel({ onClose, focusLock }: Props) {
   return (
     <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center" onClick={onClose}>
       <div className="w-[720px] max-w-[92vw] max-h-[85vh] rounded-xl bg-[#12151c] border border-white/10 shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center px-5 h-12 border-b border-white/10">
-          <div className="font-medium">{t('settings.title')}</div>
+        <div className="flex items-center pl-6 pr-4 h-[60px] shrink-0 border-b border-white/10">
+          <div className="text-[15px] font-semibold">{t('settings.title')}</div>
           <div className="flex-1" />
           <button className="text-xs text-zinc-400 hover:text-white mr-3" onClick={refresh}>{t('settings.redetect')}</button>
-          <button className="w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={onClose}><Icon name="close" /></button>
+          <button className="w-8 h-8 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={onClose} title="Esc"><Icon name="close" /></button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto">
           <GeneralSettings />
