@@ -117,6 +117,8 @@ export interface ChatSession {
   pinned?: boolean;
   /** Set when the session runs in its own git worktree (cwd is the worktree folder). */
   worktree?: WorktreeInfo;
+  /** Sessions started together on one prompt (Claude vs Codex comparison) share this key. */
+  pairKey?: string;
   /** Last turn start, turn end or request (server ms); tabs sort by this, newest first. */
   lastActivity?: number;
   status: 'starting' | 'running' | 'idle' | 'compacting' | 'closed';

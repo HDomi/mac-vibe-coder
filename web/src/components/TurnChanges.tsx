@@ -69,7 +69,7 @@ function FileDiff({ item, file, onReverted }: { item: ChangesItem; file: TurnFil
 }
 
 /** "What this turn changed": files with +/- counts, inline diffs, and undo per hunk, file or the whole turn. */
-export function TurnChangesItem({ item }: { item: ChangesItem }) {
+export function TurnChangesItem({ item, onReview, reviewer }: { item: ChangesItem; onReview?: () => void; reviewer?: string }) {
   useLang();
   const [open, setOpen] = useState<string | null>(null);
   const [all, setAll] = useState(item.files.length <= SHOWN);
@@ -104,6 +104,9 @@ export function TurnChangesItem({ item }: { item: ChangesItem }) {
         <span className="text-emerald-300/90 tabular-nums">+{adds}</span>
         <span className="text-red-300/90 tabular-nums">−{dels}</span>
         <div className="flex-1" />
+        {onReview && <button onClick={onReview} className="flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] text-zinc-400 hover:text-sky-200 hover:bg-white/5" title={t('review.cardHint', { agent: reviewer ?? '' })}>
+          <Icon name="sparkle" size={11} />{t('review.card', { agent: reviewer ?? '' })}
+        </button>}
         {left.length > 0
           ? <button disabled={busy} onClick={() => void revert()} className="flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] text-zinc-400 hover:text-amber-200 hover:bg-white/5 disabled:opacity-40" title={t('changes.revertAllHint')}>
               <Icon name="undo" size={11} />{t('changes.revertAll')}

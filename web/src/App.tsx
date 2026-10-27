@@ -12,7 +12,7 @@ import Preview from './components/Preview';
 import { editor } from './lib/editor/store';
 import ToolsPanel from './components/ToolsPanel';
 import UsageBar, { type ViewMode } from './components/UsageBar';
-import ChatPanel, { type StartOptions } from './components/ChatPanel';
+import ChatPanel, { type PairOptions, type StartOptions } from './components/ChatPanel';
 import type { BackgroundSession } from './components/Composer';
 import TerminalPanel from './components/TerminalPanel';
 import BrowserPanel from './components/BrowserPanel';
@@ -22,6 +22,7 @@ import Splitter, { usePaneWidth } from './components/Splitter';
 import { ContextMenuProvider, useContextMenu, type MenuItem } from './components/ContextMenu';
 import QuickOpen from './components/QuickOpen';
 import { t, useLang } from './lib/i18n';
+import { fencedTerminalText } from './lib/textSearch';
 import AgentIcon from './components/AgentIcon';
 import Lightbox from './components/Lightbox';
 import Toaster from './components/Toast';
@@ -210,6 +211,24 @@ function AppInner() {
       } else setActiveSession(await S.start(c, o));
     } catch (e) { window.alert((e as Error).message); }
   };
+  // Compare mode: one prompt, Claude and Codex each in a worktree of their own (created one after the other: git locks).
+  const startPair = async (c: string, o: PairOptions) => {
+    try {
+      const d = new Date();
+      const base = o.branch || `vs/${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+      const pairKey = crypto.randomUUID();
+      const title = o.prompt.split('\n')[0].slice(0, 40);
+      const ids: string[] = [];
+      for (const agent of ['claude', 'codex'] as const) {
+        const wt = await api.worktreeCreate(c, `${base}-${agent}`);
+        const id = await S.start(wt.path, { agent, permissionMode: agent === 'codex' && o.permissionMode === 'auto' ? 'default' : o.permissionMode, model: o.models[agent], worktree: { ...wt, origin: c }, pairKey, title });
+        ids.push(id);
+      }
+      for (const id of ids) S.send(id, o.prompt, []);
+      setActiveSession(ids[0]);
+    } catch (e) { window.alert((e as Error).message); }
+  };
+  const partnerOf = (s: ChatSession | null) => (s?.pairKey ? Object.values(S.sessions).find((x) => x.pairKey === s.pairKey && x.id !== s.id) ?? null : null);
   // Switching to a worktree session shows its folder in the file list; leaving it goes back to the project.
   const lastPanelRoot = useRef(panelRoot);
   useEffect(() => {
@@ -341,7 +360,8 @@ function AppInner() {
               )}
               <div className="flex-1 min-h-0">
                 <ChatPanel cwd={project} session={session}
-                  onStart={start}
+                  onStart={start} onStartPair={startPair}
+                  partner={partnerOf(session)} onFocusPartner={(id) => setActiveSession(id)} onClosePartner={(id) => S.close(id)}
                   onSend={(t, a) => session && S.send(session.id, t, a)}
                   onApprove={(r, d, m) => session && S.approve(session.id, r, d, m)}
                   onAnswer={(r, a) => session && S.answer(session.id, r, a)}
@@ -353,7 +373,8 @@ function AppInner() {
                   pendingAttachments={pendingAttachments} onConsumeAttachments={() => setPendingAttachments([])}
                   background={backgroundSessions(S.sessions, session?.id)} onFocusSession={(id) => focusSession.current(id)}
                   onRewind={(id, dry) => session ? S.rewind(session.id, id, dry) : Promise.resolve({ canRewind: false })}
-                  onVerify={() => session && S.verify(session.id)} />
+                  onVerify={() => session && S.verify(session.id)}
+                  onCrossReview={(changes) => { if (session) startCrossReview(S, session, changes).then(setActiveSession).catch((e) => window.alert((e as Error).message)); }} />
               </div>
             </div>
             {!rightCollapsed && <Splitter onStart={() => setDragging(true)} onEnd={() => setDragging(false)} onDrag={(dx) => right.setWidth(right.width - dx)} />}
@@ -464,10 +485,35 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
           onModel={(m) => session && S.setModel(session.id, m)}
           onClose={() => { if (session) { S.close(session.id); setActive(null); } }}
           background={backgroundSessions(S.sessions, session?.id)} onFocusSession={setActive}
-          onRewind={(id, dry) => session ? S.rewind(session.id, id, dry) : Promise.resolve({ canRewind: false })} />
+          onRewind={(id, dry) => session ? S.rewind(session.id, id, dry) : Promise.resolve({ canRewind: false })}
+          onVerify={() => session && S.verify(session.id)}
+          onCrossReview={(changes) => { if (session) startCrossReview(S, session, changes).then(setActive).catch((e) => window.alert((e as Error).message)); }} />
       </div>
     </div>
   );
+}
+
+type ChangesItem = Extract<ChatSession['items'][number], { kind: 'changes' }>;
+const REVIEW_DIFF_LIMIT = 80000;
+
+/**
+ * Second opinion: open the other agent in the same folder, read-only (plan mode), and ask it to review
+ * a turn's changes (the diff is inlined) or, without one, the folder's uncommitted work. Returns its id.
+ */
+async function startCrossReview(S: ReturnType<typeof useSessions>, s: ChatSession, changes?: ChangesItem): Promise<string> {
+  const other = s.agent === 'claude' ? 'codex' : 'claude';
+  const author = s.agent === 'claude' ? 'Claude' : 'Codex';
+  let body = t('review.uncommitted');
+  if (changes) {
+    const diff = await api.turnDiff(changes.root, changes.from, changes.to, '').catch(() => '');
+    const files = changes.files.map((f) => `- ${f.status} ${f.path}`).join('\n');
+    body = diff && diff.length <= REVIEW_DIFF_LIMIT
+      ? `${t('review.withDiff', { files })}\n\n${fencedTerminalText(diff)}`
+      : t('review.tooBig', { files, from: changes.from, to: changes.to });
+  }
+  const id = await S.start(s.cwd, { agent: other, permissionMode: 'plan', worktree: s.worktree, title: t('review.title', { author }) });
+  S.send(id, t('review.prompt', { author, body }), []);
+  return id;
 }
 
 /** Every other live session that is working or waiting, for the chips beside the composer's "Attach". */

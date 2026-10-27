@@ -15,6 +15,9 @@ import { VerifyButton, VerifyItem } from './Verify';
 import { TurnChangesItem } from './TurnChanges';
 import WorktreeChip from './WorktreeChip';
 
+/** Same prompt to Claude and Codex, each in its own worktree, to compare and keep the better result. */
+export interface PairOptions { prompt: string; branch?: string; permissionMode: PermissionModeId; models: { claude: string | null; codex: string | null } }
+
 export interface StartOptions { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null; title?: string; /** Start in a new git worktree (optional branch name). */ isolate?: { branch?: string } }
 
 interface Props {
@@ -23,6 +26,7 @@ interface Props {
   scope?: 'folder' | 'all';
   session: ChatSession | null;
   onStart: (cwd: string, opts?: StartOptions) => void;
+  onStartPair?: (cwd: string, opts: PairOptions) => void;
   onSend: (text: string, attachments: Attachment[]) => void;
   onApprove: (requestId: string, decision: 'allow' | 'allow_always' | 'deny', message?: string) => void;
   onAnswer: (requestId: string, answers: Record<string, string>) => void;
@@ -41,6 +45,12 @@ interface Props {
   onFocusSession?: (id: string) => void;
   /** Run the project's verification command now. */
   onVerify?: () => void;
+  /** The other session of a Claude-vs-Codex comparison, if any. */
+  partner?: ChatSession | null;
+  onFocusPartner?: (id: string) => void;
+  onClosePartner?: (id: string) => void;
+  /** Ask the other agent to review a turn's changes (or the uncommitted work). */
+  onCrossReview?: (changes?: Extract<ChatItem, { kind: 'changes' }>) => void;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -71,7 +81,7 @@ export function ModelSelect({ agent, value, onChange, compact }: { agent: AgentI
   );
 }
 
-function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: { approve: Props['onApprove']; answer: Props['onAnswer']; cwd: string; rewind?: (messageId: string) => void; latestVerify?: string; verify?: () => void }): React.ReactNode {
+function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: { approve: Props['onApprove']; answer: Props['onAnswer']; cwd: string; rewind?: (messageId: string) => void; latestVerify?: string; verify?: () => void; review?: (changes: Extract<ChatItem, { kind: 'changes' }>) => void; otherAgent?: string }): React.ReactNode {
   switch (it.kind) {
     case 'user': return <UserItem key={it.id} item={it} onRewind={actions.rewind && UUID_RE.test(it.id) && !it.compact ? () => actions.rewind!(it.id) : undefined} />;
     case 'assistant': return <AssistantItem key={it.id} item={it} baseDir={actions.cwd} />;
@@ -84,7 +94,7 @@ function renderItem(it: ChatItem, childrenOf: Map<string, ChatItem[]>, actions: 
     case 'result': return <ResultItem key={it.id} item={it} />;
     case 'error': return <div key={it.id} className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[13px] text-red-200 whitespace-pre-wrap">{it.message}</div>;
     case 'system': return <div key={it.id} className="text-xs text-zinc-500 text-center py-1">{it.text}</div>;
-    case 'changes': return <TurnChangesItem key={it.id} item={it} />;
+    case 'changes': return <TurnChangesItem key={it.id} item={it} onReview={actions.review ? () => actions.review!(it) : undefined} reviewer={actions.otherAgent} />;
     case 'verify': return <VerifyItem key={it.id} item={it} latest={it.id === actions.latestVerify} onRerun={it.id === actions.latestVerify ? actions.verify : undefined} />;
   }
 }
@@ -97,7 +107,7 @@ const MODE_IDS: { id: PermissionModeId; key: string }[] = [
   { id: 'auto', key: 'chat.mode.auto' },
 ];
 
-function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; scope?: 'folder' | 'all'; onStart: Props['onStart'] }) {
+function StartScreen({ cwd, scope = 'folder', onStart, onStartPair }: { cwd: string | null; scope?: 'folder' | 'all'; onStart: Props['onStart']; onStartPair?: Props['onStartPair'] }) {
   useLang();
   const menu = useContextMenu();
   const [history, setHistory] = useState<HistorySession[]>([]);
@@ -112,6 +122,8 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
   const [isGit, setIsGit] = useState(false);
   const [isolate, setIsolate] = useState(false);
   const [branch, setBranch] = useState('');
+  const [compare, setCompare] = useState(false);
+  const [pairPrompt, setPairPrompt] = useState('');
   useEffect(() => {
     setIsGit(false); setIsolate(false);
     if (!cwd || scope === 'all') return;
@@ -161,9 +173,29 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
       {scope === 'all' && <div className="text-xs text-zinc-500 -mt-4 mb-6">{t('chat.freeHint', { cwd })}</div>}
       <div className="flex items-center gap-1 mb-4 rounded-lg bg-white/5 p-1 w-fit text-sm">
         {(['claude', 'codex'] as AgentId[]).map((a) => (
-          <button key={a} onClick={() => setAgent(a)} className={`px-4 py-1.5 rounded-md ${agent === a ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white'}`}>{a === 'claude' ? t('chat.claudeCode') : 'Codex'}</button>
+          <button key={a} onClick={() => { setAgent(a); setCompare(false); }} className={`px-4 py-1.5 rounded-md ${agent === a && !compare ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white'}`}>{a === 'claude' ? t('chat.claudeCode') : 'Codex'}</button>
         ))}
+        {isGit && onStartPair && <button onClick={() => setCompare(true)} className={`px-4 py-1.5 rounded-md flex items-center gap-1.5 ${compare ? 'bg-violet-500/20 text-violet-100' : 'text-zinc-400 hover:text-white'}`} title={t('pair.hint')}><Icon name="branch" size={13} />{t('pair.tab')}</button>}
       </div>
+      {compare && isGit && onStartPair ? (
+        <div className="mb-6 rounded-lg border border-violet-400/25 bg-violet-400/[0.05] p-3 space-y-2.5">
+          <div className="text-xs text-zinc-400 leading-relaxed">{t('pair.about')}</div>
+          <textarea value={pairPrompt} onChange={(e) => setPairPrompt(e.target.value)} rows={4} placeholder={t('pair.placeholder')}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && pairPrompt.trim()) onStartPair(cwd, { prompt: pairPrompt.trim(), branch: branch.trim() || undefined, permissionMode: mode, models: { claude: localStorage.getItem('vibe.model.claude'), codex: localStorage.getItem('vibe.model.codex') } }); }}
+            className="w-full rounded-md bg-black/40 border border-white/10 focus:border-violet-400/50 px-3 py-2 text-[13px] outline-none resize-y" />
+          <div className="flex items-center gap-2 flex-wrap">
+            <button disabled={!pairPrompt.trim()} className="rounded-lg bg-violet-500/30 hover:bg-violet-500/40 disabled:opacity-40 px-4 py-2 text-sm"
+              onClick={() => onStartPair(cwd, { prompt: pairPrompt.trim(), branch: branch.trim() || undefined, permissionMode: mode, models: { claude: localStorage.getItem('vibe.model.claude'), codex: localStorage.getItem('vibe.model.codex') } })}>
+              {t('pair.start')} <span className="text-zinc-400 text-xs ml-1">⌘⏎</span>
+            </button>
+            <select value={mode} onChange={(e) => setMode(e.target.value as PermissionModeId)} className="bg-white/5 rounded-md text-xs px-2 py-1.5 outline-none">
+              {MODE_IDS.filter((m) => m.id !== 'auto').map((m) => <option key={m.id} value={m.id}>{t(m.key)}</option>)}
+            </select>
+            <input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder={t('pair.branchPlaceholder')} spellCheck={false}
+              className="w-48 rounded-md bg-black/40 border border-white/10 focus:border-violet-400/50 px-2 py-1.5 font-mono text-[11.5px] outline-none" />
+          </div>
+        </div>
+      ) : <>
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <button className="rounded-lg bg-blue-500/30 hover:bg-blue-500/40 px-4 py-2 text-sm" onClick={() => onStart(cwd, opts(isolate ? { isolate: { branch: branch.trim() || undefined } } : {}))}>{t('chat.newSession', { agent: agentName })} <span className="text-zinc-400 text-xs ml-1">⌘N</span></button>
         <select value={mode} onChange={(e) => setMode(e.target.value as PermissionModeId)} className="bg-white/5 rounded-md text-xs px-2 py-1.5 outline-none">
@@ -188,6 +220,7 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
         </div>
       )}
       <div className="text-xs text-zinc-500 mb-6">{agent === 'codex' ? t('chat.codexHint') : t('chat.claudeHint')}</div>
+      </>}
       <div className="flex items-center text-xs text-zinc-500 mb-2 gap-3">
         <span>{scope === 'all' ? t('chat.previousAll', { n: history.length }) : t('chat.previousFolder')}</span>
         <div className="flex-1" />
@@ -224,7 +257,7 @@ function StartScreen({ cwd, scope = 'folder', onStart }: { cwd: string | null; s
   );
 }
 
-export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onSend, onApprove, onAnswer, onInterrupt, onStopTask, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind, onVerify }: Props) {
+export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onStartPair, onSend, onApprove, onAnswer, onInterrupt, onStopTask, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind, onVerify, onCrossReview, partner, onFocusPartner, onClosePartner }: Props) {
   useLang();
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -275,7 +308,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
     return () => clearInterval(timer);
   }, [session?.turnStartedAt]);
 
-  if (!session) return <StartScreen cwd={cwd} scope={scope} onStart={onStart} />;
+  if (!session) return <StartScreen cwd={cwd} scope={scope} onStart={onStart} onStartPair={onStartPair} />;
 
   const running = session.status === 'running' || session.status === 'compacting';
   const close = () => {
@@ -353,9 +386,14 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         <span className="font-medium text-zinc-200">{session.agent === 'codex' ? 'Codex' : 'Claude'}</span>
         <ModelSelect agent={session.agent} value={session.model ?? null} onChange={onModel} compact />
         <span className="text-zinc-500 truncate min-w-0 @max-[560px]:hidden" title={session.cwd}>{session.cwd.split('/').slice(-2).join('/')}</span>
-        {session.worktree && <WorktreeChip info={session.worktree} running={running} onFinished={onClose} />}
+        {session.worktree && <WorktreeChip info={session.worktree} running={running} onFinished={onClose} commitTitle={displayTitle(session, 60) ?? session.worktree.branch}
+          partner={partner && partner.worktree ? { id: partner.id, agent: partner.agent, worktree: partner.worktree, running: partner.status === 'running' } : undefined}
+          onFocusPartner={onFocusPartner} onClosePartner={onClosePartner} />}
         {session.status === 'compacting' && <span className="text-amber-300">{t('chat.compacting')}</span>}
         <div className="flex-1" />
+        {onCrossReview && <button onClick={() => onCrossReview()} className="shrink-0 flex items-center gap-1 rounded-md px-1.5 py-1 text-zinc-500 hover:text-zinc-200 hover:bg-white/5" title={t('review.headerHint', { agent: session.agent === 'claude' ? 'Codex' : 'Claude' })}>
+          <Icon name="sparkle" size={13} /><span className="@max-[600px]:hidden">{t('review.short')}</span>
+        </button>}
         {onVerify && session.cwd && <VerifyButton cwd={session.cwd} running={running} onRun={onVerify} />}
         {session.agentSessionId && <button className="text-zinc-600 hover:text-zinc-300" title={t('chat.copySessionIdTitle', { id: session.agentSessionId })} onClick={() => navigator.clipboard.writeText(session.agentSessionId!)}>id</button>}
         {session.agent === 'claude' && <span className="text-zinc-500 @max-[440px]:hidden">${session.totalCostUsd.toFixed(3)}</span>}
@@ -367,7 +405,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
         <div ref={scroller} className="absolute inset-0 overflow-y-auto" onScroll={onScroll} onWheel={onWheel}>
           <div ref={content} className="px-5 py-4 space-y-3">
             {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.restoring ? t('chat.restoring') : session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}
-            {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd, rewind: canRewind ? rewind : undefined, latestVerify, verify: running ? undefined : onVerify }))}
+            {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd, rewind: canRewind ? rewind : undefined, latestVerify, verify: running ? undefined : onVerify, review: onCrossReview, otherAgent: session.agent === 'claude' ? 'Codex' : 'Claude' }))}
           </div>
         </div>
         {!atBottom && (

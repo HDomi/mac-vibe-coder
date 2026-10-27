@@ -164,7 +164,7 @@ export const api = {
     req<{ ok: boolean; output: string }>('/api/git/commit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, message }) }),
   worktreeCreate: (cwd: string, branch?: string) => post<WorktreeInfo>('/api/worktree/create', { cwd, branch }),
   worktreeStatus: (info: WorktreeInfo) => post<WorktreeStatus>('/api/worktree/status', { info }),
-  worktreeMerge: (info: WorktreeInfo) => post<{ ok: boolean; merged: boolean; removed: boolean; message: string; conflicts?: string[]; reason?: string }>('/api/worktree/merge', { info }),
+  worktreeMerge: (info: WorktreeInfo, commitMessage?: string) => post<{ ok: boolean; merged: boolean; removed: boolean; message: string; conflicts?: string[]; reason?: string }>('/api/worktree/merge', { info, commitMessage }),
   worktreeRemove: (info: WorktreeInfo, force: boolean) => post<{ ok: boolean; message: string }>('/api/worktree/remove', { info, force }),
   runScripts: (cwd: string) => req<{ manager: string; scripts: RunScript[] }>(`/api/run/scripts?cwd=${q(cwd)}`),
   runList: (cwd: string) => req<RunInfo[]>(`/api/run/list?cwd=${q(cwd)}`),

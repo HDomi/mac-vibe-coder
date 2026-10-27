@@ -84,9 +84,10 @@ function checkArgs(root: string, from: string, to: string, file?: string) {
   return abs;
 }
 
+/** Unified diff of one file between two snapshots; the whole turn when `file` is empty. */
 export async function turnDiff(root: string, from: string, to: string, file: string): Promise<string> {
-  const abs = checkArgs(root, from, to, file);
-  const r = await git(abs, ['diff', '--no-color', '--no-ext-diff', '--no-renames', from, to, '--', file]);
+  const abs = checkArgs(root, from, to, file || undefined);
+  const r = await git(abs, ['diff', '--no-color', '--no-ext-diff', '--no-renames', from, to, ...(file ? ['--', file] : [])]);
   if (!r.ok) throw new FsError('GIT', r.stderr || 'git diff failed', 500);
   return r.stdout;
 }

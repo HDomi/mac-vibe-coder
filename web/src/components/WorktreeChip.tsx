@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type WorktreeInfo, type WorktreeStatus } from '../lib/api';
+import type { AgentId } from '../lib/agent';
 import { t, useLang } from '../lib/i18n';
 import Icon from './Icon';
 import { toast } from './Toast';
 
 /** Chat header badge of a worktree session: branch, state, and "merge and clean up" / "discard". */
-export default function WorktreeChip({ info, running, onFinished }: { info: WorktreeInfo; running: boolean; onFinished: () => void }) {
+interface Partner { id: string; agent: AgentId; worktree: WorktreeInfo; running: boolean }
+
+export default function WorktreeChip({ info, running, onFinished, commitTitle, partner, onFocusPartner, onClosePartner }: {
+  info: WorktreeInfo; running: boolean; onFinished: () => void;
+  /** Commit message used when leftover changes are committed before merging. */
+  commitTitle: string;
+  /** Comparison partner: adopting this side discards the other worktree and closes its session. */
+  partner?: Partner; onFocusPartner?: (id: string) => void; onClosePartner?: (id: string) => void;
+}) {
   useLang();
   const [open, setOpen] = useState(false);
   const [st, setSt] = useState<WorktreeStatus | null>(null);
@@ -24,12 +33,20 @@ export default function WorktreeChip({ info, running, onFinished }: { info: Work
     return () => { window.removeEventListener('mousedown', away); window.removeEventListener('keydown', esc); };
   }, [open, info]);
 
-  const merge = async () => {
+  const [dirtyBlock, setDirtyBlock] = useState(false);
+  const merge = async (commit: boolean, adopt = false) => {
+    if (adopt && partner && !window.confirm(t('pair.confirmAdopt', { agent: partner.agent === 'claude' ? 'Claude' : 'Codex' }))) return;
     setBusy(true); setMessage(null);
     try {
-      const r = await api.worktreeMerge(info);
-      if (r.ok) { setOpen(false); onFinished(); toast(r.merged ? t('worktree.merged', { branch: info.branch, base: info.baseBranch ?? '' }) : t('worktree.removedOnly')); }
-      else setMessage({ text: r.reason && r.reason !== 'git' ? t(`worktree.err.${r.reason}`, { base: info.baseBranch ?? '' }) : r.message, error: true, list: r.conflicts });
+      const r = await api.worktreeMerge(info, commit ? commitTitle : undefined);
+      if (r.ok) {
+        if (adopt && partner) { await api.worktreeRemove(partner.worktree, true).catch(() => {}); onClosePartner?.(partner.id); }
+        setOpen(false); onFinished();
+        toast(r.merged ? t('worktree.merged', { branch: info.branch, base: info.baseBranch ?? '' }) : t('worktree.removedOnly'));
+      } else {
+        setDirtyBlock(r.reason === 'dirty');
+        setMessage({ text: r.reason && r.reason !== 'git' ? t(`worktree.err.${r.reason}`, { base: info.baseBranch ?? '' }) : r.message, error: true, list: r.conflicts });
+      }
     } catch (e) { setMessage({ text: (e as Error).message, error: true }); } finally { setBusy(false); }
   };
   const discard = async () => {
@@ -60,6 +77,14 @@ export default function WorktreeChip({ info, running, onFinished }: { info: Work
               <span className={st.dirty.length ? 'text-amber-300' : 'text-zinc-500'}>{t('worktree.uncommitted', { n: st.dirty.length })}</span>
             </div>
           ) : <div className="text-[11px] text-amber-300">{t('worktree.missing')}</div>)}
+          {partner && (
+            <div className="flex items-center gap-2 rounded-md bg-violet-400/[0.07] px-2 py-1.5 text-[11px]">
+              <span className="text-violet-200">{t('pair.partner', { agent: partner.agent === 'claude' ? 'Claude' : 'Codex' })}</span>
+              <span className="font-mono text-zinc-500 truncate min-w-0">{partner.worktree.branch}</span>
+              <div className="flex-1" />
+              <button onClick={() => { setOpen(false); onFocusPartner?.(partner.id); }} className="shrink-0 rounded px-1.5 py-0.5 text-zinc-300 hover:bg-white/10">{t('pair.show')}</button>
+            </div>
+          )}
           {message && (
             <div className={`rounded-md px-2 py-1.5 text-[11px] leading-relaxed ${message.error ? 'bg-red-500/10 text-red-200' : 'bg-white/5 text-zinc-300'}`}>
               {message.text}
@@ -67,8 +92,11 @@ export default function WorktreeChip({ info, running, onFinished }: { info: Work
             </div>
           )}
           <div className="flex items-center gap-2 pt-0.5">
-            <button disabled={busy || running || !st?.exists} onClick={() => void merge()} title={running ? t('verify.busy') : t('worktree.mergeHint')}
-              className="rounded-md bg-violet-500/25 hover:bg-violet-500/35 disabled:opacity-40 px-2.5 py-1 text-violet-100">{t('worktree.merge')}</button>
+            {partner
+              ? <button disabled={busy || running || partner.running || !st?.exists} onClick={() => void merge(true, true)} title={t('pair.adoptHint')}
+                  className="rounded-md bg-violet-500/25 hover:bg-violet-500/35 disabled:opacity-40 px-2.5 py-1 text-violet-100">{t('pair.adopt')}</button>
+              : <button disabled={busy || running || !st?.exists} onClick={() => void merge(dirtyBlock)} title={running ? t('verify.busy') : t('worktree.mergeHint')}
+                  className="rounded-md bg-violet-500/25 hover:bg-violet-500/35 disabled:opacity-40 px-2.5 py-1 text-violet-100">{dirtyBlock ? t('worktree.commitMerge') : t('worktree.merge')}</button>}
             <button onClick={() => void api.open(info.path, 'finder').catch(() => {})} className="rounded-md px-2 py-1 text-zinc-400 hover:text-white hover:bg-white/5">Finder</button>
             <div className="flex-1" />
             <button disabled={busy || running} onClick={() => void discard()} className="rounded-md px-2 py-1 text-zinc-500 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-40">{t('worktree.discard')}</button>

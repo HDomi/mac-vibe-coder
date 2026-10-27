@@ -384,7 +384,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   // Worktree sessions (worktree.ts).
   app.post('/api/worktree/create', async (c) => { const b = await c.req.json<{ cwd: string; branch?: string }>(); return c.json(await createWorktree(b.cwd, b.branch)); });
   app.post('/api/worktree/status', async (c) => c.json(await worktreeStatus(checkWorktree((await c.req.json<{ info: unknown }>()).info))));
-  app.post('/api/worktree/merge', async (c) => c.json(await mergeWorktree(checkWorktree((await c.req.json<{ info: unknown }>()).info))));
+  app.post('/api/worktree/merge', async (c) => { const b = await c.req.json<{ info: unknown; commitMessage?: string }>(); return c.json(await mergeWorktree(checkWorktree(b.info), typeof b.commitMessage === 'string' ? b.commitMessage : undefined)); });
   app.post('/api/worktree/remove', async (c) => { const b = await c.req.json<{ info: unknown; force?: boolean }>(); return c.json(await removeWorktree(checkWorktree(b.info), !!b.force)); });
 
   // Run panel (runner.ts): project scripts and long-running dev servers owned by the server.

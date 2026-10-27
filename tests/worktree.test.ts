@@ -54,5 +54,12 @@ test('worktree sessions: create next to the repo, refuse dirty merge, merge with
     assert.equal(git(repo, 'status', '--porcelain'), '');
     assert.equal((await removeWorktree(c, true)).ok, true);
     assert.equal(sanitizeBranch(' ../a b..c/ '), 'a-b.c');
+
+    // Leftover changes can be committed on the branch as part of the merge.
+    const d = await createWorktree(repo, 'dirty');
+    writeFileSync(join(d.path, 'b.txt'), 'new\n');
+    const merged = await mergeWorktree(d, 'add b');
+    assert.equal(merged.ok, true, merged.message);
+    assert.equal(readFileSync(join(repo, 'b.txt'), 'utf8'), 'new\n');
   } finally { rmSync(base, { recursive: true, force: true }); }
 });

@@ -35,6 +35,8 @@ test('turn snapshots see only what changed during the turn, including untracked 
     assert.equal(git('status', '--porcelain').includes('new.txt'), true, 'the real index is untouched');
     assert.equal(git('diff', '--cached', '--name-only'), '');
 
+    const whole = await turnDiff(before!.root, before!.tree, after!.tree, '');
+    assert.ok(whole.includes('a/a.txt') && whole.includes('b/new.txt') && whole.includes('a/gone.txt'));
     const { hunks } = splitHunks(await turnDiff(before!.root, before!.tree, after!.tree, 'a.txt'));
     assert.equal(hunks.length, 2);
     const one = await revertTurn(before!.root, before!.tree, after!.tree, { hunk: { file: 'a.txt', index: 1 } });

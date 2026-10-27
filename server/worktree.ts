@@ -83,8 +83,16 @@ export interface MergeResult { ok: boolean; merged: boolean; removed: boolean; m
  * the branch. Stops without touching anything when the worktree has uncommitted changes, when the
  * main checkout is on another branch, or when the merge conflicts (which is aborted).
  */
-export async function mergeWorktree(info: WorktreeInfo): Promise<MergeResult> {
-  const st = await worktreeStatus(info);
+export async function mergeWorktree(info: WorktreeInfo, commitMessage?: string): Promise<MergeResult> {
+  let st = await worktreeStatus(info);
+  // Agents rarely commit; with a message the leftover changes are committed on the branch first.
+  if (st.exists && st.dirty.length && commitMessage?.trim()) {
+    const dir = resolvePath(info.path);
+    const add = await git(dir, ['add', '-A']);
+    const commit = add.ok ? await git(dir, ['commit', '-q', '-m', commitMessage.trim().slice(0, 500)]) : add;
+    if (!commit.ok) return { ok: false, merged: false, removed: false, message: commit.stderr || 'git commit failed', reason: 'git' };
+    st = await worktreeStatus(info);
+  }
   if (!st.exists) return { ok: false, merged: false, removed: false, message: 'The worktree folder no longer exists.', reason: 'missing' };
   if (st.dirty.length) return { ok: false, merged: false, removed: false, message: `Uncommitted changes in the worktree (${st.dirty.length}). Commit or discard them first.`, conflicts: st.dirty.slice(0, 20), reason: 'dirty' };
   if (!info.baseBranch) return { ok: false, merged: false, removed: false, message: 'The session started from a detached HEAD; merge the branch by hand.', reason: 'detached' };
