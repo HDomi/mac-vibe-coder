@@ -4,6 +4,7 @@ import { ClaudeSession } from './agents/claude.js';
 import { CodexSession } from './agents/codex.js';
 import { which } from './shell.js';
 import { runVerify, verifySettings } from './verify.js';
+import { changedFiles, snapshot, type Snapshot } from './turns.js';
 
 const BUFFER_LIMIT = 5000;
 const BUFFER_BYTES = 16 * 1024 * 1024;
@@ -27,6 +28,8 @@ interface Entry {
   touched: boolean;
   /** Verification in flight; a new turn cancels it because its result would be stale. */
   verifying?: { id: string; cancel: () => void };
+  /** Working tree snapshot taken before the current turn (git projects only). */
+  turnBase?: Snapshot | null;
 }
 
 export class SessionRegistry {
@@ -106,6 +109,33 @@ export class SessionRegistry {
     await e.session.close();
   }
 
+  /** Snapshot the working tree before a message starts a new turn; bounded so a huge repo cannot hold the send. */
+  async beforeSend(id: string) {
+    const e = this.entries.get(id);
+    if (!e || e.running || e.closed) return;
+    const timeout = new Promise<null>((r) => setTimeout(() => r(null), 8000).unref());
+    e.turnBase = await Promise.race([snapshot(e.session.cwd).catch(() => null), timeout]);
+  }
+
+  /** After a turn: report what it changed, then verify if it changed anything. */
+  private async finishTurn(e: Entry) {
+    const base = e.turnBase;
+    const touched = e.touched;
+    e.turnBase = undefined; e.touched = false;
+    let changed = touched;
+    if (base) {
+      const after = await snapshot(base.root).catch(() => null);
+      if (after) {
+        const files = await changedFiles(base.root, base.tree, after.tree).catch(() => []);
+        changed = files.length > 0;
+        if (files.length && this.entries.has(e.session.id)) this.broadcast(e, { kind: 'changes', id: `changes-${Date.now().toString(36)}`, root: base.root, from: base.tree, to: after.tree, files });
+        // A queued message may already have started the next turn; it begins where this one ended.
+        if (e.running && e.turnBase === undefined) e.turnBase = after;
+      }
+    }
+    if (changed && !e.running) await this.verify(e.session.id);
+  }
+
   /**
    * Run the project's verification command and report it into the session as `verify` events.
    * Automatic runs (after a turn) need the project's auto flag and a turn that touched files.
@@ -134,7 +164,7 @@ export class SessionRegistry {
     e.lastActivity = msg.ts;
     if (event.kind === 'status') {
       const running = event.status === 'running' || event.status === 'compacting';
-      if (running && !e.running) { e.touched = false; e.verifying?.cancel(); }
+      if (running && !e.running) e.verifying?.cancel();
     }
     if (event.kind === 'tool.start' && MUTATING_TOOLS.test(event.name)) e.touched = true;
     if (event.kind === 'status') e.running = event.status === 'running' || event.status === 'compacting';
@@ -148,10 +178,9 @@ export class SessionRegistry {
       while (e.buffer.length > 1 && (e.buffer.length > BUFFER_LIMIT || e.bufferBytes > BUFFER_BYTES)) e.bufferBytes -= Buffer.byteLength(JSON.stringify(e.buffer.shift()!));
     }
     for (const ws of e.subscribers) safeSend(ws, msg);
-    // Verify once the turn has settled; the adapters send `status: idle` right after `result`.
-    if (event.kind === 'result' && e.touched) {
-      e.touched = false;
-      setTimeout(() => void this.verify(e.session.id).catch((err) => console.warn(`[mac-vibe-coder] verify failed to start: ${(err as Error).message}`)), 50);
+    // Once the turn has settled (the adapters send `status: idle` right after `result`): changes, then verify.
+    if (event.kind === 'result' && (e.touched || e.turnBase)) {
+      setTimeout(() => void this.finishTurn(e).catch((err) => console.warn(`[mac-vibe-coder] turn wrap-up failed: ${(err as Error).message}`)), 50);
     }
   }
 }
@@ -204,6 +233,8 @@ async function handle(cmd: ClientCommand, ws: WebSocket, registry: SessionRegist
       if (!registry.attach(cmd.sessionId, ws, cmd.after)) safeSend(ws, { type: 'session.missing', sessionId: cmd.sessionId });
       return;
     case 'session.send':
+      must(registry, cmd.sessionId);
+      await registry.beforeSend(cmd.sessionId);
       await must(registry, cmd.sessionId).send(cmd.text, cmd.attachments ?? [], cmd.messageId);
       return;
     case 'session.rewind': {

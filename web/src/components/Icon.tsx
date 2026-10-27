@@ -30,7 +30,7 @@ const PATHS: Record<string, string> = {
   terminal: 'M4 17l6-6-6-6M12 19h8',
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
   sparkle: 'M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z',
-  diff: 'M12 3v8M8 7h8M8 17h8M5 21h14',
+  diff: 'M4 8h6M7 5v6M14 17h6M17 3L7 21',
   file: 'M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8zM14 3v5h5',
   camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
 };

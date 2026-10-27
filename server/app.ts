@@ -28,6 +28,7 @@ import { gitBranches, gitCheckout, gitCommit, gitCommitDiff, gitCommitFiles, git
 import { displayableIcon, findProjectIcon } from './icons.js';
 import { convertImage, imageInfo, renderPng, writeImageBytes } from './image.js';
 import { projectSettings, suggestVerifyCommands, updateProjectSettings } from './verify.js';
+import { revertTurn, turnDiff } from './turns.js';
 import { killProcess, listeningPorts, netInfo, proxyHttp, type ProxyRequest } from './net.js';
 
 const WEB_DIST = path.join(REPO_ROOT, 'web', 'dist');
@@ -377,6 +378,13 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   });
 
   app.get('/api/sessions', (c) => c.json(registry?.list() ?? []));
+
+  // Turn change cards (snapshots from turns.ts): one file's diff, and putting files or hunks back.
+  app.get('/api/turns/diff', async (c) => c.text(await turnDiff(c.req.query('root') ?? '', c.req.query('from') ?? '', c.req.query('to') ?? '', c.req.query('path') ?? '')));
+  app.post('/api/turns/revert', async (c) => {
+    const b = await c.req.json<{ root: string; from: string; to: string; files?: string[]; hunk?: { file: string; index: number }; force?: boolean }>();
+    return c.json(await revertTurn(b.root, b.from, b.to, { files: Array.isArray(b.files) ? b.files.map(String) : undefined, hunk: b.hunk && typeof b.hunk.file === 'string' ? { file: b.hunk.file, index: Number(b.hunk.index) || 0 } : undefined, force: !!b.force }));
+  });
 
   // Per-project verification command (run after agent turns that changed files, see verify.ts).
   app.get('/api/project/verify', async (c) => {

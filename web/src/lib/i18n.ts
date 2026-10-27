@@ -1000,6 +1000,19 @@ const en: Record<string, string> = {
   'verify.sendHint': 'Put the failing output into the message box',
   'verify.rerun': 'Run again',
   'verify.fixPrompt': 'The verification command `{command}` failed (exit {code}). Fix the cause:\n\n```\n{output}\n```',
+  'changes.title': 'Changed {n} file(s) this turn',
+  'changes.revertAll': 'Undo turn',
+  'changes.revertAllHint': 'Put every file this turn changed back',
+  'changes.allReverted': 'All undone',
+  'changes.revertFile': 'Undo this file',
+  'changes.revertHunk': 'Undo',
+  'changes.reverted': 'Undone',
+  'changes.open': 'Open file',
+  'changes.binary': 'Binary file',
+  'changes.more': '{n} more',
+  'changes.confirmAll': 'Undo the changes this turn made to {n} file(s)?',
+  'changes.confirmConflict': '{n} file(s) changed again after this turn:\n{files}\n\nUndo them anyway? Later edits to them will be lost.',
+  'changes.hunkFailed': 'Could not undo this part; the file changed around it.\n{reason}',
 };
 
 const ko: Record<string, string> = {
@@ -1981,6 +1994,19 @@ const ko: Record<string, string> = {
   'verify.sendHint': '실패 출력을 입력창에 넣어',
   'verify.rerun': '다시 실행',
   'verify.fixPrompt': '검증 명령 `{command}` 이 실패했어 (exit {code}). 원인을 고쳐줘:\n\n```\n{output}\n```',
+  'changes.title': '이번 턴 변경 {n}개 파일',
+  'changes.revertAll': '턴 되돌리기',
+  'changes.revertAllHint': '이번 턴이 바꾼 파일을 모두 되돌려',
+  'changes.allReverted': '모두 되돌림',
+  'changes.revertFile': '이 파일 되돌리기',
+  'changes.revertHunk': '되돌리기',
+  'changes.reverted': '되돌림',
+  'changes.open': '파일 열기',
+  'changes.binary': '바이너리 파일',
+  'changes.more': '{n}개 더 보기',
+  'changes.confirmAll': '이번 턴이 바꾼 파일 {n}개를 되돌릴까?',
+  'changes.confirmConflict': '이 턴 이후에 다시 바뀐 파일 {n}개:\n{files}\n\n그래도 되돌릴까? 이후 수정 내용은 사라져.',
+  'changes.hunkFailed': '이 부분은 되돌릴 수 없어. 주변 내용이 바뀌었어.\n{reason}',
 };
 
 const dict: Record<Lang, Record<string, string>> = { en, ko };

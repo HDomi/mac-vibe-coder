@@ -38,7 +38,11 @@ export type AgentEvent =
   | { kind: 'task.reset' }
   /** Project verification run after a turn (see server/verify.ts). Upsert by id. */
   | { kind: 'verify'; id: string; status: VerifyStatus; command: string; output?: string; exitCode?: number; durationMs?: number }
+  /** Files the turn changed (git snapshot before vs after, see server/turns.ts). */
+  | { kind: 'changes'; id: string; root: string; from: string; to: string; files: TurnFile[] }
   | { kind: 'log'; text: string };
+
+export interface TurnFile { path: string; status: 'A' | 'M' | 'D'; additions: number; deletions: number; binary: boolean }
 
 export type VerifyStatus = 'running' | 'passed' | 'failed' | 'cancelled';
 

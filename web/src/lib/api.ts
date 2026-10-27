@@ -155,6 +155,10 @@ export const api = {
   gitRemote: (cwd: string, op: 'fetch' | 'pull' | 'push') => post<{ ok: boolean; output: string }>('/api/git/remote', { cwd, op }),
   gitCommit: (cwd: string, message: string) =>
     req<{ ok: boolean; output: string }>('/api/git/commit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, message }) }),
+  turnDiff: (root: string, from: string, to: string, path: string) =>
+    fetch(`/api/turns/diff?root=${q(root)}&from=${q(from)}&to=${q(to)}&path=${q(path)}`).then(async (r) => { const text = await r.text(); if (!r.ok) throw new Error(text || r.statusText); return text; }),
+  turnRevert: (body: { root: string; from: string; to: string; files?: string[]; hunk?: { file: string; index: number }; force?: boolean }) =>
+    post<{ ok: boolean; reverted: string[]; conflicts: string[]; error?: string }>('/api/turns/revert', body),
   projectVerify: (cwd: string) => req<{ command: string; auto: boolean; suggestions: string[] }>(`/api/project/verify?cwd=${q(cwd)}`),
   saveProjectVerify: (cwd: string, command: string, auto: boolean) =>
     req<{ command: string; auto: boolean }>('/api/project/verify', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, command, auto }) }),
