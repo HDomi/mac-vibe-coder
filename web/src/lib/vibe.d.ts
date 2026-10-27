@@ -1,5 +1,10 @@
 export {};
 
+export interface PickedElement {
+  info: { selector: string; tag: string; text: string; html: string; styles: Record<string, string>; source: string | null; url: string; rect: { x: number; y: number; width: number; height: number } };
+  shot: { path: string; name: string } | null;
+}
+
 export interface NativeBrowserState { url: string; title: string; loading: boolean; canBack: boolean; canForward: boolean; zoom: number }
 export interface ViewBounds { x: number; y: number; width: number; height: number }
 export interface NativeBrowser {
@@ -16,6 +21,8 @@ export interface NativeBrowser {
   devtools: () => Promise<void>;
   zoom: (factor: number) => Promise<void>;
   capture: () => Promise<{ path: string; name: string }>;
+  /** Element picker: null when cancelled (Escape). */
+  pick?: () => Promise<PickedElement | null>;
   onState: (cb: (s: NativeBrowserState) => void) => () => void;
   onShortcut: (cb: (k: { key: string; shift: boolean; alt: boolean }) => void) => () => void;
 }

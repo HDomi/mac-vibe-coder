@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Attachment } from '../lib/agent';
 import { t, useLang } from '../lib/i18n';
 import { keyEventFor, mouseButton, mouseModifiers, normalizeAddress } from '../lib/browserInput';
-import type { NativeBrowser, NativeBrowserState } from '../lib/vibe';
+import type { NativeBrowser, NativeBrowserState, PickedElement } from '../lib/vibe';
+import { fencedTerminalText } from '../lib/textSearch';
 import Icon from './Icon';
 
 interface Props {
@@ -232,6 +233,19 @@ function ScreencastBrowserPanel({ visible, onCapture }: Props) {
   );
 }
 
+/** Text for the composer about a picked element: where it is in the page and in the code, and how it looks. */
+function describeElement({ info }: PickedElement): string {
+  const styles = Object.entries(info.styles).map(([k, v]) => `${k}: ${v}`).join('; ');
+  const lines = [
+    t('browser.pickedIntro', { url: info.url }),
+    `- selector: \`${info.selector}\``,
+    info.source ? `- ${t('browser.pickedSource')}: ${info.source}` : null,
+    `- ${t('browser.pickedSize')}: ${Math.round(info.rect.width)}×${Math.round(info.rect.height)}${info.text ? ` · "${info.text.replace(/\s+/g, ' ').slice(0, 80)}"` : ''}`,
+    styles ? `- ${t('browser.pickedStyles')}: ${styles}` : null,
+  ].filter(Boolean).join('\n');
+  return `${lines}\n${fencedTerminalText(info.html)}\n`;
+}
+
 const ZOOMS = [0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5];
 const nearestZoom = (z: number) => ZOOMS.reduce((a, b) => (Math.abs(b - z) < Math.abs(a - z) ? b : a), 1);
 
@@ -296,6 +310,20 @@ function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: Na
     return () => { ro.disconnect(); window.removeEventListener('resize', sync); clearInterval(timer); shownRef.current = false; void native.hide(); };
   }, [visible, native]);
 
+  const [picking, setPicking] = useState(false);
+  // Pick an element: its cropped screenshot is attached and a description goes into the message box.
+  const pick = async () => {
+    if (!native.pick || picking) return;
+    setPicking(true); setNote(t('browser.pickHint'));
+    try {
+      const r = await native.pick();
+      if (!r) { setNote(null); return; }
+      if (r.shot) onCapture({ path: r.shot.path, name: r.shot.name, kind: 'image' });
+      const detail = { text: describeElement(r), handled: false };
+      window.dispatchEvent(new CustomEvent('vibe:insert-composer', { detail }));
+      setNote(detail.handled ? t('browser.picked') : t('browser.pickedNoComposer'));
+    } catch (e) { setNote((e as Error).message); } finally { setPicking(false); }
+  };
   const capture = async () => {
     try { const r = await native.capture(); onCapture({ path: r.path, name: r.name, kind: 'image' }); setNote(t('browser.captured')); }
     catch (e) { setNote((e as Error).message || t('browser.captureFailed')); }
@@ -320,6 +348,7 @@ function NativeBrowserPanel({ visible, onCapture, native }: Props & { native: Na
           {ZOOMS.map((z) => <option key={z} value={String(z)}>{Math.round(z * 100)}%</option>)}
         </select>
         <button className={btn} onClick={() => void native.devtools()} title={t('browser.devtools')}><Icon name="devtools" /></button>
+        {native.pick && <button className={`${btn} ${picking ? 'bg-sky-500/25 text-sky-200' : ''}`} onClick={() => void pick()} title={t('browser.pick')}><Icon name="target" /></button>}
         <button className="h-7 px-2 flex items-center gap-1.5 rounded-md bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 whitespace-nowrap" onClick={() => void capture()} title={t('browser.captureHint')}><Icon name="camera" size={14} />{t('browser.capture')}</button>
       </div>
       {/* The native view is laid over this box; the box itself only shows while the view is hidden. */}

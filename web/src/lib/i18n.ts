@@ -1140,6 +1140,14 @@ const en: Record<string, string> = {
   'brief.commitsTitle': 'Commits made',
   'brief.todosTitle': 'Still open',
   'brief.lastTitle': 'Last answer',
+  'browser.pick': 'Pick an element to send to the chat',
+  'browser.pickHint': 'Click an element in the page (Esc cancels)',
+  'browser.picked': 'Element attached to the message box',
+  'browser.pickedNoComposer': 'Screenshot attached; open a chat session for the description',
+  'browser.pickedIntro': 'Element I picked in the browser ({url}):',
+  'browser.pickedSource': 'source',
+  'browser.pickedSize': 'size',
+  'browser.pickedStyles': 'styles',
 };
 
 const ko: Record<string, string> = {
@@ -2261,6 +2269,14 @@ const ko: Record<string, string> = {
   'brief.commitsTitle': '만든 커밋',
   'brief.todosTitle': '남은 할 일',
   'brief.lastTitle': '마지막 답변',
+  'browser.pick': '요소를 골라 채팅으로 보내기',
+  'browser.pickHint': '페이지에서 요소를 클릭해 (Esc 취소)',
+  'browser.picked': '요소를 입력창에 첨부했어',
+  'browser.pickedNoComposer': '스크린샷은 첨부했어. 설명은 채팅 세션을 열어야 들어가',
+  'browser.pickedIntro': '브라우저에서 고른 요소 ({url}):',
+  'browser.pickedSource': '소스',
+  'browser.pickedSize': '크기',
+  'browser.pickedStyles': '스타일',
 };
 
 const dict: Record<Lang, Record<string, string>> = { en, ko };

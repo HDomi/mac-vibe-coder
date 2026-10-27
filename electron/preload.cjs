@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('vibe', {
     devtools: () => ipcRenderer.invoke('browser:devtools'),
     zoom: (factor) => ipcRenderer.invoke('browser:zoom', factor),
     capture: () => ipcRenderer.invoke('browser:capture'),
+    pick: () => ipcRenderer.invoke('browser:pick'),
     onState: (cb) => { const h = (_e, s) => cb(s); ipcRenderer.on('browser:state', h); return () => ipcRenderer.removeListener('browser:state', h); },
     onShortcut: (cb) => { const h = (_e, k) => cb(k); ipcRenderer.on('browser:shortcut', h); return () => ipcRenderer.removeListener('browser:shortcut', h); },
   },

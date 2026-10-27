@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain, session, WebContentsView } from 'electron';
 import { isLockShortcut, lockNow } from './lockScreen.cjs';
+import { PICK_SCRIPT } from './pickElement.cjs';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
@@ -152,6 +153,36 @@ export function registerBrowserIpc(fromApp: (e: Electron.IpcMainInvokeEvent) => 
     const c = wc();
     const f = Number(factor);
     if (c && Number.isFinite(f)) { c.setZoomFactor(Math.max(0.25, Math.min(3, f))); publish(); }
+  });
+  // Element picker: outline under the pointer, click to describe the element and crop it from the page.
+  let picking: Promise<unknown> | null = null;
+  handle('browser:pick', async () => {
+    const c = wc();
+    if (!c) throw new Error('Browser is not open');
+    if (picking) return null;
+    c.focus();
+    try {
+      picking = c.executeJavaScript(PICK_SCRIPT, true);
+      const info = await picking as null | { rect: { x: number; y: number; width: number; height: number }; viewport: { width: number; height: number }; url: string };
+      if (!info) return null;
+      // Page CSS pixels to view pixels; padded a little and kept inside the viewport.
+      const z = c.getZoomFactor();
+      const pad = 6;
+      const x = Math.max(0, Math.floor((info.rect.x - pad) * z));
+      const y = Math.max(0, Math.floor((info.rect.y - pad) * z));
+      const w = Math.min(Math.ceil((info.rect.width + pad * 2) * z), Math.ceil(info.viewport.width * z) - x);
+      const h = Math.min(Math.ceil((info.rect.height + pad * 2) * z), Math.ceil(info.viewport.height * z) - y);
+      let shot: { path: string; name: string } | null = null;
+      if (w > 2 && h > 2) {
+        const img = await c.capturePage({ x, y, width: w, height: h });
+        fs.mkdirSync(ATTACH_DIR, { recursive: true });
+        const name = `element-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`;
+        const file = path.join(ATTACH_DIR, `${randomUUID()}-${name}`);
+        fs.writeFileSync(file, img.toPNG());
+        shot = { path: file, name };
+      }
+      return { info, shot };
+    } finally { picking = null; }
   });
   handle('browser:capture', async () => {
     const c = wc();
