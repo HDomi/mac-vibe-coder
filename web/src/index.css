@@ -13,6 +13,15 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Hairline scrollbars everywhere (panels, editor, terminal). Setting the standard `scrollbar-width` /
+   `scrollbar-color` would make Chromium ignore these rules, so only the -webkit- pseudo-elements are used. */
+::-webkit-scrollbar { width: 2.5px; height: 2.5px; background: transparent; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.28); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
+::-webkit-scrollbar-thumb:active { background: rgba(122, 162, 247, 0.75); }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+
 .titlebar-drag { -webkit-app-region: drag; }
 .titlebar-nodrag { -webkit-app-region: no-drag; }
 
