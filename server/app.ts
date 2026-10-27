@@ -27,7 +27,7 @@ import { lockBeat, type LockBeat } from './lockWatch.js';
 import { gitBranches, gitCheckout, gitCommit, gitCommitDiff, gitCommitFiles, gitDiff, gitLog, gitRemoteOp, gitStage, gitStatus } from './git.js';
 import { displayableIcon, findProjectIcon } from './icons.js';
 import { convertImage, imageInfo, renderPng, writeImageBytes } from './image.js';
-import { projectSettings, suggestVerifyCommands, updateProjectSettings } from './verify.js';
+import { allBacklogs, cleanBacklog, projectSettings, suggestVerifyCommands, updateProjectSettings } from './verify.js';
 import { revertTurn, turnDiff } from './turns.js';
 import { checkWorktree, createWorktree, mergeWorktree, removeWorktree, worktreeStatus } from './worktree.js';
 import { listRuns, projectScripts, removeRun, startRun, stopRun, subscribeRun, type RunInfo, type RunLine } from './runner.js';
@@ -380,6 +380,17 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   });
 
   app.get('/api/sessions', (c) => c.json(registry?.list() ?? []));
+
+  // Task backlog per project; the client runs it (see web/src/lib/backlog.ts).
+  app.get('/api/backlog/all', async (c) => c.json(await allBacklogs()));
+  app.get('/api/backlog', async (c) => c.json((await projectSettings(c.req.query('cwd') ?? '~')).backlog ?? cleanBacklog({})));
+  app.put('/api/backlog', async (c) => {
+    const b = await c.req.json<{ cwd: string; backlog: unknown }>();
+    if (!b.cwd) return c.json({ error: 'cwd required', code: 'BAD_REQUEST' }, 400);
+    const backlog = cleanBacklog(b.backlog);
+    await updateProjectSettings(b.cwd, (p) => ({ ...p, backlog: backlog.items.length || backlog.auto ? backlog : undefined }));
+    return c.json(backlog);
+  });
 
   // Worktree sessions (worktree.ts).
   app.post('/api/worktree/create', async (c) => { const b = await c.req.json<{ cwd: string; branch?: string }>(); return c.json(await createWorktree(b.cwd, b.branch)); });

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { loadConfig, saveConfig, withConfigLock, type ProjectSettings } from './config.js';
+import { loadConfig, saveConfig, withConfigLock, type Backlog, type BacklogItem, type ProjectSettings } from './config.js';
 import { resolvePath } from './fs.js';
 
 /** Keep the end of the output: that is where test runners and compilers summarize failures. */
@@ -96,4 +96,27 @@ export function runVerify(cwd: string, command: string): { done: Promise<VerifyO
     child.on('close', (code, signal) => finish(code ?? (signal ? 128 : 1)));
   });
   return { done, cancel: () => { cancelled = true; killGroup('SIGTERM'); setTimeout(() => killGroup('SIGKILL'), 3000).unref(); } };
+}
+
+const STATUSES = new Set(['todo', 'running', 'done', 'failed', 'stopped']);
+
+/** Validate a backlog sent by the client; unknown fields are dropped and sizes are capped. */
+export function cleanBacklog(input: unknown): Backlog {
+  const b = (input ?? {}) as Partial<Backlog>;
+  const items: BacklogItem[] = (Array.isArray(b.items) ? b.items : []).slice(0, 200).flatMap((raw) => {
+    const i = raw as Partial<BacklogItem>;
+    if (!i || typeof i.id !== 'string' || typeof i.text !== 'string' || !i.text.trim()) return [];
+    return [{
+      id: i.id.slice(0, 64), text: i.text.slice(0, 20000), status: STATUSES.has(String(i.status)) ? i.status as BacklogItem['status'] : 'todo',
+      ...(typeof i.sessionId === 'string' ? { sessionId: i.sessionId.slice(0, 128) } : {}),
+      createdAt: Number(i.createdAt) || Date.now(),
+      ...(Number(i.startedAt) ? { startedAt: Number(i.startedAt) } : {}),
+      ...(Number(i.endedAt) ? { endedAt: Number(i.endedAt) } : {}),
+    }];
+  });
+  return { items, auto: !!b.auto, agent: b.agent === 'codex' ? 'codex' : 'claude', mode: typeof b.mode === 'string' ? b.mode.slice(0, 32) : 'acceptEdits', worktree: !!b.worktree };
+}
+
+export async function allBacklogs(): Promise<{ cwd: string; backlog: Backlog }[]> {
+  return (await loadConfig()).projects.filter((p) => p.backlog && p.backlog.items.length).map((p) => ({ cwd: p.path, backlog: p.backlog! }));
 }

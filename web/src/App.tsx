@@ -26,6 +26,8 @@ import { fencedTerminalText } from './lib/textSearch';
 import AgentIcon from './components/AgentIcon';
 import Lightbox from './components/Lightbox';
 import Toaster from './components/Toast';
+import BacklogPanel from './components/BacklogPanel';
+import { EMPTY_BACKLOG, useBacklogs } from './lib/backlog';
 import Icon from './components/Icon';
 import SessionCompanions from './components/SessionCompanions';
 
@@ -87,6 +89,16 @@ function AppInner() {
   const sidebar = usePaneWidth('vibe.w.sidebar', 256, 180, 480);
   const right = usePaneWidth('vibe.w.right', 420, 280, 1200);
   const S = useSessions();
+  const B = useBacklogs(S);
+  const [backlogOpen, setBacklogOpen] = useState(false);
+  const backlogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!backlogOpen) return;
+    const away = (e: MouseEvent) => { if (!backlogRef.current?.contains(e.target as Node)) setBacklogOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.isComposing) setBacklogOpen(false); };
+    window.addEventListener('mousedown', away); window.addEventListener('keydown', esc);
+    return () => { window.removeEventListener('mousedown', away); window.removeEventListener('keydown', esc); };
+  }, [backlogOpen]);
   // A session revived after a server restart gets a new id; keep it selected.
   useEffect(() => {
     if (activeSession && S.replaced[activeSession]) setActiveSession(S.replaced[activeSession]);
@@ -125,6 +137,8 @@ function AppInner() {
   const projectSessions = sortSessions(Object.values(S.sessions).filter((s) => inProject(s, project)));
   const session = activeSession === 'new' ? null
     : (activeSession && S.sessions[activeSession] && inProject(S.sessions[activeSession], project) ? S.sessions[activeSession] : projectSessions[0]) ?? null;
+  const projectBacklog = (project && B.backlogs[project]) || EMPTY_BACKLOG;
+  const backlogTodo = projectBacklog.items.filter((i) => i.status === 'todo' || i.status === 'running').length;
   // A worktree session's files, terminal, Git and Run panels follow its own folder.
   const panelRoot = session?.worktree ? session.cwd : project;
 
@@ -355,12 +369,24 @@ function AppInner() {
                     </div>
                   ))}
                   </div>
+                  <div ref={backlogRef} className="relative shrink-0">
+                    <button className={`h-7 px-1.5 flex items-center gap-1 rounded-md hover:bg-white/10 ${projectBacklog.auto ? 'text-amber-300' : 'text-zinc-400 hover:text-white'}`} onClick={() => setBacklogOpen((v) => !v)} title={t('backlog.title')}>
+                      <Icon name="list" size={14} />
+                      {backlogTodo > 0 && <span className="text-[10px] tabular-nums">{backlogTodo}</span>}
+                    </button>
+                    {backlogOpen && project && (
+                      <div className="absolute right-0 top-full mt-1.5 z-30 rounded-lg border border-white/10 bg-[#151922] shadow-2xl p-3">
+                        <BacklogPanel backlog={projectBacklog} onChange={(fn) => B.update(project, fn)} onFocusSession={(id) => { setBacklogOpen(false); focusSession.current(S.replaced[id] ?? id); }} />
+                      </div>
+                    )}
+                  </div>
                   <button className="w-7 h-7 shrink-0 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => setActiveSession('new')} title={t('app.newSession')}><Icon name="plus" /></button>
                 </div>
               )}
               <div className="flex-1 min-h-0">
                 <ChatPanel cwd={project} session={session}
                   onStart={start} onStartPair={startPair}
+                  backlog={project ? projectBacklog : undefined} onBacklogChange={(fn) => project && B.update(project, fn)} onOpenBacklogSession={(id) => focusSession.current(S.replaced[id] ?? id)}
                   partner={partnerOf(session)} onFocusPartner={(id) => setActiveSession(id)} onClosePartner={(id) => S.close(id)}
                   onSend={(t, a) => session && S.send(session.id, t, a)}
                   onApprove={(r, d, m) => session && S.approve(session.id, r, d, m)}

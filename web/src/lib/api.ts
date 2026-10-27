@@ -67,6 +67,9 @@ export interface RunInfo { id: string; cwd: string; name: string; command: strin
 export interface WorktreeInfo { path: string; branch: string; root: string; baseBranch: string | null; origin?: string }
 export interface WorktreeStatus { exists: boolean; dirty: string[]; ahead: number; branch: string | null }
 
+export interface BacklogItem { id: string; text: string; status: 'todo' | 'running' | 'done' | 'failed' | 'stopped'; sessionId?: string; createdAt: number; startedAt?: number; endedAt?: number }
+export interface Backlog { items: BacklogItem[]; auto: boolean; agent: 'claude' | 'codex'; mode: string; worktree: boolean }
+
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status: number) { super(message); }
 }
@@ -162,6 +165,8 @@ export const api = {
   gitRemote: (cwd: string, op: 'fetch' | 'pull' | 'push') => post<{ ok: boolean; output: string }>('/api/git/remote', { cwd, op }),
   gitCommit: (cwd: string, message: string) =>
     req<{ ok: boolean; output: string }>('/api/git/commit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, message }) }),
+  backlogAll: () => req<{ cwd: string; backlog: Backlog }[]>('/api/backlog/all'),
+  saveBacklog: (cwd: string, backlog: Backlog) => req<Backlog>('/api/backlog', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, backlog }) }),
   worktreeCreate: (cwd: string, branch?: string) => post<WorktreeInfo>('/api/worktree/create', { cwd, branch }),
   worktreeStatus: (info: WorktreeInfo) => post<WorktreeStatus>('/api/worktree/status', { info }),
   worktreeMerge: (info: WorktreeInfo, commitMessage?: string) => post<{ ok: boolean; merged: boolean; removed: boolean; message: string; conflicts?: string[]; reason?: string }>('/api/worktree/merge', { info, commitMessage }),

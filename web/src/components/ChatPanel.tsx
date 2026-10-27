@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { currentTodos, displayTitle, type ChatItem, type ChatSession } from '../lib/chatStore';
 import type { AgentId, Attachment, PermissionModeId, RewindResult } from '../lib/agent';
-import { api, type HistorySession, type ModelInfo } from '../lib/api';
+import { api, type Backlog, type HistorySession, type ModelInfo } from '../lib/api';
+import BacklogPanel from './BacklogPanel';
 import Composer, { type BackgroundSession } from './Composer';
 import ChatSearch from './ChatSearch';
 import TodoPanel from './TodoPanel';
@@ -27,6 +28,10 @@ interface Props {
   session: ChatSession | null;
   onStart: (cwd: string, opts?: StartOptions) => void;
   onStartPair?: (cwd: string, opts: PairOptions) => void;
+  /** Project task queue, shown on the start screen. */
+  backlog?: Backlog;
+  onBacklogChange?: (fn: (b: Backlog) => Backlog) => void;
+  onOpenBacklogSession?: (id: string) => void;
   onSend: (text: string, attachments: Attachment[]) => void;
   onApprove: (requestId: string, decision: 'allow' | 'allow_always' | 'deny', message?: string) => void;
   onAnswer: (requestId: string, answers: Record<string, string>) => void;
@@ -107,7 +112,7 @@ const MODE_IDS: { id: PermissionModeId; key: string }[] = [
   { id: 'auto', key: 'chat.mode.auto' },
 ];
 
-function StartScreen({ cwd, scope = 'folder', onStart, onStartPair }: { cwd: string | null; scope?: 'folder' | 'all'; onStart: Props['onStart']; onStartPair?: Props['onStartPair'] }) {
+function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onBacklogChange, onOpenBacklogSession }: { cwd: string | null; scope?: 'folder' | 'all'; onStart: Props['onStart']; onStartPair?: Props['onStartPair']; backlog?: Backlog; onBacklogChange?: Props['onBacklogChange']; onOpenBacklogSession?: Props['onOpenBacklogSession'] }) {
   useLang();
   const menu = useContextMenu();
   const [history, setHistory] = useState<HistorySession[]>([]);
@@ -221,6 +226,11 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair }: { cwd: str
       )}
       <div className="text-xs text-zinc-500 mb-6">{agent === 'codex' ? t('chat.codexHint') : t('chat.claudeHint')}</div>
       </>}
+      {backlog && onBacklogChange && scope === 'folder' && (
+        <div className="mb-6 rounded-lg border border-white/5 p-3">
+          <BacklogPanel compact backlog={backlog} onChange={onBacklogChange} onFocusSession={(id) => onOpenBacklogSession?.(id)} />
+        </div>
+      )}
       <div className="flex items-center text-xs text-zinc-500 mb-2 gap-3">
         <span>{scope === 'all' ? t('chat.previousAll', { n: history.length }) : t('chat.previousFolder')}</span>
         <div className="flex-1" />
@@ -257,7 +267,7 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair }: { cwd: str
   );
 }
 
-export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onStartPair, onSend, onApprove, onAnswer, onInterrupt, onStopTask, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind, onVerify, onCrossReview, partner, onFocusPartner, onClosePartner }: Props) {
+export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onStartPair, backlog, onBacklogChange, onOpenBacklogSession, onSend, onApprove, onAnswer, onInterrupt, onStopTask, onMode, onModel, onClose, pendingAttachments, onConsumeAttachments, background, onFocusSession, onRewind, onVerify, onCrossReview, partner, onFocusPartner, onClosePartner }: Props) {
   useLang();
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -308,7 +318,7 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
     return () => clearInterval(timer);
   }, [session?.turnStartedAt]);
 
-  if (!session) return <StartScreen cwd={cwd} scope={scope} onStart={onStart} onStartPair={onStartPair} />;
+  if (!session) return <StartScreen cwd={cwd} scope={scope} onStart={onStart} onStartPair={onStartPair} backlog={backlog} onBacklogChange={onBacklogChange} onOpenBacklogSession={onOpenBacklogSession} />;
 
   const running = session.status === 'running' || session.status === 'compacting';
   const close = () => {

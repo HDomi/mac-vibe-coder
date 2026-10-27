@@ -34,7 +34,21 @@ export interface ProjectSettings {
   path: string;
   /** Command run after an agent turn that changed files (typecheck, tests). */
   verify?: { command: string; auto: boolean };
+  /** Queued prompts run one after another in fresh sessions (managed by the client dispatcher). */
+  backlog?: Backlog;
 }
+
+export interface BacklogItem {
+  id: string;
+  text: string;
+  status: 'todo' | 'running' | 'done' | 'failed' | 'stopped';
+  sessionId?: string;
+  createdAt: number;
+  startedAt?: number;
+  endedAt?: number;
+}
+
+export interface Backlog { items: BacklogItem[]; auto: boolean; agent: 'claude' | 'codex'; mode: string; worktree: boolean }
 
 export interface Config {
   favorites: Favorite[];

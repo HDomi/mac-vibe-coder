@@ -1,0 +1,97 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api, type Backlog, type BacklogItem } from './api';
+import type { ChatSession } from './chatStore';
+import type { AgentId, PermissionModeId } from './agent';
+import type { useSessions } from './useSessions';
+import { t } from './i18n';
+
+export const EMPTY_BACKLOG: Backlog = { items: [], auto: false, agent: 'claude', mode: 'acceptEdits', worktree: false };
+
+/** A queued item's session finished its turn: idle again with a result on screen. */
+export function itemOutcome(s: ChatSession | undefined): 'running' | 'done' | 'failed' | 'stopped' {
+  if (!s) return 'stopped';
+  if (s.status === 'closed') return 'failed';
+  if (s.status !== 'idle') return 'running';
+  for (let i = s.items.length - 1; i >= 0; i--) {
+    const it = s.items[i];
+    if (it.kind === 'result') return it.ok ? 'done' : 'failed';
+    if (it.kind === 'error') return 'failed';
+  }
+  return 'running';
+}
+
+/** The next item to start, or null when one is still running or the queue is empty. */
+export function nextItem(b: Backlog): BacklogItem | null {
+  if (b.items.some((i) => i.status === 'running')) return null;
+  return b.items.find((i) => i.status === 'todo') ?? null;
+}
+
+/**
+ * Backlogs of every project, and the dispatcher that works through those whose queue is on: one item
+ * at a time per project, each in a fresh session (in its own worktree when asked), without taking the
+ * screen away from what the user is looking at.
+ */
+export function useBacklogs(S: ReturnType<typeof useSessions>) {
+  const [backlogs, setBacklogs] = useState<Record<string, Backlog>>({});
+  const ref = useRef(backlogs);
+  ref.current = backlogs;
+  const starting = useRef(new Set<string>());
+
+  useEffect(() => { api.backlogAll().then((rows) => setBacklogs(Object.fromEntries(rows.map((r) => [r.cwd, r.backlog])))).catch(() => {}); }, []);
+
+  const update = useCallback((cwd: string, fn: (b: Backlog) => Backlog) => {
+    const next = fn(ref.current[cwd] ?? EMPTY_BACKLOG);
+    ref.current = { ...ref.current, [cwd]: next };
+    setBacklogs(ref.current);
+    api.saveBacklog(cwd, next).catch(() => {});
+  }, []);
+
+  const setItem = useCallback((cwd: string, id: string, patch: Partial<BacklogItem>) =>
+    update(cwd, (b) => ({ ...b, items: b.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) })), [update]);
+
+  useEffect(() => {
+    for (const [cwd, b] of Object.entries(backlogs)) {
+      const running = b.items.find((i) => i.status === 'running');
+      if (running) {
+        const id = running.sessionId ? (S.replaced[running.sessionId] ?? running.sessionId) : undefined;
+        if (!id || starting.current.has(cwd)) continue;
+        const outcome = itemOutcome(S.sessions[id]);
+        if (outcome !== 'running') setItem(cwd, running.id, { status: outcome, endedAt: Date.now(), sessionId: id });
+        continue;
+      }
+      if (!b.auto || starting.current.has(cwd)) continue;
+      const next = nextItem(b);
+      if (!next) {
+        if (b.items.length) { update(cwd, (x) => ({ ...x, auto: false })); window.dispatchEvent(new CustomEvent('vibe:toast', { detail: { text: t('backlog.finished', { name: cwd.split('/').pop() ?? cwd }) } })); }
+        continue;
+      }
+      starting.current.add(cwd);
+      setItem(cwd, next.id, { status: 'running', startedAt: Date.now() });
+      void (async () => {
+        try {
+          const mode = (b.agent === 'codex' && b.mode === 'auto' ? 'default' : b.mode) as PermissionModeId;
+          const agent = b.agent as AgentId;
+          const model = localStorage.getItem(`vibe.model.${agent}`);
+          const title = next.text.split('\n')[0].slice(0, 40);
+          let sessionId: string;
+          if (b.worktree) {
+            const wt = await api.worktreeCreate(cwd, `todo/${next.id.slice(0, 6)}`);
+            sessionId = await S.start(wt.path, { agent, permissionMode: mode, model, worktree: { ...wt, origin: cwd }, title });
+          } else {
+            sessionId = await S.start(cwd, { agent, permissionMode: mode, model, title });
+          }
+          setItem(cwd, next.id, { sessionId });
+          S.send(sessionId, next.text, []);
+        } catch (e) {
+          setItem(cwd, next.id, { status: 'failed', endedAt: Date.now() });
+          update(cwd, (x) => ({ ...x, auto: false }));
+          window.dispatchEvent(new CustomEvent('vibe:toast', { detail: { text: (e as Error).message, kind: 'error' } }));
+        } finally {
+          starting.current.delete(cwd);
+        }
+      })();
+    }
+  }, [backlogs, S, setItem, update]);
+
+  return { backlogs, update, setItem };
+}
