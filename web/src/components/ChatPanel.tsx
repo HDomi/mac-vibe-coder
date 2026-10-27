@@ -205,7 +205,10 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onB
       <div className="text-xs text-zinc-500 mb-1">{scope === 'all' ? t('chat.agent') : t('chat.project')}</div>
       {scope === 'all'
         ? <div className="text-lg font-medium mb-6">{t('chat.freeConversation')}</div>
-        : <div className="flex items-center gap-3 mb-6" title={cwd}><ProjectIcon path={cwd} name={cwd.split('/').pop() || cwd} size={40} /><div className="text-xl font-semibold truncate">{cwd.split('/').pop() || cwd}</div></div>}
+        : <div className="flex items-center gap-3 mb-6" title={cwd}><ProjectIcon path={cwd} name={cwd.split('/').pop() || cwd} size={40} /><div className="text-xl font-semibold truncate">{cwd.split('/').pop() || cwd}</div>
+            <div className="flex-1" />
+            <button onClick={() => window.dispatchEvent(new Event('vibe:agent-context'))} className="shrink-0 flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-white/5"><Icon name="file" size={13} />{t('context.menu')}</button>
+          </div>}
       {scope === 'all' && <div className="text-xs text-zinc-500 -mt-4 mb-6">{t('chat.freeHint', { cwd })}</div>}
       <div className="flex items-center gap-1 mb-4 rounded-lg bg-white/5 p-1 w-fit text-sm">
         {(['claude', 'codex'] as AgentId[]).map((a) => (

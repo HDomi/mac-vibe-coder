@@ -29,6 +29,7 @@ import AgentIcon from './components/AgentIcon';
 import Lightbox from './components/Lightbox';
 import Toaster from './components/Toast';
 import BacklogPanel from './components/BacklogPanel';
+import AgentContextDialog from './components/AgentContextDialog';
 import { EMPTY_BACKLOG, useBacklogs } from './lib/backlog';
 import Icon from './components/Icon';
 import SessionCompanions from './components/SessionCompanions';
@@ -93,6 +94,8 @@ function AppInner() {
   const S = useSessions();
   const B = useBacklogs(S);
   const [backlogOpen, setBacklogOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
+  useEffect(() => { const h = () => setContextOpen(true); window.addEventListener('vibe:agent-context', h); return () => window.removeEventListener('vibe:agent-context', h); }, []);
   const backlogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!backlogOpen) return;
@@ -434,6 +437,7 @@ function AppInner() {
                       { label: t('common.openInVSCode'), onClick: () => api.open(project, 'vscode').catch(() => {}) },
                       { label: t('common.openInCursor'), onClick: () => api.open(project, 'cursor').catch(() => {}) },
                       { separator: true },
+                      { label: t('context.menu'), onClick: () => setContextOpen(true) },
                       { label: t('common.copyPath'), onClick: () => navigator.clipboard.writeText(project) },
                     ])}>{t('app.openMenu')}</button>
                 )}
@@ -454,6 +458,7 @@ function AppInner() {
               </div>
             </div>
           </main>
+          {contextOpen && panelRoot && <AgentContextDialog cwd={panelRoot} onClose={() => setContextOpen(false)} onOpenFile={(p) => { setContextOpen(false); editor.open(p); setView('ide'); }} />}
           {showTools && <ToolsPanel focusLock={toolsFocusLock} onClose={() => { setShowTools(false); setToolsFocusLock(false); }} />}
           {quickOpen && project && (
             <QuickOpen cwd={project} onClose={() => setQuickOpen(false)}

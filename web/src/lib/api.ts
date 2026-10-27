@@ -70,6 +70,14 @@ export interface WorktreeStatus { exists: boolean; dirty: string[]; ahead: numbe
 export interface BacklogItem { id: string; text: string; status: 'todo' | 'running' | 'done' | 'failed' | 'stopped'; sessionId?: string; createdAt: number; startedAt?: number; endedAt?: number }
 export interface Backlog { items: BacklogItem[]; auto: boolean; agent: 'claude' | 'codex'; mode: string; worktree: boolean }
 
+export interface ContextDoc { scope: 'project' | 'user'; agent: 'claude' | 'codex'; path: string; exists: boolean; content: string; mtime: number | null }
+export interface AgentContext {
+  docs: ContextDoc[];
+  skills: { scope: 'project' | 'user'; agent: 'claude' | 'codex'; name: string; description: string; path: string }[];
+  hooks: { scope: 'project' | 'user'; file: string; event: string; matcher: string; command: string }[];
+  mcp: { scope: 'project' | 'user'; agent: 'claude' | 'codex'; name: string; command: string; file: string }[];
+}
+
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status: number) { super(message); }
 }
@@ -165,6 +173,7 @@ export const api = {
   gitRemote: (cwd: string, op: 'fetch' | 'pull' | 'push') => post<{ ok: boolean; output: string }>('/api/git/remote', { cwd, op }),
   gitCommit: (cwd: string, message: string) =>
     req<{ ok: boolean; output: string }>('/api/git/commit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, message }) }),
+  agentContext: (cwd: string) => req<AgentContext>(`/api/agent-context?cwd=${q(cwd)}`),
   backlogAll: () => req<{ cwd: string; backlog: Backlog }[]>('/api/backlog/all'),
   saveBacklog: (cwd: string, backlog: Backlog) => req<Backlog>('/api/backlog', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, backlog }) }),
   worktreeCreate: (cwd: string, branch?: string) => post<WorktreeInfo>('/api/worktree/create', { cwd, branch }),

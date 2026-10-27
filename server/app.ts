@@ -29,6 +29,7 @@ import { displayableIcon, findProjectIcon } from './icons.js';
 import { convertImage, imageInfo, renderPng, writeImageBytes } from './image.js';
 import { allBacklogs, cleanBacklog, projectSettings, suggestVerifyCommands, updateProjectSettings } from './verify.js';
 import { revertTurn, turnDiff } from './turns.js';
+import { agentContext } from './agentContext.js';
 import { checkWorktree, createWorktree, mergeWorktree, removeWorktree, worktreeStatus } from './worktree.js';
 import { listRuns, projectScripts, removeRun, startRun, stopRun, subscribeRun, type RunInfo, type RunLine } from './runner.js';
 import { killProcess, listeningPorts, netInfo, proxyHttp, type ProxyRequest } from './net.js';
@@ -380,6 +381,9 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   });
 
   app.get('/api/sessions', (c) => c.json(registry?.list() ?? []));
+
+  // Instruction files, skills, hooks and MCP servers the agents see in a project (agentContext.ts).
+  app.get('/api/agent-context', async (c) => c.json(await agentContext(c.req.query('cwd') ?? '~')));
 
   // Task backlog per project; the client runs it (see web/src/lib/backlog.ts).
   app.get('/api/backlog/all', async (c) => c.json(await allBacklogs()));
