@@ -47,7 +47,7 @@ export function requestNotificationPermission() {
 }
 
 interface Persisted { id: string; cwd: string; agent: AgentId; agentSessionId?: string; permissionMode?: PermissionModeId; model?: string; historyLen?: number; title?: string; pinned?: boolean; lastActivity?: number; worktree?: WorktreeInfo; pairKey?: string; resumed?: boolean }
-interface PendingStart { cwd: string; resolve: (id: string) => void; reject: (err: Error) => void; preload: ChatItem[]; historyLen?: number; replaces?: string; title?: string; worktree?: WorktreeInfo; pairKey?: string; resumed?: boolean }
+interface PendingStart { cwd: string; resolve: (id: string) => void; reject: (err: Error) => void; preload: ChatItem[]; historyLen?: number; replaces?: string; title?: string; worktree?: WorktreeInfo; pairKey?: string; resumed?: boolean; /** CLI session being resumed; known before the adapter's init event, so a second resume can be matched right away. */ resume?: string }
 /** A revived session that goes missing again this soon is reported lost instead of looping. */
 const REVIVE_COOLDOWN_MS = 30000;
 
@@ -56,6 +56,8 @@ export function useSessions() {
   const sessionsRef = useRef(sessions);
   useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
   const pendingStart = useRef(new Map<string, PendingStart>());
+  /** Resumes in flight, by CLI session id, so a second click on the same conversation joins the first instead of opening twice. */
+  const resuming = useRef(new Map<string, Promise<string>>());
   /** Old session id -> the id that replaced it after the server restarted. Views follow this to keep their selection. */
   const [replaced, setReplaced] = useState<Record<string, string>>({});
   const reviving = useRef(new Set<string>());
@@ -93,7 +95,7 @@ export function useSessions() {
           if (m.requestId) pendingStart.current.delete(m.requestId);
           const fresh: ChatSession = {
             id: m.sessionId, agent: m.agent ?? 'claude', cwd: m.requestCwd, permissionMode: 'default', status: 'starting',
-            items: p?.preload ?? [], historyLen: p?.historyLen, title: p?.title, worktree: p?.worktree, pairKey: p?.pairKey, resumed: p?.resumed, totalCostUsd: 0, lastSeq: 0, lastActivity: Date.now(),
+            items: p?.preload ?? [], historyLen: p?.historyLen, title: p?.title, worktree: p?.worktree, pairKey: p?.pairKey, resumed: p?.resumed, agentSessionId: p?.resume, totalCostUsd: 0, lastSeq: 0, lastActivity: Date.now(),
           };
           const old = p?.replaces;
           setSessions((prev) => {
@@ -114,6 +116,19 @@ export function useSessions() {
           const s = sessionsRef.current[m.sessionId];
           if (!s || reviving.current.has(s.id)) return;
           if (Date.now() - (revivedAt.current.get(s.id) ?? 0) < REVIVE_COOLDOWN_MS) { markLost(s.id); return; }
+          // Another tab already carries this CLI session (live, or a revive in flight): fold this one into it.
+          // Reviving both would run the same conversation twice (that is how duplicate tabs piled up).
+          if (s.agentSessionId) {
+            const key = `${s.agent}:${s.agentSessionId}`;
+            const twin = Object.values(sessionsRef.current).find((x) => x.id !== s.id && x.agent === s.agent && x.agentSessionId === s.agentSessionId && x.status !== 'closed' && !x.restoring && !reviving.current.has(x.id));
+            const inflight = resuming.current.get(key);
+            if (twin || inflight) {
+              setSessions((prev) => { const n = { ...prev }; delete n[s.id]; return n; });
+              if (twin) setReplaced((r) => ({ ...r, [s.id]: twin.id }));
+              else inflight!.then((id) => setReplaced((r) => ({ ...r, [s.id]: id }))).catch(() => {});
+              return;
+            }
+          }
           // The server restarted (update, app relaunch): start the same conversation again instead of leaving a dead tab.
           reviving.current.add(s.id);
           startRef.current(s.cwd, { agent: s.agent, resume: s.agentSessionId, permissionMode: s.permissionMode, model: s.model, replaces: s.id, title: s.title, worktree: s.worktree, pairKey: s.pairKey })
@@ -153,6 +168,14 @@ export function useSessions() {
   useEffect(() => {
     let saved: Persisted[] = [];
     try { saved = JSON.parse(localStorage.getItem(LS_ACTIVE) || '[]'); } catch { /* ignore */ }
+    // Earlier builds could remember one CLI session under several tabs; keep the most recent and let the rest go.
+    const newest = new Map<string, Persisted>();
+    for (const p of saved) {
+      if (!p.agentSessionId) continue;
+      const k = `${p.agent}:${p.agentSessionId}`;
+      if ((newest.get(k)?.lastActivity ?? 0) <= (p.lastActivity ?? 0)) newest.set(k, p);
+    }
+    saved = saved.filter((p) => !p.agentSessionId || newest.get(`${p.agent}:${p.agentSessionId}`) === p);
     if (!saved.length) return;
     setSessions((prev) => {
       const next = { ...prev };
@@ -197,6 +220,21 @@ export function useSessions() {
   });
 
   const start = useCallback(async (cwd: string, opts: { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null; replaces?: string; title?: string; worktree?: WorktreeInfo; pairKey?: string } = {}) => {
+    // Resuming a conversation that is already open (from the history list, another view, or a double click)
+    // brings that tab forward; a second live process on the same CLI session would only duplicate it.
+    if (!opts.resume) return startNew(cwd, opts);
+    const key = `${opts.agent ?? 'claude'}:${opts.resume}`;
+    if (!opts.replaces) {
+      const live = Object.values(sessionsRef.current).find((s) => s.agent === (opts.agent ?? 'claude') && s.agentSessionId === opts.resume && s.status !== 'closed' && !s.restoring);
+      if (live) return live.id;
+      const inflight = resuming.current.get(key);
+      if (inflight) return inflight;
+    }
+    const run = startNew(cwd, opts).finally(() => { if (resuming.current.get(key) === run) resuming.current.delete(key); });
+    resuming.current.set(key, run);
+    return run;
+  }, []);
+  const startNew = async (cwd: string, opts: { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null; replaces?: string; title?: string; worktree?: WorktreeInfo; pairKey?: string }) => {
     let preload: ChatItem[] = [];
     let historyLen: number | undefined;
     if ((opts.agent ?? 'claude') === 'claude') {
@@ -207,10 +245,10 @@ export function useSessions() {
     }
     return new Promise<string>((resolve, reject) => {
       const requestId = crypto.randomUUID();
-      pendingStart.current.set(requestId, { cwd, resolve, reject, preload, historyLen, replaces: opts.replaces, title: opts.title, worktree: opts.worktree, pairKey: opts.pairKey, resumed: !!opts.resume && !opts.replaces });
+      pendingStart.current.set(requestId, { cwd, resolve, reject, preload, historyLen, replaces: opts.replaces, title: opts.title, worktree: opts.worktree, pairKey: opts.pairKey, resumed: !!opts.resume && !opts.replaces, resume: opts.resume });
       agentClient.send({ type: 'session.start', requestId, agent: opts.agent ?? 'claude', cwd, resume: opts.resume, permissionMode: opts.permissionMode, model: opts.model ?? undefined });
     });
-  }, []);
+  };
   const startRef = useRef(start);
 
   const send = useCallback((sessionId: string, text: string, attachments: Attachment[]) => {
