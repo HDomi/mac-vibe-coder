@@ -153,6 +153,15 @@ export const api = {
   historyRename: (agent: 'claude' | 'codex', id: string, title: string, cwd?: string) => post<{ ok: true }>('/api/history/rename', { agent, id, title, cwd }),
   historyPin: (agent: 'claude' | 'codex', id: string, pinned: boolean) => post<{ ok: true }>('/api/history/pin', { agent, id, pinned }),
   historyDelete: (agent: 'claude' | 'codex', id: string, cwd?: string) => req<{ ok: true }>(`/api/history/${q(id)}?agent=${agent}${cwd ? `&cwd=${q(cwd)}` : ''}`, { method: 'DELETE' }),
+  /** Zip of the exported markdown and its images, written to `dest` (Save As path). */
+  exportZip: (dest: string, name: string, markdown: string, images: { name: string; src: string }[]) =>
+    post<{ path: string; missing: string[] }>('/api/export/zip', { dest, name, markdown, images }),
+  /** Same bundle as bytes, for a browser tab that downloads instead of saving. */
+  exportZipBlob: async (name: string, markdown: string, images: { name: string; src: string }[]) => {
+    const res = await fetch('/api/export/zip', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, markdown, images }) });
+    if (!res.ok) throw new ApiError('HTTP', res.statusText, res.status);
+    return { blob: await res.blob(), missing: Number(res.headers.get('x-missing') ?? 0) };
+  },
   customPrompt: () => req<{ text: string }>('/api/custom-prompt'),
   saveCustomPrompt: (text: string) => req<{ text: string }>('/api/custom-prompt', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }),
   prompts: () => req<SavedPrompt[]>('/api/prompts'),

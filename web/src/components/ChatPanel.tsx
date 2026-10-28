@@ -19,6 +19,8 @@ import WorktreeChip from './WorktreeChip';
 import { useUsage } from '../lib/usageStore';
 import { minutesLabel } from './UsageBar';
 import { sessionBrief } from '../lib/brief';
+import { exportFileName, exportMarkdown } from '../lib/exportMarkdown';
+import { toast } from './Toast';
 
 /** Same prompt to Claude and Codex, each in its own worktree, to compare and keep the better result. */
 export interface PairOptions { prompt: string; branch?: string; permissionMode: PermissionModeId; models: { claude: string | null; codex: string | null } }
@@ -352,6 +354,17 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
   const [atBottom, setAtBottom] = useState(true);
   const [now, setNow] = useState(Date.now());
   const [searching, setSearching] = useState(false);
+  // Export mode: top-level blocks get a checkbox; the picked ones become one Markdown file (plus images, zipped).
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const [withThinking, setWithThinking] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  useEffect(() => { setPicked(null); }, [session?.id]);
+  useEffect(() => {
+    if (!picked) return;
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.isComposing && !e.defaultPrevented) { e.preventDefault(); setPicked(null); } };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [picked]);
   // ⌘F (dispatched by the app's shortcut handler) opens the in-chat search bar.
   useEffect(() => {
     const open = () => setSearching(true);
@@ -419,6 +432,49 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
     if (!done.canRewind) window.alert(t('rewind.failed', { reason: done.error ?? '' }));
   };
   const jump = () => { stick.current = true; setAtBottom(true); scrollToBottom(); };
+  // Blocks worth picking by default: the conversation itself, not tool calls or status lines.
+  const exportable = top.filter((it) => !(it.kind === 'assistant' && it.streaming && !it.text) && !(it.kind === 'user' && it.compact));
+  const chatOnly = () => new Set(exportable.filter((it) => it.kind === 'user' || it.kind === 'assistant').map((it) => it.id));
+  const startExport = () => { setSearching(false); setPicked(chatOnly()); };
+  const togglePick = (id: string) => setPicked((p) => { if (!p) return p; const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const runExport = async () => {
+    if (!picked || !picked.size || exporting) return;
+    setExporting(true);
+    try {
+      const title = displayTitle(session, 80) ?? session.cwd.split('/').pop() ?? 'session';
+      const name = exportFileName(title);
+      const agent = session.agent === 'codex' ? 'Codex' : 'Claude';
+      const { markdown, images } = exportMarkdown(session.items, picked, { title, agent, cwd: session.cwd, date: new Date().toISOString().slice(0, 10), includeThinking: withThinking });
+      const dir = session.worktree?.origin ?? session.cwd;
+      let saved: string; let missing = 0;
+      if (window.vibe?.saveDialog) {
+        if (!images.length) {
+          const target = await window.vibe.saveDialog({ defaultPath: `${dir}/${name}.md`, ext: 'md', label: 'Markdown' });
+          if (!target) return;
+          await api.saveText(target, markdown, { baseMtime: null, bom: false, force: true });
+          saved = target;
+        } else {
+          const target = await window.vibe.saveDialog({ defaultPath: `${dir}/${name}.zip`, ext: 'zip', label: 'ZIP' });
+          if (!target) return;
+          const res = await api.exportZip(target, name, markdown, images);
+          saved = res.path; missing = res.missing.length;
+        }
+      } else {
+        let blob: Blob; let file: string;
+        if (!images.length) { blob = new Blob([markdown], { type: 'text/markdown' }); file = `${name}.md`; }
+        else { const res = await api.exportZipBlob(name, markdown, images); blob = res.blob; missing = res.missing; file = `${name}.zip`; }
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file; a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+        saved = file;
+      }
+      toast(missing ? t('export.savedMissing', { path: saved, n: missing }) : t('export.saved', { path: saved }));
+      setPicked(null);
+    } catch (err) {
+      toast(t('export.failed', { reason: (err as Error).message }), 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
   // Bring the tool card that started a subagent into view (from the task relation graph).
   const showToolCard = (toolUseId: string) => {
     const el = content.current?.querySelector<HTMLElement>(`[data-tool-use="${CSS.escape(toolUseId)}"]`);
@@ -481,10 +537,28 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
           <Icon name="sparkle" size={13} /><span className="@max-[600px]:hidden">{t('review.short')}</span>
         </button>}
         {onVerify && session.cwd && <VerifyButton cwd={session.worktree?.origin ?? session.cwd} running={running} onRun={onVerify} />}
+        <button onClick={() => (picked ? setPicked(null) : startExport())} className={`shrink-0 flex items-center justify-center w-7 h-7 rounded-md hover:bg-white/5 ${picked ? 'text-sky-300 bg-white/10' : 'text-zinc-500 hover:text-zinc-200'}`} title={t('export.button')}><Icon name="download" size={14} /></button>
         {session.agentSessionId && <button className="text-zinc-600 hover:text-zinc-300" title={t('chat.copySessionIdTitle', { id: session.agentSessionId })} onClick={() => navigator.clipboard.writeText(session.agentSessionId!)}>id</button>}
         {session.agent === 'claude' && <span className="text-zinc-500 @max-[440px]:hidden">${session.totalCostUsd.toFixed(3)}</span>}
         <button className="w-7 h-7 -mr-2 shrink-0 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={close} title={t('chat.closeSession')}><Icon name="close" /></button>
       </div>
+      {picked && (
+        <div className="shrink-0 border-b border-sky-400/20 bg-sky-500/[0.06] px-4 py-2 text-xs text-zinc-300 space-y-1">
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <span className="text-zinc-400">{t('export.selected', { n: picked.size, total: exportable.length })}</span>
+            <span className="text-zinc-600">·</span>
+            <button className="hover:text-white" onClick={() => setPicked(new Set(exportable.map((it) => it.id)))}>{t('export.all')}</button>
+            <button className="hover:text-white" onClick={() => setPicked(new Set())}>{t('export.none')}</button>
+            <button className="hover:text-white" onClick={() => setPicked(chatOnly())}>{t('export.chatOnly')}</button>
+            <span className="text-zinc-600">·</span>
+            <label className="flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={withThinking} onChange={(e) => setWithThinking(e.target.checked)} />{t('export.thinking')}</label>
+            <span className="flex-1" />
+            <button disabled={!picked.size || exporting} onClick={runExport} className="rounded-md bg-sky-500/30 hover:bg-sky-500/40 disabled:opacity-40 px-2.5 py-1 text-sky-50">{t('export.save')}</button>
+            <button onClick={() => setPicked(null)} className="rounded-md bg-white/10 hover:bg-white/15 px-2.5 py-1">{t('export.cancel')}</button>
+          </div>
+          <div className="text-zinc-500 whitespace-normal">{t('export.hint')}</div>
+        </div>
+      )}
       <div className="flex-1 min-h-0 relative">
         {searching && <ChatSearch content={content} scroller={scroller} version={session.items} onClose={() => setSearching(false)}
           onJump={() => { stick.current = false; setAtBottom(false); }} />}
@@ -492,7 +566,18 @@ export default function ChatPanel({ cwd, scope = 'folder', session, onStart, onS
           <div ref={content} className="px-5 py-4 space-y-3">
             {session.resumed && <ResumeBrief session={session} />}
             {top.length === 0 && <div className="text-center text-zinc-600 text-sm py-10">{session.restoring ? t('chat.restoring') : session.status === 'starting' ? t('chat.starting') : t('chat.firstMessage')}</div>}
-            {top.map((it) => renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd, rewind: canRewind ? rewind : undefined, latestVerify, verify: running ? undefined : onVerify, review: onCrossReview, otherAgent: session.agent === 'claude' ? 'Codex' : 'Claude' }))}
+            {top.map((it) => {
+              const node = renderItem(it, childrenOf, { approve: onApprove, answer: onAnswer, cwd: session.cwd, rewind: canRewind ? rewind : undefined, latestVerify, verify: running ? undefined : onVerify, review: onCrossReview, otherAgent: session.agent === 'claude' ? 'Codex' : 'Claude' });
+              if (!picked) return node;
+              const on = picked.has(it.id);
+              // In export mode a click anywhere on a block toggles it; the block's own buttons are inert meanwhile.
+              return (
+                <div key={it.id} className="flex items-start gap-2">
+                  <input type="checkbox" checked={on} onChange={() => togglePick(it.id)} className="mt-2 shrink-0 accent-sky-400" />
+                  <div className={`flex-1 min-w-0 cursor-pointer rounded-lg transition-opacity ${on ? '' : 'opacity-40'}`} onClickCapture={(e) => { e.preventDefault(); e.stopPropagation(); togglePick(it.id); }}>{node}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
         {!atBottom && (

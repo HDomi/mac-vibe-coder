@@ -31,6 +31,7 @@ import { allBacklogs, cleanBacklog, projectSettings, suggestVerifyCommands, upda
 import { revertTurn, turnDiff } from './turns.js';
 import { agentContext } from './agentContext.js';
 import { suggestCommitMessage } from './commitMessage.js';
+import { exportZip } from './exportZip.js';
 import { checkWorktree, createWorktree, listWorktrees, mergeWorktree, removeWorktree, worktreeStatus } from './worktree.js';
 import { listRuns, projectScripts, removeRun, startRun, stopRun, subscribeRun, type RunInfo, type RunLine } from './runner.js';
 import { killProcess, listeningPorts, netInfo, proxyHttp, type ProxyRequest } from './net.js';
@@ -54,6 +55,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
   });
   app.use('/api/attach', bodyLimit({ maxSize: 32 * 1024 * 1024 }));
   app.use('/api/fs/text', bodyLimit({ maxSize: 16 * 1024 * 1024 }));
+  app.use('/api/export/zip', bodyLimit({ maxSize: 96 * 1024 * 1024 }));
   app.use('/api/image/write', bodyLimit({ maxSize: 128 * 1024 * 1024 }));
   app.use('/api/net/http', bodyLimit({ maxSize: 64 * 1024 * 1024 }));
   app.use('*', async (c, next) => {
@@ -201,6 +203,18 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
     cfg.prompts = prompts;
     await saveConfig(cfg);
     return c.json(prompts);
+  });
+  // Conversation export: markdown + its images as one zip (exportZip.ts). `dest` is the user's Save As choice;
+  // without it (plain browser tab) the zip comes back as the response body for a download.
+  app.post('/api/export/zip', async (c) => {
+    const b = await c.req.json<{ dest?: unknown; name?: unknown; markdown?: unknown; images?: unknown }>();
+    const images = Array.isArray(b.images)
+      ? b.images.filter((i): i is { name: string; src: string } => !!i && typeof i === 'object' && typeof (i as { name?: unknown }).name === 'string' && typeof (i as { src?: unknown }).src === 'string')
+      : [];
+    const dest = typeof b.dest === 'string' && b.dest ? b.dest : null;
+    const out = await exportZip({ name: String(b.name ?? ''), markdown: typeof b.markdown === 'string' ? b.markdown : '', images }, dest);
+    if (dest) return c.json({ path: out.path, missing: out.missing });
+    return c.body(new Uint8Array(out.bytes!), 200, { 'content-type': 'application/zip', 'x-missing': String(out.missing.length) });
   });
   app.get('/api/custom-prompt', async (c) => c.json({ text: (await loadConfig()).customPrompt ?? '' }));
   app.put('/api/custom-prompt', async (c) => {
