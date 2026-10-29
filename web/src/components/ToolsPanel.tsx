@@ -4,8 +4,9 @@ import { LANGS, setLang, t, useLang, type Lang } from '../lib/i18n';
 import { keepAwakeEnabled, setKeepAwakeEnabled } from '../lib/power';
 import Icon from './Icon';
 import LockSettings from './LockSettings';
+import FormTypesSettings from './FormTypesSettings';
 
-interface Props { onClose: () => void; /** Scroll to the lock screen section (opened from the menu bar). */ focusLock?: boolean }
+interface Props { onClose: () => void; /** Scroll to the lock screen section (opened from the menu bar). */ focusLock?: boolean; /** Scroll to the form type editor (from the prompt form). */ focusFormTypes?: boolean }
 
 function methodLabel(m: string): string {
   if (m === 'official') return t('settings.method.official');
@@ -82,7 +83,7 @@ function CustomPromptSettings() {
   );
 }
 
-export default function ToolsPanel({ onClose, focusLock }: Props) {
+export default function ToolsPanel({ onClose, focusLock, focusFormTypes }: Props) {
   useLang();
   const [info, setInfo] = useState<ToolsInfo | null>(null);
   const [log, setLog] = useState<{ line: string; err: boolean }[]>([]);
@@ -126,6 +127,7 @@ export default function ToolsPanel({ onClose, focusLock }: Props) {
         <div className="p-5 space-y-4 overflow-y-auto">
           <GeneralSettings />
           <CustomPromptSettings />
+          <FormTypesSettings focus={focusFormTypes} />
           <LockSettings focus={focusLock} />
           {!info && <div className="text-sm text-zinc-500">{t('settings.detecting')}</div>}
           {info?.tools.map((tool) => (

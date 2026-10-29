@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { Schedule } from './schedule.js';
+import type { FormType } from '../web/src/lib/promptForm.js';
 
 /** MVC_PORT / MVC_CONFIG_DIR only exist so a test copy of the app can run next to the real one. */
 export const PORT = Number(process.env.MVC_PORT) || 11398;
@@ -66,6 +67,8 @@ export interface Config {
   customPrompt?: string;
   /** Skills / prompts run on a cron schedule (server/scheduler.ts). */
   schedules: Schedule[];
+  /** "Send as form" types edited in Settings; absent while the built-in ones are in use. */
+  formTypes?: FormType[];
 }
 
 export const CUSTOM_PROMPT_MAX = 20000;

@@ -227,6 +227,13 @@ function AppInner() {
     if (key !== lastLockSummary.current) { lastLockSummary.current = key; window.vibe.lock.reportSessions(list); }
   }, [S.sessions]);
   useEffect(() => window.vibe?.lock?.onOpenSettings(() => { setToolsFocusLock(true); setShowTools(true); }), []);
+  const [toolsFocusForms, setToolsFocusForms] = useState(false);
+  // The prompt form's "Edit types" opens Settings at the form type editor.
+  useEffect(() => {
+    const h = () => { setToolsFocusForms(true); setShowTools(true); };
+    window.addEventListener('vibe:open-settings', h);
+    return () => window.removeEventListener('vibe:open-settings', h);
+  }, []);
 
   const isFavorite = !!listing && favorites.favorites.some((f) => f.path === listing.path);
   const toggleFavorite = () => {
@@ -493,7 +500,7 @@ function AppInner() {
             </div>
           </main>
           {contextOpen && panelRoot && <AgentContextDialog cwd={panelRoot} onClose={() => setContextOpen(false)} onOpenFile={(p) => { setContextOpen(false); editor.open(p); setView('ide'); }} />}
-          {showTools && <ToolsPanel focusLock={toolsFocusLock} onClose={() => { setShowTools(false); setToolsFocusLock(false); }} />}
+          {showTools && <ToolsPanel focusLock={toolsFocusLock} focusFormTypes={toolsFocusForms} onClose={() => { setShowTools(false); setToolsFocusLock(false); setToolsFocusForms(false); }} />}
           {quickOpen && project && (
             <QuickOpen cwd={project} onClose={() => setQuickOpen(false)}
               onOpen={(h) => { if (h.isDir) navigate(h.path); else api.stat(h.path).then((e) => { setSelected(e); setRightTab('preview'); setRightCollapsed(false); }).catch(() => {}); }}

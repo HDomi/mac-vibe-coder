@@ -5,7 +5,9 @@ import { t, useLang } from '../lib/i18n';
 import { openLightbox } from './Lightbox';
 import FileIcon from './FileIcon';
 import PromptMenu from './PromptMenu';
+import PromptFormDialog from './PromptFormDialog';
 import { draftKey as draftStorageKey, readDraft, writeDraft } from '../lib/draft';
+import { mergeAttachments, resolveFiles, toAttachment } from '../lib/attachFiles';
 import TaskChips from './TaskChips';
 import type { TaskInfo } from '../lib/agent';
 
@@ -41,7 +43,6 @@ interface Props {
 export interface BackgroundSession { id: string; name: string; state: 'running' | 'waiting' }
 const MAX_BACKGROUND_CHIPS = 3;
 
-const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|heic)$/i;
 const MODE_IDS: { id: PermissionModeId; key: string }[] = [
   { id: 'default', key: 'composer.mode.default' },
   { id: 'acceptEdits', key: 'composer.mode.acceptEdits' },
@@ -50,10 +51,6 @@ const MODE_IDS: { id: PermissionModeId; key: string }[] = [
   { id: 'auto', key: 'composer.mode.auto' },
 ];
 
-function toAttachment(path: string, name?: string): Attachment {
-  const n = name ?? path.split('/').pop() ?? path;
-  return { path, name: n, kind: IMAGE_RE.test(n) ? 'image' : 'file' };
-}
 
 export default function Composer({ cwd, agent, disabled, running, mode, commands = [], onSend, onStop, onMode, pendingAttachments, onConsumeAttachments, background = [], onFocusSession, draftKey, tasks, taskRootLabel, taskRootSub, onShowTaskCard, onStopTask }: Props) {
   useLang();
@@ -64,6 +61,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
   // The draft is kept until the user actually sends it; an empty composer clears it.
   useEffect(() => writeDraft(storageKey, { text, attachments }), [storageKey, text, attachments]);
   const [dragging, setDragging] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [cmdIdx, setCmdIdx] = useState(0);
@@ -126,19 +124,11 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
 
   const addFiles = useCallback(async (files: File[]) => {
     if (!files.length) return;
-    // Electron: resolve real paths without copying. Browser: upload to the attachments folder.
-    const direct: Attachment[] = [];
-    const toUpload: File[] = [];
-    for (const f of files) {
-      const p = window.vibe?.getPathForFile?.(f);
-      if (p) direct.push(toAttachment(p, f.name)); else toUpload.push(f);
-    }
-    let uploaded: Attachment[] = [];
-    if (toUpload.length) {
-      setUploading(true);
-      try { setUploadError(null); uploaded = await api.attach(toUpload); } catch (e) { setUploadError((e as Error).message); } finally { setUploading(false); }
-    }
-    setAttachments((a) => [...a, ...direct, ...uploaded].filter((x, i, arr) => arr.findIndex((y) => y.path === x.path) === i));
+    setUploading(true);
+    const r = await resolveFiles(files);
+    setUploading(false);
+    setUploadError(r.error);
+    setAttachments((a) => mergeAttachments(a, r.attachments));
   }, []);
 
   const onDrop = (e: React.DragEvent) => {
@@ -279,9 +269,15 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
           )}
           <div className="flex-1" />
           {running && <button className="shrink-0 rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs px-3 py-1.5" onClick={onStop}>{t('composer.stop')}</button>}
+          <button className="shrink-0 rounded-md bg-white/5 hover:bg-white/10 text-xs text-zinc-300 px-3 py-1.5 disabled:opacity-40" disabled={disabled} onClick={() => setFormOpen(true)} title={t('composer.formHint')}>{t('composer.form')}</button>
           <button className="shrink-0 rounded-md bg-blue-500/30 hover:bg-blue-500/40 text-xs px-3 py-1.5 disabled:opacity-40" disabled={disabled || uploading || (!text.trim() && !attachments.length)} onClick={submit}>{running ? t('composer.queue') : t('composer.send')}</button>
         </div>
       </div>
+      {formOpen && (
+        <PromptFormDialog cwd={cwd ?? null} draftKey={draftKey} running={!!running} onClose={() => setFormOpen(false)}
+          onSend={(body, atts) => onSend(body, atts)} onInsert={insertText}
+          onEditTypes={() => { setFormOpen(false); window.dispatchEvent(new CustomEvent('vibe:open-settings', { detail: { section: 'formTypes' } })); }} />
+      )}
     </div>
   );
 }

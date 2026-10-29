@@ -37,6 +37,7 @@ import { listRuns, projectScripts, removeRun, startRun, stopRun, subscribeRun, t
 import { killProcess, listeningPorts, netInfo, proxyHttp, type ProxyRequest } from './net.js';
 import type { Scheduler } from './scheduler.js';
 import { ScheduleError } from './schedule.js';
+import { cleanFormTypes, FormTypeError } from '../web/src/lib/promptForm.js';
 
 const WEB_DIST = path.join(REPO_ROOT, 'web', 'dist');
 
@@ -67,7 +68,7 @@ export function createApp(registry?: SessionRegistry, port = PORT, scheduler?: S
 
   app.onError((err, c) => {
     if (err instanceof SyntaxError) return c.json({ error: 'Invalid JSON', code: 'BAD_REQUEST' }, 400);
-    if (err instanceof ScheduleError) return c.json({ error: err.message, code: 'BAD_REQUEST' }, 400);
+    if (err instanceof ScheduleError || err instanceof FormTypeError) return c.json({ error: err.message, code: 'BAD_REQUEST' }, 400);
     if (err instanceof FsError) {
       return c.json({ error: err.message, code: err.code }, err.status as 400);
     }
@@ -218,6 +219,18 @@ export function createApp(registry?: SessionRegistry, port = PORT, scheduler?: S
     const out = await exportZip({ name: String(b.name ?? ''), markdown: typeof b.markdown === 'string' ? b.markdown : '', images }, dest);
     if (dest) return c.json({ path: out.path, missing: out.missing });
     return c.body(new Uint8Array(out.bytes!), 200, { 'content-type': 'application/zip', 'x-missing': String(out.missing.length) });
+  });
+  // "Send as form" types (web/src/lib/promptForm.ts). null = the built-in set; PUT null goes back to it.
+  app.get('/api/form-types', async (c) => c.json({ types: (await loadConfig()).formTypes ?? null }));
+  app.put('/api/form-types', async (c) => {
+    const body = await c.req.json<{ types?: unknown }>();
+    const types = body.types === null ? null : cleanFormTypes(body.types);
+    return c.json({ types: await withConfigLock(async () => {
+      const cfg = await loadConfig();
+      if (types) cfg.formTypes = types; else delete cfg.formTypes;
+      await saveConfig(cfg);
+      return types;
+    }) });
   });
   app.get('/api/custom-prompt', async (c) => c.json({ text: (await loadConfig()).customPrompt ?? '' }));
   app.put('/api/custom-prompt', async (c) => {

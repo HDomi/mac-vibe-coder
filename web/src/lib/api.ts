@@ -1,3 +1,5 @@
+import type { FormType } from './promptForm';
+
 export type PreviewKind = 'markdown' | 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'binary';
 
 export interface Entry {
@@ -177,6 +179,8 @@ export const api = {
     if (!res.ok) throw new ApiError('HTTP', res.statusText, res.status);
     return { blob: await res.blob(), missing: Number(res.headers.get('x-missing') ?? 0) };
   },
+  formTypes: () => req<{ types: FormType[] | null }>('/api/form-types'),
+  saveFormTypes: (types: FormType[] | null) => req<{ types: FormType[] | null }>('/api/form-types', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ types }) }),
   customPrompt: () => req<{ text: string }>('/api/custom-prompt'),
   saveCustomPrompt: (text: string) => req<{ text: string }>('/api/custom-prompt', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }),
   prompts: () => req<SavedPrompt[]>('/api/prompts'),
