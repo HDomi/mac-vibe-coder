@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assemblePrompt, chipPresets, cleanFormTypes, defaultFormTypes, emptyForm, FormTypeError, readFormState, switchType, type FormLabels } from '../web/src/lib/promptForm';
+import { assemblePrompt, chipPresets, cleanFormTypes, defaultFormTypes, emptyForm, FormTypeError, readFormState, switchType, withSkill, type FormLabels } from '../web/src/lib/promptForm';
 
 const tr = (k: string) => k.split('.').pop()!;
 const L: FormLabels = {
@@ -49,6 +49,9 @@ test('prompt form: drafts and saved types are validated', () => {
   assert.deepEqual(r.files, ['a']);
   assert.equal(r.approach, fallback.approach);
   assert.equal(r.verify, fallback.verify);
+  assert.equal(r.skill, '');
+  assert.equal(readFormState({ skill: 'sweet:sweet-commit' }, fallback).skill, 'sweet:sweet-commit');
+  assert.equal(readFormState({ skill: 'bad name; rm' }, fallback).skill, '');
 
   const clean = cleanFormTypes([{ id: 'a b', name: ' Ops ', fields: ['files', 'bogus', 'context'], constraints: ['x', 'x', ' ', 'y'], approach: 'plan', verify: 1 }, { id: 'ab', name: 'Dup id' }]);
   assert.deepEqual(clean[0], { id: 'ab', name: 'Ops', instruction: '', fields: ['context', 'files'], constraints: ['x', 'y'], done: [], verify: false, output: [], approach: 'plan' });
@@ -56,4 +59,14 @@ test('prompt form: drafts and saved types are validated', () => {
   assert.throws(() => cleanFormTypes([]), FormTypeError);
   assert.throws(() => cleanFormTypes([{ name: '' }]), /needs a name/);
   assert.throws(() => cleanFormTypes('x'), FormTypeError);
+});
+
+test('prompt form: a skill leads the message on the command line', () => {
+  const [feature, bugfix] = defaultFormTypes(tr);
+  assert.equal(withSkill('', '## Goal\nx'), '## Goal\nx');
+  assert.equal(withSkill('frontend-design', ' ## Goal\nx '), '/frontend-design ## Goal\nx');
+  assert.equal(withSkill('/weekly-report', ''), '/weekly-report');
+  assert.equal(withSkill('bad name', 'x'), 'x');
+  // Kept when the type changes.
+  assert.equal(switchType({ ...emptyForm(feature), skill: 'review' }, bugfix).skill, 'review');
 });

@@ -41,6 +41,8 @@ export interface FormState {
   output: string[];
   approach: Approach;
   notes: string;
+  /** Claude skill the message invokes as "/skill"; empty for none. Kept across type switches. */
+  skill: string;
 }
 
 /** Headings and fixed sentences of the assembled prompt, in the UI language. `verify` contains "{cmd}". */
@@ -79,7 +81,7 @@ export function chipPresets(tr: (key: string) => string): Record<'constraints' |
 }
 
 export function emptyForm(type: FormType): FormState {
-  return { typeId: type.id, goal: '', context: '', files: [], repro: '', actual: '', expected: '', logs: '', requirements: [], ...typeDefaults(type), notes: '' };
+  return { typeId: type.id, goal: '', context: '', files: [], repro: '', actual: '', expected: '', logs: '', requirements: [], ...typeDefaults(type), notes: '', skill: '' };
 }
 
 /** Switching type keeps everything typed and resets the choices to the new type's defaults. */
@@ -118,6 +120,16 @@ export function assemblePrompt(s: FormState, type: FormType, L: FormLabels, veri
   return out.join('\n\n');
 }
 
+const SKILL_NAME = /^[\w.:-]+$/;
+
+/** The message with a skill: "/skill <prompt>" on one line, as the CLI parses the command name up to the first space. */
+export function withSkill(skill: string, prompt: string): string {
+  const name = skill.trim().replace(/^\//, '');
+  const rest = prompt.trim();
+  if (!name || !SKILL_NAME.test(name)) return rest;
+  return rest ? `/${name} ${rest}` : `/${name}`;
+}
+
 /** Read a stored form draft, dropping anything malformed. */
 export function readFormState(raw: unknown, fallback: FormState): FormState {
   if (!raw || typeof raw !== 'object') return fallback;
@@ -128,6 +140,7 @@ export function readFormState(raw: unknown, fallback: FormState): FormState {
     typeId: str('typeId'), goal: str('goal'), context: str('context'), files: list('files'), repro: str('repro'), actual: str('actual'), expected: str('expected'), logs: str('logs'),
     requirements: list('requirements'), constraints: list('constraints'), done: list('done'), verify: typeof r.verify === 'boolean' ? r.verify : fallback.verify,
     output: list('output'), approach: APPROACHES.includes(r.approach as Approach) ? r.approach as Approach : fallback.approach, notes: str('notes'),
+    skill: SKILL_NAME.test(str('skill')) ? str('skill') : '',
   };
 }
 

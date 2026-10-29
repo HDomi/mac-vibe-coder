@@ -274,7 +274,7 @@ export default function Composer({ cwd, agent, disabled, running, mode, commands
         </div>
       </div>
       {formOpen && (
-        <PromptFormDialog cwd={cwd ?? null} draftKey={draftKey} running={!!running} onClose={() => setFormOpen(false)}
+        <PromptFormDialog cwd={cwd ?? null} agent={agent} draftKey={draftKey} running={!!running} onClose={() => setFormOpen(false)}
           onSend={(body, atts) => onSend(body, atts)} onInsert={insertText}
           onEditTypes={() => { setFormOpen(false); window.dispatchEvent(new CustomEvent('vibe:open-settings', { detail: { section: 'formTypes' } })); }} />
       )}

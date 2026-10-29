@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../lib/api';
+import { api, type AgentContext } from '../lib/api';
 import type { Attachment } from '../lib/agent';
 import { mergeAttachments, resolveFiles } from '../lib/attachFiles';
 import { formLabels, useFormTypes } from '../lib/formTypes';
 import { t, useLang } from '../lib/i18n';
-import { APPROACHES, assemblePrompt, chipPresets, emptyForm, readFormState, switchType, type FormField, type FormState } from '../lib/promptForm';
+import { APPROACHES, assemblePrompt, chipPresets, emptyForm, readFormState, switchType, withSkill, type FormField, type FormState } from '../lib/promptForm';
 import FileIcon from './FileIcon';
 import Icon from './Icon';
 
@@ -14,10 +14,12 @@ const storeKey = (k: string) => `vibe.form.${k}`;
 /**
  * "Send as form": fill in fields shaped by a form type, watch the prompt they assemble into, then send it
  * (queued if the agent is busy) or drop it into the composer to edit. Separate from the composer's own text;
- * the form keeps its draft per session until it is sent.
+ * the form keeps its draft per session until it is sent. In a Claude session a skill can be picked; the message
+ * then starts with "/skill".
  */
-export default function PromptFormDialog({ cwd, draftKey, running, onSend, onInsert, onClose, onEditTypes }: {
+export default function PromptFormDialog({ cwd, agent, draftKey, running, onSend, onInsert, onClose, onEditTypes }: {
   cwd: string | null;
+  agent?: 'claude' | 'codex';
   draftKey?: string;
   running: boolean;
   onSend: (text: string, attachments: Attachment[]) => void;
@@ -34,6 +36,8 @@ export default function PromptFormDialog({ cwd, draftKey, running, onSend, onIns
   const [override, setOverride] = useState<string | null>(null);
   const [verifyCmd, setVerifyCmd] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [skills, setSkills] = useState<AgentContext['skills'] | null>(null);
+  const skillsOn = agent === 'claude';
 
   // The saved draft once the types are known; a type that was deleted falls back to the first one.
   useEffect(() => {
@@ -47,11 +51,18 @@ export default function PromptFormDialog({ cwd, draftKey, running, onSend, onIns
     try { localStorage.setItem(key, JSON.stringify({ state, attachments })); } catch { /* ignore */ }
   }, [key, state, attachments]);
   useEffect(() => { if (cwd) api.projectVerify(cwd).then((v) => setVerifyCmd(v.command?.trim() || null)).catch(() => {}); }, [cwd]);
+  useEffect(() => {
+    if (!skillsOn) return;
+    let live = true;
+    api.agentContext(cwd ?? '~').then((c) => { if (live) setSkills(c.skills.filter((s) => s.agent === 'claude')); }).catch(() => { if (live) setSkills([]); });
+    return () => { live = false; };
+  }, [cwd, skillsOn]);
 
   const type = (state && types.find((x) => x.id === state.typeId)) ?? types[0];
-  const prompt = useMemo(() => (state && type ? assemblePrompt(state, type, formLabels(), verifyCmd) : ''), [state, type, verifyCmd]);
+  const skill = skillsOn ? state?.skill ?? '' : '';
+  const prompt = useMemo(() => (state && type ? withSkill(skill, assemblePrompt(state, type, formLabels(), verifyCmd)) : ''), [state, type, verifyCmd, skill]);
   const text = override ?? prompt;
-  const canSend = !!text.trim() && (override !== null || !!state?.goal.trim());
+  const canSend = !!text.trim() && (override !== null || !!state?.goal.trim() || !!skill);
 
   const finish = (send: boolean) => {
     if (!canSend) return;
@@ -101,7 +112,8 @@ export default function PromptFormDialog({ cwd, draftKey, running, onSend, onIns
         <div className="flex-1 min-h-0 flex">
           <div className="flex-1 min-w-0 overflow-y-auto px-5 py-4 space-y-4">
             {type.instruction && <div className="rounded-md bg-white/[0.03] border border-white/5 px-3 py-2 text-[11.5px] text-zinc-400 whitespace-pre-wrap">{type.instruction}</div>}
-            <Field label={t('form.f.goal')} required>
+            {skillsOn && <Field label={t('form.f.skill')}><SkillInput skills={skills} value={state.skill} onChange={(v) => set('skill', v)} /></Field>}
+            <Field label={t('form.f.goal')} required={!skill}>
               <input autoFocus className={box} value={state.goal} onChange={(e) => set('goal', e.target.value)} placeholder={t('form.p.goal')} />
             </Field>
             {has('context') && <Field label={t('form.f.context')}><Area value={state.context} onChange={(v) => set('context', v)} placeholder={t('form.p.context')} /></Field>}
@@ -230,6 +242,60 @@ function ListInput({ items, onChange, placeholder }: { items: string[]; onChange
         <input className={box} value={draft} placeholder={placeholder} onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); add(); } }} onBlur={add} />
       </div>
+    </div>
+  );
+}
+
+/** One Claude skill (project, global or plugin), picked from a search over name and description. */
+function SkillInput({ skills, value, onChange }: { skills: AgentContext['skills'] | null; value: string; onChange: (v: string) => void }) {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const [idx, setIdx] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const hits = useMemo(() => {
+    const needle = q.trim().toLowerCase().replace(/^\//, '');
+    return (skills ?? []).filter((s) => !needle || `${s.name} ${s.description}`.toLowerCase().includes(needle));
+  }, [skills, q]);
+  useEffect(() => { setIdx(0); }, [q]);
+  useEffect(() => { listRef.current?.children[idx]?.scrollIntoView({ block: 'nearest' }); }, [idx]);
+  const pick = (name: string) => { onChange(name); setQ(''); setOpen(false); };
+
+  if (value) {
+    const s = skills?.find((x) => x.name === value);
+    return (
+      <div className="flex items-start gap-2 rounded-md bg-violet-500/10 border border-violet-400/20 px-2.5 py-1.5">
+        <span className="font-mono text-violet-200 shrink-0">/{value}</span>
+        {s && <span className="shrink-0 mt-0.5 rounded bg-white/5 px-1.5 text-[10px] text-zinc-400">{t(`context.scope.${s.scope}`)}</span>}
+        <span className="flex-1 min-w-0 truncate text-zinc-500" title={s?.description}>{s ? s.description : skills ? t('form.skillMissing') : ''}</span>
+        <button className="shrink-0 text-zinc-500 hover:text-white" onClick={() => onChange('')} title={t('form.skillClear')}><Icon name="close" size={11} /></button>
+      </div>
+    );
+  }
+  return (
+    <div className="relative">
+      <input className={box} value={q} placeholder={skills && !skills.length ? t('form.skillNone') : t('form.p.skill')} disabled={!!skills && !skills.length}
+        onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === 'ArrowDown' && hits.length) { e.preventDefault(); setOpen(true); setIdx((i) => (i + 1) % hits.length); }
+          if (e.key === 'ArrowUp' && hits.length) { e.preventDefault(); setIdx((i) => (i - 1 + hits.length) % hits.length); }
+          if (e.key === 'Enter' && open && hits[idx]) { e.preventDefault(); pick(hits[idx].name); }
+          if (e.key === 'Escape' && open && q) { e.preventDefault(); setQ(''); setOpen(false); }
+        }} />
+      {open && hits.length > 0 && (
+        <div ref={listRef} className="absolute left-0 right-0 top-full mt-1 z-10 max-h-72 overflow-y-auto rounded-lg border border-white/10 bg-[#171a22] shadow-xl py-1">
+          {hits.map((s, i) => (
+            <div key={`${s.scope}:${s.name}`} onMouseEnter={() => setIdx(i)} onMouseDown={(e) => { e.preventDefault(); pick(s.name); }}
+              className={`px-3 py-1.5 cursor-pointer ${i === idx ? 'bg-blue-500/20' : ''}`}>
+              <div className="flex items-center gap-2">
+                <span className={`font-mono text-[12px] ${i === idx ? 'text-white' : 'text-zinc-200'}`}>/{s.name}</span>
+                <span className="rounded bg-white/5 px-1.5 text-[10px] text-zinc-400">{t(`context.scope.${s.scope}`)}</span>
+              </div>
+              {s.description && <div className="text-[11px] text-zinc-500 line-clamp-2">{s.description}</div>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
