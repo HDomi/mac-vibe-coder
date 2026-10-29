@@ -268,7 +268,7 @@ export default function FileTree({ root, activePath, onAttach }: Props) {
             const isActive = activePath === e.path;
             const open = e.isDir && expanded.has(e.path);
             return (
-              <div key={e.path} style={{ ...base, color: isSel || isActive ? M.accent : e.hidden ? M.faint : undefined, background: isSel ? '#00000040' : undefined }}
+              <div key={e.path} style={{ ...base, color: isSel || isActive ? M.accent : e.hidden ? M.faint : undefined, background: isSel ? '#ffffff0d' : undefined }}
                 className="flex items-center gap-1.5 pr-2 cursor-default hover:bg-white/[0.04] hover:text-white"
                 title={e.path}
                 onClick={() => { setSelected(e.path); if (e.isDir) toggle(e.path); else openFile(e, true); }}

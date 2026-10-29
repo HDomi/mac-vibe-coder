@@ -3,22 +3,25 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 
 /**
- * Community Material Theme — Darker High Contrast (Equinusocio.vsc-community-material-theme 1.4.6,
- * Apache-2.0), ported to CodeMirror. Colors are the theme's own `colors` / `tokenColors` values.
+ * Syntax colors from Community Material Theme — Darker High Contrast (Equinusocio.vsc-community-material-theme
+ * 1.4.6, Apache-2.0), ported to CodeMirror. The surfaces (backgrounds, borders, gutter, selection) use the
+ * app's own navy palette instead of the theme's grays, so IDE mode matches the rest of the window.
  */
 export const M = {
-  bg: '#212121',
-  sidebar: '#1a1a1a',
+  /** Same as the page background (index.css) and the chat area. */
+  bg: '#0b0d12',
+  /** Same as the VIBE sidebar and the title bar. */
+  sidebar: '#0e1117',
   fg: '#EEFFFF',
-  dim: '#848484',
-  faint: '#616161',
-  lineNumber: '#424242',
-  border: '#00000060',
+  dim: '#8b92a1',
+  faint: '#5d6575',
+  lineNumber: '#3a4150',
+  border: '#ffffff1a',
   accent: '#80CBC4',
   cursor: '#FFCC00',
-  selection: '#61616150',
-  input: '#2B2B2B',
-  comment: '#4A4A4A',
+  selection: '#7aa2f733',
+  input: '#171a22',
+  comment: '#545d6e',
   purple: '#C792EA',
   cyan: '#89DDFF',
   green: '#C3E88D',
@@ -37,10 +40,10 @@ const chrome = EditorView.theme({
   '.cm-content': { caretColor: M.cursor, padding: '4px 0' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: M.cursor, borderLeftWidth: '2px' },
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': { backgroundColor: M.selection },
-  '.cm-activeLine': { backgroundColor: '#00000050' },
+  '.cm-activeLine': { backgroundColor: '#ffffff08' },
   '.cm-selectionMatch': { backgroundColor: '#FFCC0020' },
-  '.cm-searchMatch': { backgroundColor: '#00000050', outline: '1px solid #ffffff50' },
-  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: '#000000', outline: `1px solid ${M.accent}` },
+  '.cm-searchMatch': { backgroundColor: '#ffffff10', outline: '1px solid #ffffff50' },
+  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: '#ffffff1a', outline: `1px solid ${M.accent}` },
   '&.cm-focused .cm-matchingBracket': { backgroundColor: M.bg, outline: '1px solid #FFCC0050' },
   '&.cm-focused .cm-nonmatchingBracket': { outline: `1px solid ${M.red}70` },
   '.cm-gutters': { backgroundColor: M.bg, color: M.lineNumber, border: 'none' },
@@ -48,8 +51,8 @@ const chrome = EditorView.theme({
   '.cm-activeLineGutter': { backgroundColor: 'transparent', color: M.dim },
   '.cm-foldGutter .cm-gutterElement': { color: M.faint, padding: '0 4px' },
   '.cm-foldPlaceholder': { backgroundColor: 'transparent', border: `1px solid ${M.lineNumber}`, color: M.dim },
-  '.cm-tooltip': { backgroundColor: M.bg, border: '1px solid #FFFFFF10', color: M.fg },
-  '.cm-tooltip-autocomplete > ul > li[aria-selected]': { backgroundColor: '#00000050', color: M.fg },
+  '.cm-tooltip': { backgroundColor: M.input, border: '1px solid #FFFFFF10', color: M.fg },
+  '.cm-tooltip-autocomplete > ul > li[aria-selected]': { backgroundColor: '#7aa2f733', color: M.fg },
   '.cm-completionMatchedText': { color: M.accent, textDecoration: 'none' },
   '.cm-panels': { backgroundColor: M.sidebar, color: M.fg },
   '.cm-panels.cm-panels-top': { borderBottom: `1px solid ${M.border}` },
@@ -58,7 +61,7 @@ const chrome = EditorView.theme({
   '.cm-panel.cm-search label': { color: M.dim, fontSize: '11px' },
   '.cm-textfield': { backgroundColor: M.input, border: '1px solid #FFFFFF10', borderRadius: '4px', color: M.fg, padding: '2px 6px', fontSize: '12px' },
   '.cm-textfield:focus': { outline: `1px solid ${M.accent}` },
-  '.cm-button': { backgroundImage: 'none', backgroundColor: '#61616150', border: 'none', borderRadius: '4px', color: M.fg, fontSize: '11px', padding: '2px 8px' },
+  '.cm-button': { backgroundImage: 'none', backgroundColor: '#ffffff14', border: 'none', borderRadius: '4px', color: M.fg, fontSize: '11px', padding: '2px 8px' },
   '.cm-panel button[name=close]': { color: M.dim },
   '.cm-specialChar': { color: M.red },
   '.cm-trailingSpace': { backgroundColor: '#FF537030' },
