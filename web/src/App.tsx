@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { backgroundState, displayTitle, inProject, pendingRequests, sortSessions, type ChatSession } from './lib/chatStore';
-import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing, type RecentSession } from './lib/api';
+import { api, ApiError, type Entry, type Favorites, type HomeInfo, type Listing, type RecentSession, type ScheduleRun } from './lib/api';
 import { agentClient, type Attachment } from './lib/agent';
 import { reconnectTerminals, terminalsBusy } from './lib/terminals';
 import { keepAwakeEnabled, workInProgress } from './lib/power';
@@ -12,6 +12,7 @@ import Preview from './components/Preview';
 import { editor } from './lib/editor/store';
 import ToolsPanel from './components/ToolsPanel';
 import UsageBar, { type ViewMode } from './components/UsageBar';
+import { useScheduleWatch } from './lib/scheduleWatch';
 import ChatPanel, { type PairOptions, type StartOptions } from './components/ChatPanel';
 import type { BackgroundSession } from './components/Composer';
 import TerminalPanel from './components/TerminalPanel';
@@ -38,6 +39,7 @@ import SessionCompanions from './components/SessionCompanions';
 // CodeMirror and the explorer load the first time IDE mode is shown; the toolbox likewise.
 const EditorPanel = lazy(() => import('./components/editor/EditorPanel'));
 const ToolboxView = lazy(() => import('./components/toolbox/ToolboxView'));
+const ScheduleView = lazy(() => import('./components/ScheduleView'));
 
 const LS_CWD = 'vibe.cwd';
 const LS_PROJECT = 'vibe.project';
@@ -174,6 +176,7 @@ function AppInner() {
   const approveRef = useRef<(sessionId: string, requestId: string, decision: 'allow' | 'allow_always' | 'deny') => void>(() => {});
   approveRef.current = S.approve;
   focusSession.current = (id: string) => {
+    if (id.startsWith('schedule:')) { const run = scheduleRuns.current.get(id.slice(9)); if (run) openRun(run); return; }
     const s = S.sessions[id];
     if (!s) return;
     if (view === 'agent') setAgentActive(id);
@@ -280,6 +283,21 @@ function AppInner() {
     if (s.cwd && s.cwd !== project) openProject(s.cwd);
     void start(dir, { agent: s.agent, resume: s.sessionId, title: s.title || undefined });
   };
+  // A scheduled run's session: attach to it while the server still has it, otherwise resume the conversation.
+  const openRun = (r: ScheduleRun) => {
+    void (async () => {
+      const live = r.sessionId ? (await api.liveSessions().catch(() => [])).some((x) => x.id === r.sessionId) : false;
+      setView('vibe');
+      if (r.cwd !== project) openProject(r.cwd);
+      if (live && r.sessionId) {
+        S.adopt({ id: r.sessionId, cwd: r.cwd, agent: r.agent, agentSessionId: r.agentSessionId, title: r.name });
+        setActiveSession(r.sessionId);
+      } else if (r.agentSessionId) {
+        resumeSession({ agent: r.agent, sessionId: r.agentSessionId, title: r.name, cwd: r.cwd, lastModified: r.endedAt ?? r.startedAt });
+      }
+    })();
+  };
+  const scheduleRuns = useScheduleWatch();
   const attach = (entries: Entry[]) => {
     setPendingAttachments((prev) => [...prev, ...entries.filter((e) => !e.isDir).map((e) => ({ path: e.path, name: e.name, kind: IMAGE_RE.test(e.name) ? 'image' as const : 'file' as const }))]);
     if (!session && project) setActiveSession(null);
@@ -305,8 +323,8 @@ function AppInner() {
       // The editor owns ⌘W (close tab), ⌘/ (toggle comment), ⌘S and ⇧⌘K (delete line) while it has focus.
       const inEditor = !!(e.target as HTMLElement)?.closest?.('[data-editor-scope]');
       if (inEditor && (k === 'w' || k === '/' || k === 's' || k === 'k')) return;
-      // Tools mode has no sessions or panels; its own ⌘1-9 switch tools (see ToolboxView).
-      if (view === 'tools') return;
+      // Tools mode has no sessions or panels; its own ⌘1-9 switch tools (see ToolboxView). Schedules have none either.
+      if (view === 'tools' || view === 'schedule') return;
       if (view === 'ide') {
         // No chat or right panel on screen: ⌘W closes an editor tab (never a hidden session), ⌘B the explorer.
         if (k === 'w') { e.preventDefault(); if (editor.active) editor.close(editor.active); return; }
@@ -346,6 +364,8 @@ function AppInner() {
           <AgentView home={home?.home ?? '~'} S={S} active={agentActive} setActive={setAgentActive} />
         ) : view === 'tools' ? (
           <Suspense fallback={null}><ToolboxView /></Suspense>
+        ) : view === 'schedule' ? (
+          <Suspense fallback={null}><ScheduleView defaultCwd={project} projects={[...favorites.favorites.map((f) => f.path), ...recent]} onOpenRun={openRun} /></Suspense>
         ) : view === 'ide' ? (
           <div className="flex-1 flex min-h-0 relative">
             {project

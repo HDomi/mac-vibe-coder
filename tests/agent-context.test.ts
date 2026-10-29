@@ -27,6 +27,7 @@ test('agent context: docs, skills, hooks and MCP from project and user level', a
     assert.deepEqual(ctx.mcp.map((m) => [m.agent, m.name, m.command]), [['claude', 'db', 'npx db-mcp'], ['codex', 'figma', 'http https://f.example/mcp'], ['codex', 'local-fs', 'node fs.js --root']]);
     assert.deepEqual(codexMcp('', 'f'), []);
     assert.deepEqual(skillMeta('no front matter'), {});
+    assert.deepEqual(skillMeta('---\nname: sweet\ndescription: >\n  Short and\n  kind.\nlicense: MIT\n---\n'), { name: 'sweet', description: 'Short and kind.' });
   } finally { rmSync(proj, { recursive: true, force: true }); rmSync(home, { recursive: true, force: true }); }
 });
 

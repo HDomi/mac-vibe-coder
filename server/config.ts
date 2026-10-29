@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import type { Schedule } from './schedule.js';
 
 /** MVC_PORT / MVC_CONFIG_DIR only exist so a test copy of the app can run next to the real one. */
 export const PORT = Number(process.env.MVC_PORT) || 11398;
@@ -63,11 +64,13 @@ export interface Config {
    * start (Claude: system prompt append, Codex: thread developer instructions), so it costs no extra tokens per turn.
    */
   customPrompt?: string;
+  /** Skills / prompts run on a cron schedule (server/scheduler.ts). */
+  schedules: Schedule[];
 }
 
 export const CUSTOM_PROMPT_MAX = 20000;
 
-const DEFAULT: Config = { favorites: [], groups: [], recent: [], pinnedSessions: [], prompts: [], projects: [] };
+const DEFAULT: Config = { favorites: [], groups: [], recent: [], pinnedSessions: [], prompts: [], projects: [], schedules: [] };
 
 export class ConfigStore {
   private pending: Promise<unknown> = Promise.resolve();

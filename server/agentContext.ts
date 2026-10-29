@@ -9,7 +9,7 @@ import { resolvePath } from './fs.js';
  * instruction files through the normal file API.
  */
 
-type Scope = 'project' | 'user';
+type Scope = 'project' | 'user' | 'plugin';
 type Agent = 'claude' | 'codex';
 
 export interface ContextDoc { scope: Scope; agent: Agent; path: string; exists: boolean; content: string; mtime: number | null }
@@ -39,11 +39,23 @@ async function readJson(file: string): Promise<Record<string, unknown> | null> {
 export function skillMeta(text: string): { name?: string; description?: string } {
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return {};
-  const get = (k: string) => m[1].match(new RegExp(`^${k}:\\s*(.*)$`, 'm'))?.[1]?.trim().replace(/^["']|["']$/g, '');
+  const lines = m[1].split(/\r?\n/);
+  const get = (k: string) => {
+    const i = lines.findIndex((l) => l.startsWith(`${k}:`));
+    if (i < 0) return undefined;
+    const v = lines[i].slice(k.length + 1).trim();
+    // YAML block scalar ("description: >" / "|-"): the value is the indented lines that follow.
+    if (/^[>|][-+]?$/.test(v)) {
+      const body: string[] = [];
+      for (const l of lines.slice(i + 1)) { if (l.trim() && !/^\s/.test(l)) break; body.push(l.trim()); }
+      return body.join(v[0] === '>' ? ' ' : '\n').replace(/\s+$/, '').trim();
+    }
+    return v.replace(/^["']|["']$/g, '');
+  };
   return { name: get('name'), description: get('description') };
 }
 
-async function listSkills(scope: Scope, agent: Agent, dir: string): Promise<ContextSkill[]> {
+async function listSkills(scope: Scope, agent: Agent, dir: string, prefix = ''): Promise<ContextSkill[]> {
   const out: ContextSkill[] = [];
   const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const e of entries) {
@@ -52,9 +64,21 @@ async function listSkills(scope: Scope, agent: Agent, dir: string): Promise<Cont
     const text = await fs.readFile(file, 'utf8').catch(() => null);
     if (text === null) continue;
     const meta = skillMeta(text.slice(0, 4000));
-    out.push({ scope, agent, name: meta.name || e.name, description: meta.description ?? '', path: file });
+    out.push({ scope, agent, name: prefix + (meta.name || e.name), description: meta.description ?? '', path: file });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Skills of the Claude plugins enabled in user settings, named "plugin:skill" as the CLI invokes them. */
+async function pluginSkills(claudeHome: string): Promise<ContextSkill[]> {
+  const [installed, settings] = await Promise.all([readJson(path.join(claudeHome, 'plugins', 'installed_plugins.json')), readJson(path.join(claudeHome, 'settings.json'))]);
+  const enabled = (settings?.enabledPlugins ?? {}) as Record<string, unknown>;
+  const plugins = (installed?.plugins ?? {}) as Record<string, Array<{ installPath?: unknown }>>;
+  const lists = Object.entries(plugins).filter(([key]) => enabled[key] === true).map(([key, installs]) => {
+    const dir = Array.isArray(installs) ? installs.find((i) => typeof i?.installPath === 'string')?.installPath as string | undefined : undefined;
+    return dir ? listSkills('plugin', 'claude', path.join(dir, 'skills'), `${key.split('@')[0]}:`) : Promise.resolve([]);
+  });
+  return (await Promise.all(lists)).flat();
 }
 
 function hooksOf(scope: Scope, file: string, json: Record<string, unknown> | null): ContextHook[] {
@@ -101,6 +125,7 @@ export async function agentContext(cwd: string): Promise<AgentContext> {
   const skills = (await Promise.all([
     listSkills('project', 'claude', path.join(root, '.claude', 'skills')),
     listSkills('user', 'claude', path.join(claudeHome, 'skills')),
+    pluginSkills(claudeHome),
     listSkills('project', 'codex', path.join(root, '.codex', 'skills')),
     listSkills('user', 'codex', path.join(codexHome, 'skills')),
   ])).flat();

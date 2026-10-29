@@ -4,7 +4,7 @@ import { loadUsage, useUsage } from '../lib/usageStore';
 import { t, useLang } from '../lib/i18n';
 import Icon from './Icon';
 
-export type ViewMode = 'vibe' | 'ide' | 'agent' | 'tools';
+export type ViewMode = 'vibe' | 'ide' | 'agent' | 'tools' | 'schedule';
 
 interface Props { mode: ViewMode; onMode: (m: ViewMode) => void; companions?: boolean; onCompanions?: () => void }
 
@@ -84,7 +84,7 @@ export default function UsageBar({ mode, onMode, companions, onCompanions }: Pro
       <div className={`shrink-0 flex items-center ${windowButtons ? 'pl-[80px]' : 'pl-3'}`}>
         {windowButtons && <span className="w-px h-[18px] bg-white/10 mr-3" aria-hidden="true" />}
         <div className="titlebar-nodrag flex items-center rounded-md bg-white/5 p-0.5">
-          {(['vibe', 'ide', 'agent', 'tools'] as ViewMode[]).map((m) => (
+          {(['vibe', 'ide', 'agent', 'tools', 'schedule'] as ViewMode[]).map((m) => (
             <button key={m} onClick={() => onMode(m)}
               className={`px-3 py-0.5 rounded text-[11px] font-medium transition-colors ${mode === m ? 'bg-white/15 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
               {t(`usage.${m}`)}

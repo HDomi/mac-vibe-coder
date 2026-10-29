@@ -35,13 +35,15 @@ import { exportZip } from './exportZip.js';
 import { checkWorktree, createWorktree, listWorktrees, mergeWorktree, removeWorktree, worktreeStatus } from './worktree.js';
 import { listRuns, projectScripts, removeRun, startRun, stopRun, subscribeRun, type RunInfo, type RunLine } from './runner.js';
 import { killProcess, listeningPorts, netInfo, proxyHttp, type ProxyRequest } from './net.js';
+import type { Scheduler } from './scheduler.js';
+import { ScheduleError } from './schedule.js';
 
 const WEB_DIST = path.join(REPO_ROOT, 'web', 'dist');
 
 // Version/commit of the running build (dist/build-info.json), not of the checkout.
 const BUILD = readBuildInfo();
 
-export function createApp(registry?: SessionRegistry, port = PORT) {
+export function createApp(registry?: SessionRegistry, port = PORT, scheduler?: Scheduler) {
   const app = new Hono();
 
   // Reject requests that a web page in the user's browser could forge (see guard.ts).
@@ -65,6 +67,7 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
 
   app.onError((err, c) => {
     if (err instanceof SyntaxError) return c.json({ error: 'Invalid JSON', code: 'BAD_REQUEST' }, 400);
+    if (err instanceof ScheduleError) return c.json({ error: err.message, code: 'BAD_REQUEST' }, 400);
     if (err instanceof FsError) {
       return c.json({ error: err.message, code: err.code }, err.status as 400);
     }
@@ -409,6 +412,22 @@ export function createApp(registry?: SessionRegistry, port = PORT) {
 
   // Instruction files, skills, hooks and MCP servers the agents see in a project (agentContext.ts).
   app.get('/api/agent-context', async (c) => c.json(await agentContext(c.req.query('cwd') ?? '~')));
+
+  // Scheduled skill / prompt runs (scheduler.ts). Every change answers with the fresh snapshot.
+  const sched = () => { if (!scheduler) throw new ScheduleError('Scheduling is not available on this server'); return scheduler; };
+  app.get('/api/schedules', async (c) => c.json(await sched().snapshot()));
+  app.post('/api/schedules', async (c) => { await sched().create(await c.req.json()); return c.json(await sched().snapshot()); });
+  app.patch('/api/schedules/:id', async (c) => { await sched().update(c.req.param('id'), await c.req.json()); return c.json(await sched().snapshot()); });
+  app.delete('/api/schedules/:id', async (c) => { await sched().remove(c.req.param('id')); return c.json(await sched().snapshot()); });
+  app.post('/api/schedules/:id/run', async (c) => { await sched().runNow(c.req.param('id')); return c.json(await sched().snapshot()); });
+  app.delete('/api/schedule-runs', async (c) => { sched().clearRuns(); return c.json(await sched().snapshot()); });
+  // Installs or removes the wake helper (schedulePower.ts) behind the system's admin password prompt.
+  app.post('/api/schedules/wake-helper', async (c) => {
+    const b = await c.req.json<{ install?: unknown; prompt?: unknown }>();
+    const result = await sched().power.setHelper(b.install === true, typeof b.prompt === 'string' && b.prompt ? b.prompt.slice(0, 300) : 'Mac Vibe Coder wants to wake this Mac for scheduled runs.');
+    await sched().tick();
+    return c.json({ result, ...(await sched().snapshot()) });
+  });
 
   // Task backlog per project; the client runs it (see web/src/lib/backlog.ts).
   app.get('/api/backlog/all', async (c) => c.json(await allBacklogs()));

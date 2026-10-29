@@ -71,10 +71,25 @@ export interface WorktreeStatus { exists: boolean; dirty: string[]; ahead: numbe
 export interface BacklogItem { id: string; text: string; status: 'todo' | 'running' | 'done' | 'failed' | 'stopped'; sessionId?: string; createdAt: number; startedAt?: number; endedAt?: number }
 export interface Backlog { items: BacklogItem[]; auto: boolean; agent: 'claude' | 'codex'; mode: string; worktree: boolean }
 
+export type SchedulePower = 'none' | 'awake' | 'wake';
+export type ScheduleRunStatus = 'running' | 'waiting' | 'done' | 'failed' | 'missed' | 'skipped';
+export interface Schedule {
+  id: string; name: string; cwd: string; agent: 'claude' | 'codex'; skill: string; prompt: string; cron: string;
+  permissionMode: string; model?: string; enabled: boolean; graceMinutes: number; power: SchedulePower; createdAt: number; cursor: number;
+  /** Next run time (server computed); null when disabled or never. */
+  next: number | null;
+}
+export interface ScheduleRun {
+  id: string; scheduleId: string; name: string; cwd: string; agent: 'claude' | 'codex'; trigger: 'schedule' | 'manual';
+  scheduledFor: number; startedAt: number; endedAt?: number; status: ScheduleRunStatus; sessionId?: string; agentSessionId?: string; error?: string; costUsd?: number;
+}
+export interface ScheduleSnapshot { schedules: Schedule[]; runs: ScheduleRun[]; power: { helper: boolean; awake: boolean; wakeAt: number | null; error: string | null } }
+export type ScheduleInput = Partial<Omit<Schedule, 'id' | 'next' | 'createdAt' | 'cursor'>>;
+
 export interface ContextDoc { scope: 'project' | 'user'; agent: 'claude' | 'codex'; path: string; exists: boolean; content: string; mtime: number | null }
 export interface AgentContext {
   docs: ContextDoc[];
-  skills: { scope: 'project' | 'user'; agent: 'claude' | 'codex'; name: string; description: string; path: string }[];
+  skills: { scope: 'project' | 'user' | 'plugin'; agent: 'claude' | 'codex'; name: string; description: string; path: string }[];
   hooks: { scope: 'project' | 'user'; file: string; event: string; matcher: string; command: string }[];
   mcp: { scope: 'project' | 'user'; agent: 'claude' | 'codex'; name: string; command: string; file: string }[];
 }
@@ -187,6 +202,14 @@ export const api = {
   gitCommit: (cwd: string, message: string) =>
     req<{ ok: boolean; output: string }>('/api/git/commit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, message }) }),
   agentContext: (cwd: string) => req<AgentContext>(`/api/agent-context?cwd=${q(cwd)}`),
+  liveSessions: () => req<{ id: string; agent: 'claude' | 'codex'; cwd: string; createdAt: number; agentSessionId?: string }[]>('/api/sessions'),
+  schedules: () => req<ScheduleSnapshot>('/api/schedules'),
+  scheduleCreate: (body: ScheduleInput) => post<ScheduleSnapshot>('/api/schedules', body),
+  scheduleUpdate: (id: string, body: ScheduleInput) => req<ScheduleSnapshot>(`/api/schedules/${q(id)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+  scheduleDelete: (id: string) => req<ScheduleSnapshot>(`/api/schedules/${q(id)}`, { method: 'DELETE' }),
+  scheduleRunNow: (id: string) => post<ScheduleSnapshot>(`/api/schedules/${q(id)}/run`, {}),
+  scheduleClearRuns: () => req<ScheduleSnapshot>('/api/schedule-runs', { method: 'DELETE' }),
+  scheduleWakeHelper: (install: boolean, prompt: string) => post<ScheduleSnapshot & { result: 'ok' | 'cancelled' }>('/api/schedules/wake-helper', { install, prompt }),
   backlogAll: () => req<{ cwd: string; backlog: Backlog }[]>('/api/backlog/all'),
   saveBacklog: (cwd: string, backlog: Backlog) => req<Backlog>('/api/backlog', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cwd, backlog }) }),
   worktreeList: (cwd: string) => req<WorktreeInfo[]>(`/api/worktree/list?cwd=${q(cwd)}`),

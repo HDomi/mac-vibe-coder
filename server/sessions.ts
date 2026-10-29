@@ -69,6 +69,23 @@ export class SessionRegistry {
   runningCount() { return [...this.entries.values()].filter((e) => !e.closed && e.running).length; }
 
   async start(cmd: Extract<ClientCommand, { type: 'session.start' }>, ws: WebSocket): Promise<AgentSession> {
+    return this.create(cmd, ws);
+  }
+
+  /**
+   * A session nobody is watching yet (scheduled runs). It is started right away; a window can attach to it
+   * later like any other live session.
+   */
+  async startHeadless(cmd: Omit<Extract<ClientCommand, { type: 'session.start' }>, 'type'>): Promise<AgentSession> {
+    const session = await this.create({ ...cmd, type: 'session.start' }, null);
+    session.start();
+    return session;
+  }
+
+  /** Windows currently showing the session. */
+  watchers(id: string) { return this.entries.get(id)?.subscribers.size ?? 0; }
+
+  private async create(cmd: Extract<ClientCommand, { type: 'session.start' }>, ws: WebSocket | null): Promise<AgentSession> {
     if (this.closing) throw new Error('Server is shutting down');
     let session: ClaudeSession | CodexSession;
     // Read at start so a prompt edited in Settings reaches the next session without a restart.
@@ -84,8 +101,8 @@ export class SessionRegistry {
     } else {
       throw new Error(`Unknown agent: ${cmd.agent}`);
     }
-    if (this.closing || ws.readyState !== ws.OPEN) throw new Error('Connection closed before session started');
-    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set([ws]), createdAt: Date.now(), lastActivity: Date.now(), running: false, closed: false, bufferBytes: 0, touched: false, sendChain: Promise.resolve(), turnPaths: new Set(), turnShell: false };
+    if (this.closing || (ws && ws.readyState !== ws.OPEN)) throw new Error('Connection closed before session started');
+    const entry: Entry = { session, buffer: [], seq: 0, subscribers: new Set(ws ? [ws] : []), createdAt: Date.now(), lastActivity: Date.now(), running: false, closed: false, bufferBytes: 0, touched: false, sendChain: Promise.resolve(), turnPaths: new Set(), turnShell: false };
     this.entries.set(session.id, entry);
     session.onEvent((event) => this.broadcast(entry, event));
     return session;

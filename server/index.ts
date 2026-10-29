@@ -10,14 +10,17 @@ import { setShutdownHandler } from './lifecycle.js';
 import { attachBrowser, browser } from './browser.js';
 import { RESTART_EXIT_CODE } from './updater.js';
 import { stopAllRuns } from './runner.js';
+import { Scheduler } from './scheduler.js';
 
 export async function startServer(port = PORT): Promise<ServerType> {
   await syncLoginShellPath();
   return new Promise((resolve, reject) => {
     const registry = new SessionRegistry();
-    const app = createApp(registry, port);
+    const scheduler = new Scheduler(registry);
+    const app = createApp(registry, port, scheduler);
     const server = serve({ fetch: app.fetch, hostname: HOST, port }, (info) => {
       console.log(`[mac-vibe-coder] http://${info.address}:${info.port}`);
+      void scheduler.start().catch((err) => console.warn(`[mac-vibe-coder] scheduler failed to start: ${(err as Error).message}`));
       resolve(server);
     });
     const http = server as import('node:http').Server;
@@ -36,6 +39,7 @@ export async function startServer(port = PORT): Promise<ServerType> {
       // Stop accepting connections right away so a new app instance does not attach to a dying server.
       http.close();
       const timer = setTimeout(() => process.exit(code), 4000);
+      scheduler.stop();
       killAllPtys();
       stopAllRuns();
       // Quitting closes the headless Chrome we started; an update restart keeps it (and its logins) for the new server.

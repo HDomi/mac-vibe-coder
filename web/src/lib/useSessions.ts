@@ -234,6 +234,14 @@ export function useSessions() {
     resuming.current.set(key, run);
     return run;
   }, []);
+  /** Show a live server session this window did not start (a scheduled run). Its buffer replays from the start. */
+  const adopt = useCallback((p: { id: string; cwd: string; agent: AgentId; agentSessionId?: string; title?: string }) => {
+    if (sessionsRef.current[p.id]) return;
+    const saved: Persisted = { ...p, historyLen: 0, lastActivity: Date.now() };
+    setSessions((prev) => prev[p.id] ? prev : { ...prev, [p.id]: { id: p.id, agent: p.agent, cwd: p.cwd, agentSessionId: p.agentSessionId, historyLen: 0, title: p.title, lastActivity: saved.lastActivity, permissionMode: 'default', status: 'idle', items: [], totalCostUsd: 0, lastSeq: 0, restoring: true } });
+    void reattach(saved);
+  }, []);
+
   const startNew = async (cwd: string, opts: { resume?: string; permissionMode?: PermissionModeId; agent?: AgentId; model?: string | null; replaces?: string; title?: string; worktree?: WorktreeInfo; pairKey?: string }) => {
     let preload: ChatItem[] = [];
     let historyLen: number | undefined;
@@ -298,5 +306,5 @@ export function useSessions() {
     setSessions((prev) => { const n = { ...prev }; delete n[sessionId]; return n; });
   }, []);
 
-  return { sessions, replaced, start, send, approve, answer, interrupt, stopTask, setMode, setModel, setPinned, rewind, verify, close };
+  return { sessions, replaced, start, adopt, send, approve, answer, interrupt, stopTask, setMode, setModel, setPinned, rewind, verify, close };
 }
