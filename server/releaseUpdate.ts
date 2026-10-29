@@ -18,6 +18,8 @@ import { run } from './shell.js';
 export const BUNDLE_ID = 'com.hdomi.vibrato';
 /** GitHub REST base for the releases. Overridable for local end-to-end tests against a fake feed. */
 export const FEED = process.env.VIBRATO_UPDATE_FEED || 'https://api.github.com/repos/HDomi/vibrato';
+/** The repository's web pages (Atom feed, asset downloads). Not subject to the API rate limit. */
+export const WEB = process.env.VIBRATO_UPDATE_WEB || 'https://github.com/HDomi/vibrato';
 export const UPDATE_DIR = process.env.VIBRATO_UPDATE_DIR || path.join(homedir(), 'Library', 'Caches', BUNDLE_ID, 'update');
 export const PENDING_FILE = 'pending.json';
 
@@ -59,26 +61,110 @@ export function parseSums(text: string): Map<string, string> {
   return out;
 }
 
-const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'vibrato-updater' };
+const UA = 'vibrato-updater';
+const headers = { Accept: 'application/vnd.github+json', 'User-Agent': UA };
+
+export interface FeedError extends Error { status: number; rateLimited: boolean }
+
+/**
+ * Unauthenticated API calls share 60 requests per hour per public IP (an office NAT burns through that quickly).
+ * Two measures keep the updater working: conditional requests, since a 304 does not count against the limit,
+ * and the web pages (Atom feed + release assets) as the source of truth while the limit is exhausted.
+ */
+const etags = new Map<string, { etag: string; body: unknown }>();
+
+function feedError(url: string, res: Response): FeedError {
+  const rateLimited = res.status === 429 || (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0');
+  const resetAt = Number(res.headers.get('x-ratelimit-reset')) * 1000;
+  const wait = resetAt ? Math.max(1, Math.ceil((resetAt - Date.now()) / 60000)) : 0;
+  const message = rateLimited ? `GitHub API rate limit reached${wait ? `; it resets in ${wait} min` : ''}` : `${url.replace(FEED, 'GitHub')}: HTTP ${res.status}`;
+  return Object.assign(new Error(message), { status: res.status, rateLimited });
+}
 
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw Object.assign(new Error(`${url.replace(FEED, 'GitHub')}: HTTP ${res.status}`), { status: res.status });
-  return await res.json() as T;
+  const hit = etags.get(url);
+  const res = await fetch(url, { headers: hit ? { ...headers, 'If-None-Match': hit.etag } : headers, signal: AbortSignal.timeout(15000) });
+  if (res.status === 304 && hit) return hit.body as T;
+  if (!res.ok) throw feedError(url, res);
+  const body = await res.json() as T;
+  const etag = res.headers.get('etag');
+  if (etag) etags.set(url, { etag, body });
+  return body;
 }
 
-export const latestRelease = () => getJson<Release>(`${FEED}/releases/latest`);
-export const releaseByTag = (tag: string) => getJson<Release>(`${FEED}/releases/tags/${encodeURIComponent(tag)}`);
+async function getText(url: string): Promise<string> {
+  const res = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'follow', signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw Object.assign(new Error(`${url.replace(WEB, 'GitHub')}: HTTP ${res.status}`), { status: res.status, rateLimited: false });
+  return await res.text();
+}
 
-/** The newest published releases that carry a zip for this machine, newest first. */
+const decodeEntities = (s: string) => s.replace(/&(#x[0-9a-f]+|#\d+|lt|gt|amp|quot|apos|#39);/gi, (_, e: string) => {
+  if (e[0] === '#') return String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+  return { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" }[e.toLowerCase()] ?? '';
+});
+
+/** Entries of the repository's releases.atom, newest first. The notes are the HTML body flattened to text. */
+export function parseAtom(xml: string): { tag: string; name: string; publishedAt: string | null; notes: string }[] {
+  const out: { tag: string; name: string; publishedAt: string | null; notes: string }[] = [];
+  for (const [, entry] of xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)) {
+    const tag = entry.match(/\/releases\/tag\/([^"<]+)"/)?.[1];
+    if (!tag) continue;
+    const title = decodeEntities(entry.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? '').trim();
+    const html = decodeEntities(entry.match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1] ?? '');
+    const notes = decodeEntities(html.replace(/<\/(p|li|h\d|div|br)>|<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')).replace(/\n{3,}/g, '\n\n').trim();
+    out.push({ tag: decodeURIComponent(tag), name: title || tag, publishedAt: entry.match(/<updated>([^<]+)<\/updated>/)?.[1] ?? null, notes });
+  }
+  return out;
+}
+
+/** A release rebuilt from its web assets: SHA256SUMS.txt lists every file the workflow attached. Sizes are unknown. */
+async function releaseFromWeb(tag: string, meta: Partial<Release> = {}): Promise<Release> {
+  const base = `${WEB}/releases/download/${encodeURIComponent(tag)}`;
+  const names = [...parseSums(await getText(`${base}/SHA256SUMS.txt`)).keys(), 'SHA256SUMS.txt'];
+  return { tag_name: tag, name: meta.name ?? tag, body: meta.body ?? '', published_at: meta.published_at ?? null, assets: names.map((name) => ({ name, browser_download_url: `${base}/${name}`, size: 0 })) };
+}
+
+/** The Atom feed does not mark prereleases; only plain vX.Y.Z tags count. Releases without a checksum list are dropped. */
+async function releasesFromWeb(limit: number): Promise<Release[]> {
+  const entries = parseAtom(await getText(`${WEB}/releases.atom`)).filter((e) => /^v\d+\.\d+\.\d+$/.test(e.tag)).slice(0, limit);
+  if (!entries.length) throw new Error('releases.atom lists no release');
+  const all = await Promise.all(entries.map((e) => releaseFromWeb(e.tag, { name: e.name, body: e.notes, published_at: e.publishedAt }).catch(() => null)));
+  return all.filter((r): r is Release => r !== null);
+}
+
+/** Runs `api`; while the API is rate limited, `web` answers instead. Any other failure (or both failing) is reported as the API's. */
+async function viaApiOrWeb<T>(api: () => Promise<T>, web: () => Promise<T>): Promise<T> {
+  try { return await api(); } catch (err) {
+    if (!(err as FeedError).rateLimited) throw err;
+    try { return await web(); } catch { throw err; }
+  }
+}
+
+const installable = (r: Release) => !r.draft && !r.prerelease && !!pickAssets(r).zip && !!pickAssets(r).sums;
+
+/** The newest published releases that carry a zip for this machine, newest first. One API call for the whole update check. */
+export async function installableReleases(limit = 3): Promise<Release[]> {
+  const list = await viaApiOrWeb(() => getJson<Release[]>(`${FEED}/releases?per_page=15`), () => releasesFromWeb(limit + 2));
+  return list.filter(installable).slice(0, limit);
+}
+
+export async function latestRelease(): Promise<Release> {
+  const [release] = await installableReleases(1);
+  if (!release) throw Object.assign(new Error('No release has been published yet.'), { status: 404, rateLimited: false });
+  return release;
+}
+
+export const releaseByTag = (tag: string) => viaApiOrWeb(() => getJson<Release>(`${FEED}/releases/tags/${encodeURIComponent(tag)}`), () => releaseFromWeb(tag));
+
+export const summarize = (r: Release): ReleaseSummary => ({
+  version: r.tag_name.replace(/^v/, ''), tag: r.tag_name, name: r.name || r.tag_name, publishedAt: r.published_at ?? null, notes: (r.body ?? '').trim().slice(0, 1500),
+});
+
 export async function recentReleases(limit = 3): Promise<ReleaseSummary[]> {
-  const list = await getJson<Release[]>(`${FEED}/releases?per_page=15`);
-  return list.filter((r) => !r.draft && !r.prerelease && pickAssets(r).zip && pickAssets(r).sums).slice(0, limit).map((r) => ({
-    version: r.tag_name.replace(/^v/, ''), tag: r.tag_name, name: r.name || r.tag_name, publishedAt: r.published_at ?? null, notes: (r.body ?? '').trim().slice(0, 1500),
-  }));
+  return (await installableReleases(limit)).map(summarize);
 }
 
-/** Commit subjects between two tags, newest first (empty when GitHub cannot compare them). */
+/** Commit subjects between two tags, newest first (empty when GitHub cannot compare them, or the API is rate limited). */
 export async function releaseCommits(fromTag: string, toTag: string): Promise<{ hash: string; subject: string }[]> {
   try {
     const cmp = await getJson<{ commits?: { sha: string; commit: { message: string } }[] }>(`${FEED}/compare/${encodeURIComponent(fromTag)}...${encodeURIComponent(toTag)}`);
@@ -87,7 +173,7 @@ export async function releaseCommits(fromTag: string, toTag: string): Promise<{ 
 }
 
 async function download(url: string, file: string, onProgress: (pct: number) => void): Promise<void> {
-  const res = await fetch(url, { headers: { 'User-Agent': headers['User-Agent'] }, redirect: 'follow', signal: AbortSignal.timeout(15 * 60 * 1000) });
+  const res = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'follow', signal: AbortSignal.timeout(15 * 60 * 1000) });
   if (!res.ok || !res.body) throw new Error(`download failed: HTTP ${res.status}`);
   const total = Number(res.headers.get('content-length')) || 0;
   let got = 0; let shown = -1;
@@ -125,7 +211,7 @@ export async function stageRelease(release: Release, onLine: (line: string, stre
   await fs.rm(stage, { recursive: true, force: true });
   await fs.rm(path.join(UPDATE_DIR, PENDING_FILE), { force: true });
   try {
-    onLine(`▸ download ${zip.name} (${(zip.size / 1048576).toFixed(0)} MB)`, 'stdout');
+    onLine(`▸ download ${zip.name}${zip.size ? ` (${(zip.size / 1048576).toFixed(0)} MB)` : ''}`, 'stdout');
     await download(zip.browser_download_url, zipFile, (pct) => { if (pct >= 0) onLine(`  ${pct}%`, 'stdout'); });
     onLine('▸ verify SHA-256', 'stdout');
     const sumsFile = path.join(UPDATE_DIR, 'SHA256SUMS.txt');

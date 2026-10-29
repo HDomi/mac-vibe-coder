@@ -2,7 +2,7 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { run, streamShell } from './shell.js';
 import { REPO_ROOT } from './paths.js';
-import { bundleOf, bundleProblem, latestRelease, recentReleases, releaseByTag, releaseCommits, stageRelease, type Release, type ReleaseSummary } from './releaseUpdate.js';
+import { bundleOf, bundleProblem, installableReleases, latestRelease, releaseByTag, releaseCommits, stageRelease, summarize, type Release, type ReleaseSummary } from './releaseUpdate.js';
 export { REPO_ROOT };
 
 /**
@@ -86,9 +86,12 @@ async function readReleaseUpdate(status: UpdateStatus): Promise<UpdateStatus> {
   try {
     const problem = bundleProblem(APP_BUNDLE!);
     if (problem) throw new Error(problem);
-    const [release, releases] = await Promise.all([latestRelease(), recentReleases(3).catch(() => [])]);
+    // One list call covers the latest release and the roll-back candidates (the API rate limit is tight).
+    const releases = await installableReleases(3);
+    const release = releases[0];
+    if (!release) throw Object.assign(new Error('No release has been published yet.'), { status: 404 });
     latest = release;
-    status.releases = releases;
+    status.releases = releases.map(summarize);
     const version = release.tag_name.replace(/^v/, '');
     status.remote = { version, commit: '', builtAt: null };
     status.available = compareVersions(version, status.installed.version) > 0;
@@ -97,8 +100,7 @@ async function readReleaseUpdate(status: UpdateStatus): Promise<UpdateStatus> {
       status.remote.commit = status.commits[0]?.hash ?? '';
     }
   } catch (err) {
-    // A repository without any release yet answers 404 for releases/latest.
-    status.error = (err as { status?: number }).status === 404 ? 'No release has been published yet.' : (err as Error).message;
+    status.error = (err as Error).message;
   }
   cached = status;
   return status;
