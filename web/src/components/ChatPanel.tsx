@@ -326,8 +326,8 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onB
               { separator: true },
               { label: h.pinned ? t('common.deleteUnpinFirst') : t('common.deletePermanently'), danger: true, disabled: !!h.pinned, onClick: () => remove(h) },
             ])}>
-            {h.pinned && <span title={t('common.pinned')}>📌</span>}
             <AgentIcon agent={h.agent} size={18} />
+            {h.pinned && <span title={t('common.pinned')}>📌</span>}
             <div className="flex-1 min-w-0">
               {renaming === h.sessionId
                 ? <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onClick={(e) => e.stopPropagation()} onBlur={() => rename(h)}
