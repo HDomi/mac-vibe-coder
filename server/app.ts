@@ -354,11 +354,12 @@ export function createApp(registry?: SessionRegistry, port = PORT, scheduler?: S
     const agent = c.req.query('agent') ?? 'all';
     const wantClaude = agent === 'claude' || agent === 'all';
     const wantCodex = agent === 'codex' || agent === 'all';
+    const limit = Math.min(300, Math.max(1, Number(c.req.query('limit')) || 30));
     const [claude, codexPath] = await Promise.all([
-      wantClaude ? listSessions({ dir, limit: 30 }).catch(() => []) : Promise.resolve([]),
+      wantClaude ? listSessions({ dir, limit }).catch(() => []) : Promise.resolve([]),
       wantCodex ? which('codex') : Promise.resolve(null),
     ]);
-    const codex = codexPath ? await listCodexThreads(codexPath, dir).catch(() => []) : [];
+    const codex = codexPath ? await listCodexThreads(codexPath, dir, limit).catch(() => []) : [];
     const pinned = new Set((await loadConfig()).pinnedSessions);
     const rows = [
       ...claude.map((s) => ({ ...s, agent: 'claude' as const, firstPrompt: isCompactSummary(s.firstPrompt) ? '' : s.firstPrompt })),

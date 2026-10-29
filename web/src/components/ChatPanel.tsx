@@ -29,8 +29,8 @@ export interface StartOptions { resume?: string; permissionMode?: PermissionMode
 
 interface Props {
   cwd: string | null;
-  /** 'folder' lists sessions of cwd; 'all' lists every session across projects (Agent mode). */
-  scope?: 'folder' | 'all';
+  /** 'folder': a project's start screen. 'home': the Agent view, which holds only sessions run in the home folder. */
+  scope?: 'folder' | 'home';
   session: ChatSession | null;
   onStart: (cwd: string, opts?: StartOptions) => void;
   onStartPair?: (cwd: string, opts: PairOptions) => void;
@@ -186,7 +186,7 @@ const MODE_IDS: { id: PermissionModeId; key: string }[] = [
   { id: 'auto', key: 'chat.mode.auto' },
 ];
 
-function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onBacklogChange, onOpenBacklogSession, openWorktrees, onOpenWorktree }: { cwd: string | null; scope?: 'folder' | 'all'; onStart: Props['onStart']; onStartPair?: Props['onStartPair']; backlog?: Backlog; onBacklogChange?: Props['onBacklogChange']; onOpenBacklogSession?: Props['onOpenBacklogSession']; openWorktrees?: string[]; onOpenWorktree?: Props['onOpenWorktree'] }) {
+function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onBacklogChange, onOpenBacklogSession, openWorktrees, onOpenWorktree }: { cwd: string | null; scope?: 'folder' | 'home'; onStart: Props['onStart']; onStartPair?: Props['onStartPair']; backlog?: Backlog; onBacklogChange?: Props['onBacklogChange']; onOpenBacklogSession?: Props['onOpenBacklogSession']; openWorktrees?: string[]; onOpenWorktree?: Props['onOpenWorktree'] }) {
   useLang();
   const menu = useContextMenu();
   const [history, setHistory] = useState<HistorySession[]>([]);
@@ -205,7 +205,7 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onB
   const [pairPrompt, setPairPrompt] = useState('');
   useEffect(() => {
     setIsGit(false); setIsolate(false);
-    if (!cwd || scope === 'all') return;
+    if (!cwd || scope === 'home') return;
     let alive = true;
     api.gitStatus(cwd).then((st) => { if (alive) setIsGit(st.repo); }).catch(() => {});
     return () => { alive = false; };
@@ -219,9 +219,7 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onB
     const request = ++historyRequest.current;
     if (!cwd) return;
     setLoadingHistory(true);
-    const p = scope === 'all'
-      ? api.historyAll(300).then((rows) => rows.map((r) => ({ agent: r.agent, sessionId: r.sessionId, summary: r.title, lastModified: r.lastModified, cwd: r.cwd ?? undefined, pinned: r.pinned })))
-      : api.history(cwd, 'all');
+    const p = api.history(cwd, 'all', scope === 'home' ? 200 : undefined);
     p.then((rows) => { if (request === historyRequest.current) setHistory(rows); }).catch(() => { if (request === historyRequest.current) setHistory([]); }).finally(() => { if (request === historyRequest.current) setLoadingHistory(false); });
   };
   useEffect(() => { setHistory([]); loadHistory(); return () => { historyRequest.current++; }; /* eslint-disable-line react-hooks/exhaustive-deps */ }, [cwd, scope]);
@@ -245,14 +243,14 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onB
 
   return (
     <div className="h-full overflow-y-auto p-8 max-w-2xl mx-auto">
-      <div className="text-xs text-zinc-500 mb-1">{scope === 'all' ? t('chat.agent') : t('chat.project')}</div>
-      {scope === 'all'
+      <div className="text-xs text-zinc-500 mb-1">{scope === 'home' ? t('chat.agent') : t('chat.project')}</div>
+      {scope === 'home'
         ? <div className="text-lg font-medium mb-6">{t('chat.freeConversation')}</div>
         : <div className="flex items-center gap-3 mb-6" title={cwd}><ProjectIcon path={cwd} name={cwd.split('/').pop() || cwd} size={40} /><div className="text-xl font-semibold truncate">{cwd.split('/').pop() || cwd}</div>
             <div className="flex-1" />
             <button onClick={() => window.dispatchEvent(new Event('vibe:agent-context'))} className="shrink-0 flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-white/5"><Icon name="file" size={13} />{t('context.menu')}</button>
           </div>}
-      {scope === 'all' && <div className="text-xs text-zinc-500 -mt-4 mb-6">{t('chat.freeHint', { cwd })}</div>}
+      {scope === 'home' && <div className="text-xs text-zinc-500 -mt-4 mb-6">{t('chat.freeHint', { cwd })}</div>}
       <div className="flex items-center gap-1 mb-4 rounded-lg bg-white/5 p-1 w-fit text-sm">
         {(['claude', 'codex'] as AgentId[]).map((a) => (
           <button key={a} onClick={() => { setAgent(a); setCompare(false); }} className={`px-4 py-1.5 rounded-md ${agent === a && !compare ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-white'}`}>{a === 'claude' ? t('chat.claudeCode') : 'Codex'}</button>
@@ -310,9 +308,9 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onB
         </div>
       )}
       <div className="flex items-center text-xs text-zinc-500 mb-2 gap-3">
-        <span>{scope === 'all' ? t('chat.previousAll', { n: history.length }) : t('chat.previousFolder')}</span>
+        <span>{scope === 'home' ? t('chat.previousAll', { n: history.length }) : t('chat.previousFolder')}</span>
         <div className="flex-1" />
-        {scope === 'all' && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('common.search')} className="bg-white/5 rounded px-2 py-1 text-xs outline-none w-40" />}
+        {scope === 'home' && <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('common.search')} className="bg-white/5 rounded px-2 py-1 text-xs outline-none w-40" />}
         {loadingHistory && <span className="text-zinc-600">{t('chat.loading')}</span>}
       </div>
       {history.length === 0 && !loadingHistory && <div className="text-xs text-zinc-600">{t('chat.noSessions')}</div>}
@@ -336,7 +334,7 @@ function StartScreen({ cwd, scope = 'folder', onStart, onStartPair, backlog, onB
                     onKeyDown={(e) => { if (e.key === 'Enter') rename(h); if (e.key === 'Escape') setRenaming(null); }}
                     className="w-full bg-black/40 rounded px-2 py-0.5 text-sm outline-none border border-blue-400/50" />
                 : <div className="text-sm truncate">{titleOf(h)}</div>}
-              <div className="text-[11px] text-zinc-500 truncate">{new Date(h.lastModified).toLocaleString()}{h.gitBranch ? ` · ${h.gitBranch}` : ''}{scope === 'all' && h.cwd ? ` · ${h.cwd.replace(/^\/Users\/[^/]+/, '~')}` : ''}</div>
+              <div className="text-[11px] text-zinc-500 truncate">{new Date(h.lastModified).toLocaleString()}{h.gitBranch ? ` · ${h.gitBranch}` : ''}</div>
             </div>
           </div>
         ))}

@@ -166,7 +166,7 @@ export const api = {
     for (const f of files) fd.append('files', f, f.name);
     return req<{ path: string; name: string; kind: 'image' | 'file'; mime?: string }[]>('/api/attach', { method: 'POST', body: fd });
   },
-  history: (cwd: string, agent: 'claude' | 'codex' | 'all' = 'all') => req<HistorySession[]>(`/api/history?cwd=${q(cwd)}&agent=${agent}`),
+  history: (cwd: string, agent: 'claude' | 'codex' | 'all' = 'all', limit?: number) => req<HistorySession[]>(`/api/history?cwd=${q(cwd)}&agent=${agent}${limit ? `&limit=${limit}` : ''}`),
   historyRename: (agent: 'claude' | 'codex', id: string, title: string, cwd?: string) => post<{ ok: true }>('/api/history/rename', { agent, id, title, cwd }),
   historyPin: (agent: 'claude' | 'codex', id: string, pinned: boolean) => post<{ ok: true }>('/api/history/pin', { agent, id, pinned }),
   historyDelete: (agent: 'claude' | 'codex', id: string, cwd?: string) => req<{ ok: true }>(`/api/history/${q(id)}?agent=${agent}${cwd ? `&cwd=${q(cwd)}` : ''}`, { method: 'DELETE' }),

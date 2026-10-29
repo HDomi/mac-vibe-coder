@@ -179,8 +179,9 @@ function AppInner() {
     if (id.startsWith('schedule:')) { const run = scheduleRuns.current.get(id.slice(9)); if (run) openRun(run); return; }
     const s = S.sessions[id];
     if (!s) return;
-    if (view === 'agent') setAgentActive(id);
-    else { if (!inProject(s, project)) openProject(s.worktree?.origin ?? s.cwd); setActiveSession(id); }
+    // The Agent view lists home-folder sessions only; a project session opens in VIBE.
+    if (view === 'agent' && s.cwd === home?.home) setAgentActive(id);
+    else { if (view === 'agent') setView('vibe'); if (!inProject(s, project)) openProject(s.worktree?.origin ?? s.cwd); setActiveSession(id); }
   };
   // Sessions a message can be sent to (right-click / drag): every open one except the one on screen.
   const onScreenId = view === 'agent' ? (agentActive && agentActive !== 'new' ? agentActive : null) : (session?.id ?? null);
@@ -368,7 +369,7 @@ function AppInner() {
         <UsageBar mode={view} onMode={setView} companions={companions} onCompanions={() => setCompanions((v) => !v)} />
         {companions && <SessionCompanions sessions={Object.values(S.sessions)} scene={`${view}:${rightTab}:${rightCollapsed}`} />}
         {view === 'agent' ? (
-          <AgentView home={home?.home ?? '~'} S={S} active={agentActive} setActive={setAgentActive} />
+          <AgentView home={home?.home ?? '~'} S={S} active={agentActive} setActive={setAgentActive} onFocusSession={(id) => focusSession.current(id)} />
         ) : view === 'tools' ? (
           <Suspense fallback={null}><ToolboxView /></Suspense>
         ) : view === 'schedule' ? (
@@ -513,10 +514,11 @@ function AppInner() {
 }
 
 /** Agent mode: free conversation not tied to a project. Left: live sessions; center: chat / all previous conversations. */
-function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType<typeof useSessions>; active: string | 'new' | null; setActive: (v: string | 'new' | null) => void }) {
+function AgentView({ home, S, active, setActive, onFocusSession }: { home: string; S: ReturnType<typeof useSessions>; active: string | 'new' | null; setActive: (v: string | 'new' | null) => void; onFocusSession: (id: string) => void }) {
   useLang();
   const menu = useContextMenu();
-  const live = sortSessions(Object.values(S.sessions));
+  // Only sessions run in the home folder; project sessions live in VIBE's project tabs.
+  const live = sortSessions(Object.values(S.sessions).filter((s) => s.cwd === home));
   const session = active && active !== 'new' ? S.sessions[active] ?? null : null;
   const start = (c: string, o?: StartOptions) => S.start(c, o).then(setActive).catch((e) => window.alert(e.message));
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -553,7 +555,7 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
         <div data-companion-floor="agent-list-bottom" className="h-px shrink-0 bg-white/10 mb-4" />
       </aside>
       <div className="flex-1 min-w-0">
-        <ChatPanel cwd={home} scope="all" session={session}
+        <ChatPanel cwd={home} scope="home" session={session}
           onStart={start}
           onSend={(t, a) => session && S.send(session.id, t, a)}
           onApprove={(r, d, m) => session && S.approve(session.id, r, d, m)}
@@ -563,7 +565,7 @@ function AgentView({ home, S, active, setActive }: { home: string; S: ReturnType
           onMode={(m) => session && S.setMode(session.id, m)}
           onModel={(m) => session && S.setModel(session.id, m)}
           onClose={() => { if (session) { S.close(session.id); setActive(null); } }}
-          background={backgroundSessions(S.sessions, session?.id)} onFocusSession={setActive}
+          background={backgroundSessions(S.sessions, session?.id)} onFocusSession={onFocusSession}
           onRewind={(id, dry) => session ? S.rewind(session.id, id, dry) : Promise.resolve({ canRewind: false })}
           onVerify={() => session && S.verify(session.id)}
           onCrossReview={(changes) => { if (session) startCrossReview(S, session, changes).then(setActive).catch((e) => window.alert((e as Error).message)); }}
