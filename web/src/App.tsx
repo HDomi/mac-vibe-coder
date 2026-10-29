@@ -387,8 +387,8 @@ function AppInner() {
         ) : (
         <div className="flex-1 flex min-h-0 relative">
           <div data-companion-zone="left" data-companion-wall="right" style={{ width: collapsed ? 40 : sidebar.width }} className={`shrink-0 h-full overflow-hidden ${paneTransition}`}>
-            <Sidebar home={home} favorites={favorites} recent={recent} cwd={project ?? ''} collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)}
-              onNavigate={openProject} onFavoritesChange={setFavorites} onRecentChange={setRecent}
+            <Sidebar home={home} favorites={favorites} cwd={project ?? ''} collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)}
+              onNavigate={openProject} onFavoritesChange={setFavorites}
               onPickFolder={pickFolder} onOpenSettings={() => setShowTools(true)} onResumeSession={resumeSession} />
           </div>
           {!collapsed && <Splitter onStart={() => setDragging(true)} onEnd={() => setDragging(false)} onDrag={(dx) => sidebar.setWidth(sidebar.width + dx)} />}

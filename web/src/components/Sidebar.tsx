@@ -11,13 +11,11 @@ import Icon from './Icon';
 interface Props {
   home: HomeInfo | null;
   favorites: Favorites;
-  recent: string[];
   cwd: string;
   collapsed: boolean;
   onToggle: () => void;
   onNavigate: (path: string) => void;
   onFavoritesChange: (f: Favorites) => void;
-  onRecentChange: (r: string[]) => void;
   onPickFolder: () => void;
   onOpenSettings: () => void;
   onResumeSession: (s: RecentSession) => void;
@@ -129,14 +127,6 @@ export default function Sidebar(p: Props) {
     { separator: true },
     { label: t('sidebar.deleteGroup'), danger: true, onClick: () => apply(api.removeFavoriteGroup(g.id)) },
   ];
-  const recentMenu = (r: string): MenuItem[] => [
-    { label: t('common.open'), onClick: () => p.onNavigate(r) },
-    { label: favorites.some((f) => f.path === r) ? t('sidebar.alreadyFavorite') : t('sidebar.addFavorite'), disabled: favorites.some((f) => f.path === r), onClick: () => apply(api.addFavorite(r)) },
-    { separator: true },
-    ...commonItems(r),
-    { separator: true },
-    { label: t('sidebar.removeRecent'), danger: true, onClick: () => api.removeRecent(r).then(p.onRecentChange).catch(() => {}) },
-  ];
   const sessionMenu = (s: RecentSession): MenuItem[] => [
     { label: t('common.resume'), onClick: () => p.onResumeSession(s) },
     { label: s.pinned ? t('common.unpin') : t('common.pin'), onClick: () => api.historyPin(s.agent, s.sessionId, !s.pinned).then(reloadSessions).catch(() => {}) },
@@ -210,13 +200,6 @@ export default function Sidebar(p: Props) {
           {favorites.length === 0 && !creatingGroup && <div className="px-2 text-xs text-zinc-600">{t('sidebar.emptyFavorites')}</div>}
         </Section>
         <div data-companion-floor="favorites-divider" role="separator" className="h-px bg-white/10 mx-2 mb-4" />
-        {p.recent.length > 0 && (
-          <Section title={t('sidebar.recent')} right={<button className="text-[10px] text-zinc-600 hover:text-zinc-300" onClick={() => Promise.all(p.recent.map((r) => api.removeRecent(r))).then(() => p.onRecentChange([])).catch(() => {})}>{t('sidebar.clear')}</button>}>
-            {p.recent.slice(0, 8).map((r) => (
-              <Item key={r} label={r.split('/').pop() || r} path={r} active={p.cwd === r} icon onClick={() => p.onNavigate(r)} onContextMenu={(e) => menu.open(e, recentMenu(r))} />
-            ))}
-          </Section>
-        )}
       </div>
       {/* Recent sessions: pinned to the bottom quarter of the sidebar with its own scroll. */}
       <div data-companion-floor="recent-sessions" className="h-1/4 min-h-[120px] shrink-0 flex flex-col border-t border-white/10 bg-[#0b0d12]">
