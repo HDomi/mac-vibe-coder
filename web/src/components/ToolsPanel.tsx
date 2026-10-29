@@ -6,7 +6,16 @@ import Icon from './Icon';
 import LockSettings from './LockSettings';
 import FormTypesSettings from './FormTypesSettings';
 
-interface Props { onClose: () => void; /** Scroll to the lock screen section (opened from the menu bar). */ focusLock?: boolean; /** Scroll to the form type editor (from the prompt form). */ focusFormTypes?: boolean }
+interface Props { onClose: () => void; /** Open at the lock screen tab (from the menu bar). */ focusLock?: boolean; /** Open at the form type editor (from the prompt form). */ focusFormTypes?: boolean }
+
+type Tab = 'general' | 'customPrompt' | 'formTypes' | 'lock' | 'agents';
+const TABS: { id: Tab; key: string }[] = [
+  { id: 'general', key: 'settings.general' },
+  { id: 'customPrompt', key: 'settings.customPrompt' },
+  { id: 'formTypes', key: 'settings.tab.formTypes' },
+  { id: 'lock', key: 'settings.tab.lock' },
+  { id: 'agents', key: 'settings.tab.agents' },
+];
 
 function methodLabel(m: string): string {
   if (m === 'official') return t('settings.method.official');
@@ -89,6 +98,12 @@ export default function ToolsPanel({ onClose, focusLock, focusFormTypes }: Props
   const [log, setLog] = useState<{ line: string; err: boolean }[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState<Tab>(focusLock ? 'lock' : focusFormTypes ? 'formTypes' : 'general');
+  // Opened again while already showing (menu bar, prompt form): jump to the asked section.
+  useEffect(() => { if (focusLock) setTab('lock'); }, [focusLock]);
+  useEffect(() => { if (focusFormTypes) setTab('formTypes'); }, [focusFormTypes]);
+  const tabs = TABS.filter((x) => x.id !== 'lock' || !!window.vibe?.lock);
+  const agentsNeedAttention = !!info?.tools.some((x) => !x.installed || x.loggedIn === false);
 
   const refresh = () => api.tools(true).then(setInfo).catch((e) => setLog((l) => [...l, { line: e.message, err: true }]));
   useEffect(() => { refresh(); }, []);
@@ -117,64 +132,78 @@ export default function ToolsPanel({ onClose, focusLock, focusFormTypes }: Props
 
   return (
     <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center" onClick={onClose}>
-      <div className="w-[720px] max-w-[92vw] max-h-[85vh] rounded-xl bg-[#12151c] border border-white/10 shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="w-[980px] max-w-[94vw] h-[85vh] rounded-xl bg-[#12151c] border border-white/10 shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center pl-6 pr-4 h-[60px] shrink-0 border-b border-white/10">
           <div className="text-[15px] font-semibold">{t('settings.title')}</div>
           <div className="flex-1" />
-          <button className="text-xs text-zinc-400 hover:text-white mr-3" onClick={refresh}>{t('settings.redetect')}</button>
+          {tab === 'agents' && <button className="text-xs text-zinc-400 hover:text-white mr-3" onClick={refresh}>{t('settings.redetect')}</button>}
           <button className="w-8 h-8 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={onClose} title="Esc"><Icon name="close" /></button>
         </div>
-        <div className="p-5 space-y-4 overflow-y-auto">
-          <GeneralSettings />
-          <CustomPromptSettings />
-          <FormTypesSettings focus={focusFormTypes} />
-          <LockSettings focus={focusLock} />
-          {!info && <div className="text-sm text-zinc-500">{t('settings.detecting')}</div>}
-          {info?.tools.map((tool) => (
-            <div key={tool.id} className="rounded-lg border border-white/10 p-4">
-              <div className="flex items-center gap-3">
-                <span className={`w-2 h-2 rounded-full ${tool.installed ? (tool.loggedIn ? 'bg-green-400' : 'bg-amber-400') : 'bg-zinc-600'}`} />
-                <div className="font-medium">{tool.name}</div>
-                {tool.installed ? (
-                  <span className="text-xs text-zinc-400">{tool.version} · {tool.path}</span>
-                ) : (
-                  <span className="text-xs text-zinc-500">{t('settings.notInstalled')}</span>
-                )}
-                <div className="flex-1" />
-                {tool.installed && (
-                  <button disabled={!!running} className="text-xs rounded bg-white/5 hover:bg-white/10 px-2 py-1 disabled:opacity-40"
-                    onClick={() => run(tool.id, 'update')}>{t('settings.update')}</button>
-                )}
-              </div>
-              {tool.installed && (
-                <div className="mt-2 text-xs text-zinc-400">
-                  {tool.loggedIn === true && <>{t('settings.loggedIn')} · {tool.authInfo}</>}
-                  {tool.loggedIn === false && <span className="text-amber-300">{t('settings.loginRequired', { cmd: tool.id === 'claude' ? 'claude → /login' : 'codex login' })}</span>}
-                  {tool.loggedIn === null && t('settings.loginUnknown')}
+        <div className="flex-1 min-h-0 flex">
+          <nav className="w-[200px] shrink-0 border-r border-white/10 p-3 space-y-0.5 overflow-y-auto">
+            {tabs.map((x) => (
+              <button key={x.id} onClick={() => setTab(x.id)}
+                className={`w-full flex items-center gap-2 text-left rounded-md px-3 py-2 text-sm ${tab === x.id ? 'bg-white/10 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'}`}>
+                <span className="flex-1 truncate">{t(x.key)}</span>
+                {x.id === 'agents' && (running ? <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" /> : agentsNeedAttention && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />)}
+              </button>
+            ))}
+          </nav>
+          {/* Every tab stays mounted so unsaved edits survive switching. */}
+          <div className="flex-1 min-w-0 p-5 overflow-y-auto">
+            <div className={tab === 'general' ? '' : 'hidden'}><GeneralSettings /></div>
+            <div className={tab === 'customPrompt' ? '' : 'hidden'}><CustomPromptSettings /></div>
+            <div className={tab === 'formTypes' ? '' : 'hidden'}><FormTypesSettings focus={focusFormTypes} /></div>
+            <div className={tab === 'lock' ? '' : 'hidden'}><LockSettings focus={focusLock} /></div>
+            <div className={tab === 'agents' ? 'space-y-4' : 'hidden'}>
+              {!info && <div className="text-sm text-zinc-500">{t('settings.detecting')}</div>}
+              {info?.tools.map((tool) => (
+                <div key={tool.id} className="rounded-lg border border-white/10 p-4">
+                  <div className="flex items-center gap-3">
+                    <span className={`w-2 h-2 rounded-full ${tool.installed ? (tool.loggedIn ? 'bg-green-400' : 'bg-amber-400') : 'bg-zinc-600'}`} />
+                    <div className="font-medium">{tool.name}</div>
+                    {tool.installed ? (
+                      <span className="text-xs text-zinc-400">{tool.version} · {tool.path}</span>
+                    ) : (
+                      <span className="text-xs text-zinc-500">{t('settings.notInstalled')}</span>
+                    )}
+                    <div className="flex-1" />
+                    {tool.installed && (
+                      <button disabled={!!running} className="text-xs rounded bg-white/5 hover:bg-white/10 px-2 py-1 disabled:opacity-40"
+                        onClick={() => run(tool.id, 'update')}>{t('settings.update')}</button>
+                    )}
+                  </div>
+                  {tool.installed && (
+                    <div className="mt-2 text-xs text-zinc-400">
+                      {tool.loggedIn === true && <>{t('settings.loggedIn')} · {tool.authInfo}</>}
+                      {tool.loggedIn === false && <span className="text-amber-300">{t('settings.loginRequired', { cmd: tool.id === 'claude' ? 'claude → /login' : 'codex login' })}</span>}
+                      {tool.loggedIn === null && t('settings.loginUnknown')}
+                    </div>
+                  )}
+                  {!tool.installed && (
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      {methodsFor(tool, info.installers).map((m) => (
+                        <button key={m} disabled={!!running}
+                          className="text-xs rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 px-3 py-1.5 disabled:opacity-40"
+                          onClick={() => run(tool.id, m)}>{t('settings.installVia', { method: methodLabel(m) })}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {info && (
+                <div className="text-xs text-zinc-500">
+                  {t('settings.installers')}: brew {info.installers.brew ? '✓' : '✗'} · npm {info.installers.npm ? '✓' : '✗'} · node {info.installers.node ? '✓' : '✗'}
                 </div>
               )}
-              {!tool.installed && (
-                <div className="mt-3 flex gap-2 flex-wrap">
-                  {methodsFor(tool, info.installers).map((m) => (
-                    <button key={m} disabled={!!running}
-                      className="text-xs rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 px-3 py-1.5 disabled:opacity-40"
-                      onClick={() => run(tool.id, m)}>{t('settings.installVia', { method: methodLabel(m) })}</button>
-                  ))}
+              {log.length > 0 && (
+                <div ref={logRef} className="rounded-lg bg-black/50 p-3 font-mono text-[12px] max-h-64 overflow-auto">
+                  {log.map((l, i) => <div key={i} className={l.err ? 'text-amber-200' : 'text-zinc-300'}>{l.line}</div>)}
+                  {running && <div className="text-zinc-500 animate-pulse">{t('settings.running')}</div>}
                 </div>
               )}
             </div>
-          ))}
-          {info && (
-            <div className="text-xs text-zinc-500">
-              {t('settings.installers')}: brew {info.installers.brew ? '✓' : '✗'} · npm {info.installers.npm ? '✓' : '✗'} · node {info.installers.node ? '✓' : '✗'}
-            </div>
-          )}
-          {log.length > 0 && (
-            <div ref={logRef} className="rounded-lg bg-black/50 p-3 font-mono text-[12px] max-h-64 overflow-auto">
-              {log.map((l, i) => <div key={i} className={l.err ? 'text-amber-200' : 'text-zinc-300'}>{l.line}</div>)}
-              {running && <div className="text-zinc-500 animate-pulse">{t('settings.running')}</div>}
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
