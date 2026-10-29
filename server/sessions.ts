@@ -166,10 +166,11 @@ export class SessionRegistry {
       if (after) {
         let files = await changedFiles(base.root, base.tree, after.tree).catch(() => []);
         // Without shell commands, a changed file the session never edited came from elsewhere (another
-        // session in this folder, the user). It is flagged so "undo turn" leaves it alone.
+        // session in this folder, the user) and is not part of this turn. A turn that ran shell commands
+        // could have touched anything, so it keeps every change.
         if (!shell) {
           const mine = new Set([...own].map((p) => repoRelative(base.root, p)).filter(Boolean));
-          files = files.map((f) => (mine.has(f.path) ? f : { ...f, external: true }));
+          files = files.filter((f) => mine.has(f.path));
         }
         changed = files.length > 0;
         if (files.length && this.entries.has(e.session.id)) this.broadcast(e, { kind: 'changes', id: `changes-${Date.now().toString(36)}`, root: base.root, from: base.tree, to: after.tree, files });

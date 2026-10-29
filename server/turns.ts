@@ -13,7 +13,7 @@ import { FsError, resolvePath } from './fs.js';
 
 const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 
-export interface TurnFile { path: string; status: 'A' | 'M' | 'D'; additions: number; deletions: number; binary: boolean; /** Not edited by the session's own file tools (another session or the user, most likely). */ external?: boolean }
+export interface TurnFile { path: string; status: 'A' | 'M' | 'D'; additions: number; deletions: number; binary: boolean }
 export interface Snapshot { root: string; tree: string }
 
 function git(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; timeout?: number; input?: string } = {}): Promise<{ ok: boolean; stdout: string; stderr: string }> {

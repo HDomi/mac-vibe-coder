@@ -244,3 +244,29 @@ test('the server echo of a sent message keeps the id the client chose', () => {
   assert.equal((next.items[0] as any).pending, undefined);
   assert.equal(next.items[0].id, 'aaaaaaaa-0000-4000-8000-000000000001');
 });
+
+test('turn changes list only what the session edited, unless it ran shell commands', () => temporary(async (dir) => {
+  const { snapshot } = await import('../server/turns');
+  const { execFileSync } = await import('node:child_process');
+  const git = (...a: string[]) => execFileSync('git', ['-C', dir, ...a], { stdio: 'pipe' });
+  git('init', '-q'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't');
+  await writeFile(join(dir, 'mine.txt'), 'a\n'); await writeFile(join(dir, 'other.txt'), 'a\n');
+  git('add', '.'); git('commit', '-qm', 'init');
+  const turn = async (shell: boolean) => {
+    const registry = new SessionRegistry();
+    const sent: any[] = [];
+    const entry: any = { session: { id: 's', agent: 'claude', cwd: dir }, buffer: [], seq: 0, subscribers: new Set([{ readyState: 1, OPEN: 1, send: (m: string) => sent.push(JSON.parse(m)) }]), closed: false, bufferBytes: 0, touched: false, turnPaths: new Set(), turnShell: false };
+    (registry as any).entries.set('s', entry);
+    entry.turnBase = await snapshot(dir);
+    (registry as any).broadcast(entry, { kind: 'tool.start', toolUseId: 't1', name: shell ? 'Bash' : 'Edit', input: shell ? { command: 'x' } : { file_path: join(dir, 'mine.txt') }, parent: null });
+    await writeFile(join(dir, 'mine.txt'), `${Date.now()}\n`);
+    // Another session in the same folder writes meanwhile.
+    await writeFile(join(dir, 'other.txt'), `${Date.now()}\n`);
+    await (registry as any).finishTurn(entry);
+    (registry as any).entries.clear();
+    await registry.closeAll();
+    return sent.filter((m) => m.event?.kind === 'changes').flatMap((m) => m.event.files.map((f: any) => f.path)).sort();
+  };
+  assert.deepEqual(await turn(false), ['mine.txt']);
+  assert.deepEqual(await turn(true), ['mine.txt', 'other.txt']);
+}));

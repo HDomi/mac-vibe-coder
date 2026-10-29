@@ -42,7 +42,7 @@ export type AgentEvent =
   | { kind: 'changes'; id: string; root: string; from: string; to: string; files: TurnFile[] }
   | { kind: 'log'; text: string };
 
-export interface TurnFile { path: string; status: 'A' | 'M' | 'D'; additions: number; deletions: number; binary: boolean; /** Not edited by the session itself (another session or the user). */ external?: boolean }
+export interface TurnFile { path: string; status: 'A' | 'M' | 'D'; additions: number; deletions: number; binary: boolean }
 
 export type VerifyStatus = 'running' | 'passed' | 'failed' | 'cancelled';
 
