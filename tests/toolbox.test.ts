@@ -54,7 +54,10 @@ test('jwt: RS256 verify with a PEM public key', async () => {
   const spki = Buffer.from(await crypto.subtle.exportKey('spki', kp.publicKey)).toString('base64');
   const pem = `-----BEGIN PUBLIC KEY-----\n${spki.match(/.{1,64}/g)!.join('\n')}\n-----END PUBLIC KEY-----`;
   assert.equal(await verifyJwt(decodeJwt(`${input}.${sig}`), pem), true);
-  assert.equal(await verifyJwt(decodeJwt(`${input}.${sig.slice(0, -2)}AA`), pem), false);
+  // Flip a bit instead of overwriting the tail: the tail byte can already be 0x00, which made the old check flaky.
+  const sigBytes = Buffer.from(sig, 'base64url');
+  sigBytes[0] ^= 0x01;
+  assert.equal(await verifyJwt(decodeJwt(`${input}.${sigBytes.toString('base64url')}`), pem), false);
 });
 
 test('aes: GCM and CBC round-trip with raw and passphrase keys; wrong key is a clean error', async () => {
