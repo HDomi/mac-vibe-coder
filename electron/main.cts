@@ -16,25 +16,25 @@ import { blocksQuit, initLockScreen, isLocked, isLockShortcut, lockNow, openLock
  * file access to this app, so folder permission prompts show the app name.
  */
 
-const PORT = Number(process.env.MVC_PORT) || 11398; // MVC_PORT: test copies only (server/config.ts)
+const PORT = Number(process.env.VIBRATO_PORT) || 11398; // VIBRATO_PORT: test copies only (server/config.ts)
 const DEV = process.env.VITE_DEV === '1';
 const URL_DEV = 'http://localhost:5173';
 const URL_PROD = `http://127.0.0.1:${PORT}`;
 const RESTART_EXIT_CODE = 75;
 const REPO_ROOT = path.resolve(__dirname, '../..');
 const APP_ICON = path.join(REPO_ROOT, 'web', 'public', 'icon.png');
-const APP_NAME = 'Mac Vibe Coder';
+const APP_NAME = 'Vibrato';
 /** The .app this code runs from (standalone build), or null for a source checkout / the install.sh launcher. */
 const APP_BUNDLE = (() => { const i = __dirname.indexOf('.app/Contents/Resources/app/'); return i < 0 ? null : __dirname.slice(0, i + 4); })();
 /** Shared with server/releaseUpdate.ts: where a downloaded update waits until the app restarts. */
-const UPDATE_DIR = process.env.MVC_UPDATE_DIR || path.join(os.homedir(), 'Library', 'Caches', 'com.hdomi.mac-vibe-coder', 'update');
+const UPDATE_DIR = process.env.VIBRATO_UPDATE_DIR || path.join(os.homedir(), 'Library', 'Caches', 'com.hdomi.vibrato', 'update');
 const EXPECTED_BUILD = (() => { try { return JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'dist/build-info.json'), 'utf8')); } catch { return null; } })();
 
 // Name used by dialogs, the app menu title and notifications. The menu bar / Dock label of the
 // unpackaged Electron.app comes from its Info.plist, which scripts/brand-electron.sh patches.
 app.setName(APP_NAME);
 // Test copies run beside the real app with their own profile (and so their own single-instance lock).
-if (process.env.MVC_USER_DATA) app.setPath('userData', process.env.MVC_USER_DATA);
+if (process.env.VIBRATO_USER_DATA) app.setPath('userData', process.env.VIBRATO_USER_DATA);
 
 let server: ChildProcess | null = null;
 let quitting = false;
@@ -131,19 +131,19 @@ async function startServer(): Promise<void> {
   if (adoptedServerPid !== null) {
     // The adopted server went away (an update restart, or a crash). Its exit code never reaches us, so
     // relaunch the whole app the way an update would; the new instance spawns and owns its server.
-    console.log('[mac-vibe-coder] adopted server exited; relaunching');
+    console.log('[vibrato] adopted server exited; relaunching');
     restartApp();
     return;
   }
   const runtime = await resolveNode();
   const entry = path.join(REPO_ROOT, 'dist', 'server', 'index.js');
   if (quitting) return;
-  const env: NodeJS.ProcessEnv = { ...process.env, MVC_DEV: DEV ? '1' : '0', MVC_ELECTRON_EXEC_PATH: process.execPath, MVC_ELECTRON_VERSION: process.versions.electron, MVC_UPDATE_DIR: UPDATE_DIR };
+  const env: NodeJS.ProcessEnv = { ...process.env, VIBRATO_DEV: DEV ? '1' : '0', VIBRATO_ELECTRON_EXEC_PATH: process.execPath, VIBRATO_ELECTRON_VERSION: process.versions.electron, VIBRATO_UPDATE_DIR: UPDATE_DIR };
   delete env.ELECTRON_RUN_AS_NODE;
   Object.assign(env, runtime.env);
-  console.log(`[mac-vibe-coder] server runtime: ${runtime.label}`);
+  console.log(`[vibrato] server runtime: ${runtime.label}`);
   server = spawn(runtime.exe, [entry], { cwd: REPO_ROOT, env, stdio: ['ignore', 'inherit', 'inherit'] });
-  server.on('error', (err) => console.error('[mac-vibe-coder] server spawn failed', err.message));
+  server.on('error', (err) => console.error('[vibrato] server spawn failed', err.message));
   server.on('close', (code) => {
     server = null;
     if (quitting) return;
@@ -155,11 +155,11 @@ async function startServer(): Promise<void> {
     // Crash: respawn with exponential backoff (1.5s → 30s) so a persistent failure does not spin.
     const delay = respawnDelay;
     respawnDelay = Math.min(30000, respawnDelay * 2);
-    console.log(`[mac-vibe-coder] server exited (${code}); restarting in ${delay}ms`);
+    console.log(`[vibrato] server exited (${code}); restarting in ${delay}ms`);
     respawnTimer = setTimeout(() => { void startServer().catch(console.error); }, delay);
   });
   if (await waitHealthy(15000)) respawnDelay = 1500;
-  else throw new Error(`Server did not start on port ${PORT}. Close any other Mac Vibe Coder checkout using this port and try again.`); // healthy start resets the backoff
+  else throw new Error(`Server did not start on port ${PORT}. Close any other Vibrato checkout using this port and try again.`); // healthy start resets the backoff
 }
 
 /**
@@ -175,7 +175,7 @@ function restartApp() {
 }
 
 const SWAP_SCRIPT = `#!/bin/zsh
-# Written by Mac Vibe Coder (electron/main.cts). Installs a staged update once the app has quit.
+# Written by Vibrato (electron/main.cts). Installs a staged update once the app has quit.
 PID="$1"; APP="$2"; NEW="$3"; shift 3
 for i in {1..300}; do kill -0 "$PID" 2>/dev/null || break; sleep 0.2; done
 echo "$(date '+%F %T') install $NEW -> $APP"
@@ -207,7 +207,7 @@ function startBundleSwap(): boolean {
     const script = path.join(UPDATE_DIR, 'install-update.sh');
     fs.writeFileSync(script, SWAP_SCRIPT, { mode: 0o700 });
     // Test copies keep their isolation across the restart (open --env).
-    const keep = ['MVC_PORT', 'MVC_USER_DATA', 'MVC_CONFIG_DIR', 'MVC_UPDATE_FEED', 'MVC_UPDATE_DIR'].filter((k) => process.env[k]).flatMap((k) => ['--env', `${k}=${process.env[k]}`]);
+    const keep = ['VIBRATO_PORT', 'VIBRATO_USER_DATA', 'VIBRATO_CONFIG_DIR', 'VIBRATO_UPDATE_FEED', 'VIBRATO_UPDATE_DIR'].filter((k) => process.env[k]).flatMap((k) => ['--env', `${k}=${process.env[k]}`]);
     const log = fs.openSync(path.join(UPDATE_DIR, 'install.log'), 'a');
     spawn('/bin/zsh', [script, String(process.pid), APP_BUNDLE, staged, ...keep], { detached: true, stdio: ['ignore', log, log] }).unref();
     return true;
@@ -345,7 +345,7 @@ ipcMain.on('keep-awake', (e, busy: unknown) => {
 // installs; existing users switch to alerts in System Settings, which this opens straight at the app's page.
 ipcMain.on('open-notification-settings', (e) => {
   if (!fromApp(e)) return;
-  void shell.openExternal('x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.hdomi.mac-vibe-coder');
+  void shell.openExternal('x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.hdomi.vibrato');
 });
 ipcMain.on('notify-close', (e, requestId: unknown) => {
   if (!fromApp(e) || typeof requestId !== 'string') return;
@@ -389,7 +389,7 @@ function buildMenu() {
     languageMenu,
     lockMenu,
     { role: 'windowMenu' },
-    { role: 'help', submenu: [{ label: 'Repository', click: () => { void shell.openExternal('https://github.com/HDomi/mac-vibe-coder'); } }] },
+    { role: 'help', submenu: [{ label: 'Repository', click: () => { void shell.openExternal('https://github.com/HDomi/vibrato'); } }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

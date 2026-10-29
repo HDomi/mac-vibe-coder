@@ -7,10 +7,10 @@ function findRoot(start: string): string {
   let current = start;
   while (true) {
     try {
-      if (JSON.parse(readFileSync(path.join(current, 'package.json'), 'utf8')).name === 'mac-vibe-coder') return current;
+      if (JSON.parse(readFileSync(path.join(current, 'package.json'), 'utf8')).name === 'vibrato') return current;
     } catch { /* keep walking */ }
     const parent = path.dirname(current);
-    if (parent === current) throw new Error('Mac Vibe Coder repository root not found');
+    if (parent === current) throw new Error('Vibrato repository root not found');
     current = parent;
   }
 }

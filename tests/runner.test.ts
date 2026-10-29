@@ -8,7 +8,7 @@ import { listRuns, projectScripts, removeRun, startRun, stopRun, subscribeRun, t
 const until = async (cond: () => boolean, ms = 8000) => { const end = Date.now() + ms; while (!cond()) { if (Date.now() > end) throw new Error('timeout'); await new Promise((r) => setTimeout(r, 30)); } };
 
 test('runner: scripts listed dev-first, output and URL captured, stop kills the group', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'mvc-run-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vibrato-run-'));
   try {
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ scripts: { lint: 'x', dev: 'vite', test: 'y', predev: 'z' } }));
     const { scripts } = await projectScripts(dir);

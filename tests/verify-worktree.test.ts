@@ -5,13 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-const cfg = mkdtempSync(join(tmpdir(), 'mvc-cfg-'));
-process.env.MVC_CONFIG_DIR = cfg;
+const cfg = mkdtempSync(join(tmpdir(), 'vibrato-cfg-'));
+process.env.VIBRATO_CONFIG_DIR = cfg;
 
 test('a worktree session verifies with the settings of the repository it came from', async () => {
   const { updateProjectSettings, verifySettings } = await import('../server/verify');
   const { createWorktree, removeWorktree } = await import('../server/worktree');
-  const base = mkdtempSync(join(tmpdir(), 'mvc-vw-'));
+  const base = mkdtempSync(join(tmpdir(), 'vibrato-vw-'));
   const repo = join(base, 'p');
   const git = (...a: string[]) => execFileSync('git', a, { stdio: 'pipe' });
   try {

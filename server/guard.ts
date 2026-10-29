@@ -7,14 +7,14 @@
  * Every HTTP request and WebSocket upgrade goes through `rejectReason` first.
  *
  *  - Host must be a loopback name (defeats DNS rebinding).
- *  - Origin, when present, must be this server's own origin (or the Vite dev server when MVC_DEV=1).
+ *  - Origin, when present, must be this server's own origin (or the Vite dev server when VIBRATO_DEV=1).
  *  - Without Origin, Sec-Fetch-Site must not say the request came from another site.
  *  - Clients that send neither (curl, Electron's health probe, local scripts) already run as the
  *    user on this machine and are allowed.
  */
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 const DEV_PORT = 5173;
-const DEV = process.env.MVC_DEV === '1';
+const DEV = process.env.VIBRATO_DEV === '1';
 
 function hostParts(host: string): { name: string; port: number | null } | null {
   const m = host.trim().toLowerCase().match(/^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/);

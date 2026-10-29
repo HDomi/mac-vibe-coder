@@ -29,7 +29,7 @@ class AppServerClient {
     const rl = createInterface({ input: this.proc.stdout! });
     // A codex CLI update can change message shapes; a TypeError in a handler must not take the server down.
     rl.on('line', (line) => {
-      try { this.handleLine(line); } catch (err) { this.onStderr(`[mac-vibe-coder] failed to handle app-server message: ${(err as Error).message}`); }
+      try { this.handleLine(line); } catch (err) { this.onStderr(`[vibrato] failed to handle app-server message: ${(err as Error).message}`); }
     });
     this.proc.stderr!.on('data', (d) => this.onStderr(String(d)));
     // EPIPE after the process died would otherwise be an unhandled 'error' event.
@@ -156,7 +156,7 @@ export class CodexSession implements AgentSession {
     c.onRequest = (id, m, p) => this.handleRequest(id, m, p);
     c.onStderr = (t) => this.emit({ kind: 'log', text: t });
     c.onExit = () => { if (!this.closed) { this.closed = true; this.emit({ kind: 'error', message: 'codex app-server process exited' }); this.emit({ kind: 'status', status: 'closed' }); } };
-    await c.request('initialize', { clientInfo: { name: 'mac-vibe-coder', title: 'mac-vibe-coder', version: '0.1.0' }, capabilities: null });
+    await c.request('initialize', { clientInfo: { name: 'vibrato', title: 'vibrato', version: '0.1.0' }, capabilities: null });
     c.notify('initialized');
     const pol = policyFor(this.mode, this.cwd);
     const base: Json = { cwd: this.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandboxMode, model: this.opts.model ?? null };
@@ -473,7 +473,7 @@ export class CodexSession implements AgentSession {
 export async function listCodexThreads(codexPath: string, cwd: string | null, limit = 30): Promise<{ sessionId: string; summary: string; lastModified: number; firstPrompt?: string; gitBranch?: string; cwd?: string }[]> {
   const c = new AppServerClient(codexPath, cwd ?? process.env.HOME ?? '/');
   try {
-    await c.request('initialize', { clientInfo: { name: 'mac-vibe-coder', title: 'mac-vibe-coder', version: '0.1.0' }, capabilities: null });
+    await c.request('initialize', { clientInfo: { name: 'vibrato', title: 'vibrato', version: '0.1.0' }, capabilities: null });
     c.notify('initialized');
     const res = await c.request<Json>('thread/list', { cwd: cwd ?? null, limit, sortKey: 'updated_at', sortDirection: 'desc', archived: false }, 30000);
     return ((res.data as Json[]) ?? []).map((t) => ({
@@ -492,7 +492,7 @@ export async function listCodexThreads(codexPath: string, cwd: string | null, li
 export async function listCodexModels(codexPath: string): Promise<{ id: string; name: string; description?: string; isDefault?: boolean }[]> {
   const c = new AppServerClient(codexPath, process.env.HOME ?? '/');
   try {
-    await c.request('initialize', { clientInfo: { name: 'mac-vibe-coder', title: 'mac-vibe-coder', version: '0.1.0' }, capabilities: null });
+    await c.request('initialize', { clientInfo: { name: 'vibrato', title: 'vibrato', version: '0.1.0' }, capabilities: null });
     c.notify('initialized');
     const res = await c.request<Json>('model/list', { includeHidden: false }, 30000);
     return ((res.data as Json[]) ?? []).filter((m) => !m.hidden).map((m) => ({ id: String(m.model ?? m.id), name: String(m.displayName ?? m.model), description: m.description ? String(m.description) : undefined, isDefault: Boolean(m.isDefault) }));
@@ -505,7 +505,7 @@ export async function listCodexModels(codexPath: string): Promise<{ id: string; 
 export async function codexThreadOp(codexPath: string, op: 'rename' | 'delete', threadId: string, name?: string): Promise<void> {
   const c = new AppServerClient(codexPath, process.env.HOME ?? '/');
   try {
-    await c.request('initialize', { clientInfo: { name: 'mac-vibe-coder', title: 'mac-vibe-coder', version: '0.1.0' }, capabilities: null });
+    await c.request('initialize', { clientInfo: { name: 'vibrato', title: 'vibrato', version: '0.1.0' }, capabilities: null });
     c.notify('initialized');
     if (op === 'rename') await c.request('thread/name/set', { threadId, name: name ?? '' });
     else await c.request('thread/delete', { threadId }); // permanent, unlike thread/archive

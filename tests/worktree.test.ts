@@ -7,7 +7,7 @@ import test from 'node:test';
 import { checkWorktree, createWorktree, listWorktrees, mergeWorktree, removeWorktree, sanitizeBranch, worktreeStatus } from '../server/worktree';
 
 test('worktree sessions: create next to the repo, refuse dirty merge, merge with a merge commit, clean up', async () => {
-  const base = realpathSync(mkdtempSync(join(tmpdir(), 'mvc-wt-')));
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'vibrato-wt-')));
   const repo = join(base, 'proj');
   mkdirSync(join(repo, 'node_modules', 'dep'), { recursive: true });
   const git = (cwd: string, ...a: string[]) => execFileSync('git', ['-C', cwd, ...a], { stdio: 'pipe' }).toString().trim();

@@ -39,10 +39,10 @@ for (const scenario of ['success', 'build-failure', 'checkout-conflict']) {
       const before = git(checkout, 'rev-parse', 'HEAD');
       const expected = git(remote, 'rev-parse', 'HEAD');
       const bin = join(checkout, 'runtime/node/bin'); await mkdir(bin, { recursive: true });
-      await writeFile(join(bin, 'npm'), '#!/bin/sh\nif [ "$1" = ci ]; then mkdir -p node_modules; echo "new build" > node_modules/marker; fi\nif [ "$1" = run ]; then\n  if [ "$MVC_TEST_FAIL" = 1 ]; then exit 9; fi\n  mkdir -p dist web/dist; printf "new build" > dist/marker; printf "new build" > web/dist/marker\nfi\n', { mode: 0o755 });
+      await writeFile(join(bin, 'npm'), '#!/bin/sh\nif [ "$1" = ci ]; then mkdir -p node_modules; echo "new build" > node_modules/marker; fi\nif [ "$1" = run ]; then\n  if [ "$VIBRATO_TEST_FAIL" = 1 ]; then exit 9; fi\n  mkdir -p dist web/dist; printf "new build" > dist/marker; printf "new build" > web/dist/marker\nfi\n', { mode: 0o755 });
       if (scenario === 'checkout-conflict') await writeFile(join(checkout, 'payload.txt'), 'local work');
-      const env = { ...process.env, MVC_TEST_FAIL: scenario === 'build-failure' ? '1' : '0' };
-      delete env.MVC_ELECTRON_EXEC_PATH; delete env.MVC_ELECTRON_VERSION;
+      const env = { ...process.env, VIBRATO_TEST_FAIL: scenario === 'build-failure' ? '1' : '0' };
+      delete env.VIBRATO_ELECTRON_EXEC_PATH; delete env.VIBRATO_ELECTRON_VERSION;
       const result = spawnSync('/bin/zsh', [join(checkout, 'scripts/apply-update.sh')], { env, encoding: 'utf8', timeout: 15000 });
       const success = scenario === 'success';
       assert.equal(result.status === 0, success, result.stdout + result.stderr);

@@ -32,7 +32,7 @@ test('HTTP proxy: method, headers, body echo, gzip, binary, redirects, errors', 
     assert.ok(r.ok);
     assert.equal(r.status, 201);
     assert.equal(r.encoding, 'utf8');
-    assert.deepEqual(JSON.parse(r.body), { method: 'PUT', x: 'yes', ua: 'mac-vibe-coder', body: '{"a":1}' });
+    assert.deepEqual(JSON.parse(r.body), { method: 'PUT', x: 'yes', ua: 'vibrato', body: '{"a":1}' });
     assert.ok(r.wireSize < r.size || r.size < 80);
     assert.deepEqual(r.headers.filter(([k]) => k === 'Set-Cookie').map(([, v]) => v), ['a=1', 'b=2']);
 

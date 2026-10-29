@@ -139,7 +139,7 @@ export class Scheduler {
       for (const f of fire) void this.execute(f.s, f.at, 'schedule');
       await this.updatePower(now);
     } catch (err) {
-      console.warn(`[mac-vibe-coder] schedule tick failed: ${(err as Error).message}`);
+      console.warn(`[vibrato] schedule tick failed: ${(err as Error).message}`);
     } finally {
       this.ticking = false;
     }
@@ -180,7 +180,7 @@ export class Scheduler {
       await fs.mkdir(CONFIG_DIR, { recursive: true });
       const temp = `${RUNS_FILE}.${randomUUID()}.tmp`;
       try { await fs.writeFile(temp, data, { mode: 0o600 }); await fs.rename(temp, RUNS_FILE); } finally { await fs.rm(temp, { force: true }); }
-    }).catch((err) => console.warn(`[mac-vibe-coder] saving schedule runs failed: ${(err as Error).message}`));
+    }).catch((err) => console.warn(`[vibrato] saving schedule runs failed: ${(err as Error).message}`));
   }
 
   private async execute(s: Schedule, scheduledFor: number, trigger: ScheduleRun['trigger']) {

@@ -77,7 +77,7 @@ export function createApp(registry?: SessionRegistry, port = PORT, scheduler?: S
   });
 
   // pid / appOwned let an app that adopts an already running server (after the lock watchdog restarted it) stop it on quit.
-  app.get('/api/health', (c) => c.json({ ok: true, repo: REPO_ROOT, version: BUILD.version, commit: BUILD.commit, builtAt: BUILD.builtAt, pid: process.pid, appOwned: !!process.env.MVC_ELECTRON_EXEC_PATH }));
+  app.get('/api/health', (c) => c.json({ ok: true, repo: REPO_ROOT, version: BUILD.version, commit: BUILD.commit, builtAt: BUILD.builtAt, pid: process.pid, appOwned: !!process.env.VIBRATO_ELECTRON_EXEC_PATH }));
   app.get('/api/home', async (c) => c.json(await homeInfo()));
 
   app.get('/api/fs/list', async (c) => c.json(await listDir(c.req.query('path') ?? '~')));
@@ -438,7 +438,7 @@ export function createApp(registry?: SessionRegistry, port = PORT, scheduler?: S
   // Installs or removes the wake helper (schedulePower.ts) behind the system's admin password prompt.
   app.post('/api/schedules/wake-helper', async (c) => {
     const b = await c.req.json<{ install?: unknown; prompt?: unknown }>();
-    const result = await sched().power.setHelper(b.install === true, typeof b.prompt === 'string' && b.prompt ? b.prompt.slice(0, 300) : 'Mac Vibe Coder wants to wake this Mac for scheduled runs.');
+    const result = await sched().power.setHelper(b.install === true, typeof b.prompt === 'string' && b.prompt ? b.prompt.slice(0, 300) : 'Vibrato wants to wake this Mac for scheduled runs.');
     await sched().tick();
     return c.json({ result, ...(await sched().snapshot()) });
   });

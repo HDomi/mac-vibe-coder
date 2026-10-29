@@ -1,4 +1,4 @@
-# Mac Vibe Coder
+# Vibrato
 
 개인용 macOS 바이브코딩 앱. Electron 껍데기 + 로컬 Node 서버(Hono, 127.0.0.1:11398) + React(Vite, Tailwind v4).
 에이전트는 사용자가 설치·로그인한 `claude` / `codex` CLI 만 쓴다. API 키 기반 설계는 하지 않는다.
@@ -44,5 +44,5 @@ npm run dist       # build + electron-builder → release/ (DMG, zip)
 
 - 코드 주석 · 로그 문자열은 영어. UI 문자열은 `web/src/lib/i18n.ts` 에 en / ko 둘 다 넣는다.
 - 사용자가 체크아웃 런처 앱을 띄워 둔 상태일 수 있다. 그 앱은 레포의 `dist/` · `web/dist/` 를 그대로 서빙하고, 빌드 정보가 바뀌면 재시작 루프에 빠진다. **레포 안에서 `npm run build` / `vite build` / `npm run dist` 를 하지 말고** `/tmp` 복사본에서 빌드 · 검증한다.
-- 실행 중인 앱 옆에서 테스트 사본을 띄울 때 쓰는 환경 변수: `MVC_PORT`, `MVC_USER_DATA`, `MVC_CONFIG_DIR`, `MVC_UPDATE_DIR`, `MVC_UPDATE_FEED`(가짜 릴리스 API). 자동 업데이트 재시작 때도 `open --env` 로 유지된다.
+- 실행 중인 앱 옆에서 테스트 사본을 띄울 때 쓰는 환경 변수: `VIBRATO_PORT`, `VIBRATO_USER_DATA`, `VIBRATO_CONFIG_DIR`, `VIBRATO_UPDATE_DIR`, `VIBRATO_UPDATE_FEED`(가짜 릴리스 API). 자동 업데이트 재시작 때도 `open --env` 로 유지된다.
 - 독립 앱은 Apple 개발자 서명이 없다(ad-hoc, `scripts/after-pack.cjs`). 공증 · 스토어 배포는 범위 밖.

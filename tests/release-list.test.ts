@@ -3,7 +3,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import test from 'node:test';
 
-const asset = (v: string) => [{ name: `Mac-Vibe-Coder-${v}-arm64-mac.zip`, browser_download_url: 'x', size: 1 }, { name: `Mac-Vibe-Coder-${v}-x64-mac.zip`, browser_download_url: 'x', size: 1 }, { name: 'SHA256SUMS.txt', browser_download_url: 'x', size: 1 }];
+const asset = (v: string) => [{ name: `Vibrato-${v}-arm64-mac.zip`, browser_download_url: 'x', size: 1 }, { name: `Vibrato-${v}-x64-mac.zip`, browser_download_url: 'x', size: 1 }, { name: 'SHA256SUMS.txt', browser_download_url: 'x', size: 1 }];
 
 test('recent releases: newest installable ones, drafts, prereleases and asset-less ones skipped', async () => {
   const releases = [
@@ -18,7 +18,7 @@ test('recent releases: newest installable ones, drafts, prereleases and asset-le
   let asked = '';
   const server = http.createServer((req, res) => { asked = req.url ?? ''; res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(releases)); });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  process.env.MVC_UPDATE_FEED = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  process.env.VIBRATO_UPDATE_FEED = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   try {
     const { recentReleases } = await import('../server/releaseUpdate');
     const list = await recentReleases(3);

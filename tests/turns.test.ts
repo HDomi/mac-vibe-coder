@@ -7,7 +7,7 @@ import test from 'node:test';
 import { changedFiles, revertTurn, snapshot, splitHunks, turnDiff } from '../server/turns';
 
 function repo() {
-  const dir = mkdtempSync(join(tmpdir(), 'mvc-turns-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vibrato-turns-'));
   const git = (...a: string[]) => execFileSync('git', ['-C', dir, ...a], { stdio: 'pipe' }).toString();
   git('init', '-q'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't');
   writeFileSync(join(dir, '.gitignore'), 'ignored.txt\n');
@@ -58,7 +58,7 @@ test('turn snapshots see only what changed during the turn, including untracked 
 });
 
 test('turn snapshots: none outside git, paths and ids are validated', async () => {
-  const plain = mkdtempSync(join(tmpdir(), 'mvc-plain-'));
+  const plain = mkdtempSync(join(tmpdir(), 'vibrato-plain-'));
   try { assert.equal(await snapshot(plain), null); } finally { rmSync(plain, { recursive: true, force: true }); }
   const { dir } = repo();
   try {
@@ -70,7 +70,7 @@ test('turn snapshots: none outside git, paths and ids are validated', async () =
 
 test('turn undo goes through git: symlinks are replaced, not written through; modes come back', async () => {
   const { dir, git } = repo();
-  const outside = mkdtempSync(join(tmpdir(), 'mvc-outside-'));
+  const outside = mkdtempSync(join(tmpdir(), 'vibrato-outside-'));
   try {
     const { chmodSync, statSync, symlinkSync, lstatSync } = await import('node:fs');
     writeFileSync(join(dir, 'run.sh'), '#!/bin/sh\necho hi\n'); chmodSync(join(dir, 'run.sh'), 0o755);

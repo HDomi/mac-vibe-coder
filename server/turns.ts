@@ -34,7 +34,7 @@ export async function repoRoot(cwd: string): Promise<string | null> {
 export async function snapshot(cwd: string, timeout = 20000): Promise<Snapshot | null> {
   const root = await repoRoot(cwd);
   if (!root) return null;
-  const dir = await mkdtemp(path.join(tmpdir(), 'mvc-snap-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'vibrato-snap-'));
   const index = path.join(dir, 'index');
   try {
     // Starting from the real index lets `git add` skip files whose stat data did not change.
@@ -127,7 +127,7 @@ export async function revertTurn(root: string, from: string, to: string, opts: {
     const { header, hunks } = splitHunks(await turnDiff(abs, from, to, opts.hunk.file));
     const h = hunks[opts.hunk.index];
     if (!h) return { ok: false, reverted: [], conflicts: [], error: 'Hunk not found' };
-    const dir = await mkdtemp(path.join(tmpdir(), 'mvc-hunk-'));
+    const dir = await mkdtemp(path.join(tmpdir(), 'vibrato-hunk-'));
     try {
       const patch = path.join(dir, 'p.diff');
       await writeFile(patch, `${header}\n${h}\n`);
@@ -156,7 +156,7 @@ export async function revertTurn(root: string, from: string, to: string, opts: {
   if (restore.length) {
     // git writes the old entries itself: file mode, symlinks and binary content come back exactly, and an
     // existing symlink at the path is replaced rather than written through.
-    const dir = await mkdtemp(path.join(tmpdir(), 'mvc-restore-'));
+    const dir = await mkdtemp(path.join(tmpdir(), 'vibrato-restore-'));
     try {
       const env = { GIT_INDEX_FILE: path.join(dir, 'index') };
       const read = await git(abs, ['read-tree', from], { env });

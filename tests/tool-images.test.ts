@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-const dir = mkdtempSync(join(tmpdir(), 'mvc-toolimg-'));
-process.env.MVC_CONFIG_DIR = dir;
+const dir = mkdtempSync(join(tmpdir(), 'vibrato-toolimg-'));
+process.env.VIBRATO_CONFIG_DIR = dir;
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 
 test('tool images: saved once by content hash, unusable input rejected', async () => {

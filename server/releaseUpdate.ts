@@ -9,16 +9,16 @@ import { run } from './shell.js';
 
 /*
  * Updates for the standalone app (the .app built by electron-builder, see electron-builder.yml).
- * The release workflow attaches Mac-Vibe-Coder-<version>-<arch>-mac.zip and SHA256SUMS.txt to every
+ * The release workflow attaches Vibrato-<version>-<arch>-mac.zip and SHA256SUMS.txt to every
  * version tag's GitHub release. Applying an update downloads the zip, checks its hash, unpacks it next to
  * the cache and records it as pending; the Electron main process swaps the bundle in after the app quits
  * and reopens it (electron/main.cts startBundleSwap). Nothing touches the installed app until then.
  */
 
-export const BUNDLE_ID = 'com.hdomi.mac-vibe-coder';
+export const BUNDLE_ID = 'com.hdomi.vibrato';
 /** GitHub REST base for the releases. Overridable for local end-to-end tests against a fake feed. */
-export const FEED = process.env.MVC_UPDATE_FEED || 'https://api.github.com/repos/HDomi/mac-vibe-coder';
-export const UPDATE_DIR = process.env.MVC_UPDATE_DIR || path.join(homedir(), 'Library', 'Caches', BUNDLE_ID, 'update');
+export const FEED = process.env.VIBRATO_UPDATE_FEED || 'https://api.github.com/repos/HDomi/vibrato';
+export const UPDATE_DIR = process.env.VIBRATO_UPDATE_DIR || path.join(homedir(), 'Library', 'Caches', BUNDLE_ID, 'update');
 export const PENDING_FILE = 'pending.json';
 
 /** The .app bundle this code runs from, or null when it runs from a source checkout. */
@@ -30,7 +30,7 @@ export function bundleOf(root: string): string | null {
 
 /** Why the bundle cannot replace itself, or null. Translocated or mounted copies are read-only. */
 export function bundleProblem(bundle: string): string | null {
-  if (bundle.includes('/AppTranslocation/') || bundle.startsWith('/Volumes/')) return 'Move Mac Vibe Coder to the Applications folder and open it from there to enable updates.';
+  if (bundle.includes('/AppTranslocation/') || bundle.startsWith('/Volumes/')) return 'Move Vibrato to the Applications folder and open it from there to enable updates.';
   return null;
 }
 
@@ -59,7 +59,7 @@ export function parseSums(text: string): Map<string, string> {
   return out;
 }
 
-const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'mac-vibe-coder-updater' };
+const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'vibrato-updater' };
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });

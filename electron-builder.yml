@@ -1,7 +1,7 @@
 # Standalone macOS app: Electron shell, local server, web build and production node_modules in one bundle.
 # Built by .github/workflows/release.yml on every pushed version tag; locally with `npm run dist`.
-appId: com.hdomi.mac-vibe-coder
-productName: Mac Vibe Coder
+appId: com.hdomi.vibrato
+productName: Vibrato
 copyright: HDomi
 directories:
   output: release
@@ -27,7 +27,7 @@ mac:
       arch: arm64
   category: public.app-category.developer-tools
   # The zip's name; server/releaseUpdate.ts looks for "-<arch>-mac.zip". The DMG overrides it below.
-  artifactName: Mac-Vibe-Coder-${version}-${arch}-mac.${ext}
+  artifactName: Vibrato-${version}-${arch}-mac.${ext}
   icon: assets/icon.icns
   # No Apple Developer ID: skip electron-builder's signing; scripts/after-pack.cjs signs ad hoc instead.
   identity: null
@@ -36,6 +36,6 @@ mac:
     # Approval notifications carry buttons, so default to the "alert" style that stays until dismissed.
     NSUserNotificationAlertStyle: alert
 dmg:
-  artifactName: Mac-Vibe-Coder-${version}-${arch}.${ext}
+  artifactName: Vibrato-${version}-${arch}.${ext}
 afterPack: scripts/after-pack.cjs
 publish: null

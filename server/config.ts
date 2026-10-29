@@ -5,10 +5,10 @@ import { randomUUID } from 'node:crypto';
 import type { Schedule } from './schedule.js';
 import type { FormType } from '../web/src/lib/promptForm.js';
 
-/** MVC_PORT / MVC_CONFIG_DIR only exist so a test copy of the app can run next to the real one. */
-export const PORT = Number(process.env.MVC_PORT) || 11398;
+/** VIBRATO_PORT / VIBRATO_CONFIG_DIR only exist so a test copy of the app can run next to the real one. */
+export const PORT = Number(process.env.VIBRATO_PORT) || 11398;
 export const HOST = '127.0.0.1';
-export const CONFIG_DIR = process.env.MVC_CONFIG_DIR || path.join(homedir(), '.mac-vibe-coder');
+export const CONFIG_DIR = process.env.VIBRATO_CONFIG_DIR || path.join(homedir(), '.vibrato');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 export interface Favorite {

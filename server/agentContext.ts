@@ -18,7 +18,7 @@ export interface ContextHook { scope: Scope; file: string; event: string; matche
 export interface ContextMcp { scope: Scope; agent: Agent; name: string; command: string; file: string }
 export interface AgentContext { docs: ContextDoc[]; skills: ContextSkill[]; hooks: ContextHook[]; mcp: ContextMcp[] }
 
-const HOME = process.env.MVC_AGENT_HOME || homedir();
+const HOME = process.env.VIBRATO_AGENT_HOME || homedir();
 const MAX_DOC = 512 * 1024;
 
 async function readDoc(scope: Scope, agent: Agent, file: string): Promise<ContextDoc> {

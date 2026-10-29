@@ -5,7 +5,7 @@ import { Area, Code, Seg, btn, errText, select, usePersisted } from './ui';
 
 const LABEL: Record<DataFormat, string> = { json: 'JSON', yaml: 'YAML', toml: 'TOML' };
 const SAMPLE = `# app config
-name: mac-vibe-coder
+name: vibrato
 server:
   host: 127.0.0.1
   port: 11398

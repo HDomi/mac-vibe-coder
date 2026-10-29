@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="web/public/icon.png" width="128" alt="Mac Vibe Coder" />
+  <img src="web/public/icon.png" width="128" alt="Vibrato" />
 </p>
 
-<h1 align="center">Mac Vibe Coder</h1>
+<h1 align="center">Vibrato</h1>
 
 <p align="center">
   Claude Code · Codex CLI 를 한 화면에서 쓰는 macOS 전용 바이브코딩 앱.<br/>
@@ -18,7 +18,7 @@
 ## 왜 만들었나
 
 바이브코딩을 하다 보면 코드를 직접 보는 시간보다 에이전트와 대화하는 시간이 길다. 그런데 Claude Code 는 이 터미널, Codex 는 저 터미널, 결과물 확인은 Finder 와 브라우저… 전부 흩어져 있다.
-Mac Vibe Coder 는 그걸 한 창에 모은다. 폴더를 고르면 그 폴더를 루트로 에이전트 세션이 열리고, 옆에서 파일을 보고, 터미널을 띄우고, 커밋까지 한다.
+Vibrato 는 그걸 한 창에 모은다. 폴더를 고르면 그 폴더를 루트로 에이전트 세션이 열리고, 옆에서 파일을 보고, 터미널을 띄우고, 커밋까지 한다.
 
 - **API 키를 쓰지 않는다.** 이미 설치·로그인된 `claude`(claude.ai 구독) 와 `codex`(ChatGPT) 바이너리를 그대로 쓴다. CLI 로 쓰는 것과 요금·한도가 똑같다.
 - **코드는 안 숨긴다.** 전부 TypeScript. 마음에 안 드는 UI 는 고쳐 쓰면 된다.
@@ -52,12 +52,12 @@ Mac Vibe Coder 는 그걸 한 창에 모은다. 폴더를 고르면 그 폴더�
 
 ## 설치
 
-[Releases](https://github.com/HDomi/mac-vibe-coder/releases/latest) 에서 `Mac-Vibe-Coder-<버전>-arm64.dmg` 를 받아 앱을 `응용 프로그램` 폴더로 끌어 놓는다. 레포 · git · Node 없이 혼자 돈다.
+[Releases](https://github.com/HDomi/vibrato/releases/latest) 에서 `Vibrato-<버전>-arm64.dmg` 를 받아 앱을 `응용 프로그램` 폴더로 끌어 놓는다. 레포 · git · Node 없이 혼자 돈다.
 
 Apple 개발자 서명이 없는(ad-hoc) 앱이라 처음 한 번은 macOS 가 막는다. 시스템 설정 › 개인정보 보호 및 보안 › "그래도 열기" 를 누르거나, 터미널에서 격리 표시를 지운다.
 
 ```bash
-xattr -dr com.apple.quarantine "/Applications/Mac Vibe Coder.app"
+xattr -dr com.apple.quarantine "/Applications/Vibrato.app"
 ```
 
 이후 업데이트는 앱이 알아서 받는다(아래 [업데이트](#업데이트)). 예전 `install.sh` 런처를 쓰고 있었다면 DMG 의 앱으로 덮어쓰면 된다. 설정 · 세션은 그대로 남는다.
@@ -65,12 +65,12 @@ xattr -dr com.apple.quarantine "/Applications/Mac Vibe Coder.app"
 ### 소스에서 설치 (개발용)
 
 ```bash
-git clone https://github.com/HDomi/mac-vibe-coder.git
-cd mac-vibe-coder
+git clone https://github.com/HDomi/vibrato.git
+cd vibrato
 ./install.sh
 ```
 
-`install.sh` 가 하는 일: Node 확인(없으면 `runtime/` 에 내려받음) → 의존성 설치 → 빌드 → Electron 런타임에 이름·아이콘·번들 id 입히기 → `/Applications/Mac Vibe Coder.app` 생성 → 실행.
+`install.sh` 가 하는 일: Node 확인(없으면 `runtime/` 에 내려받음) → 의존성 설치 → 빌드 → Electron 런타임에 이름·아이콘·번들 id 입히기 → `/Applications/Vibrato.app` 생성 → 실행.
 이 앱 번들은 체크아웃을 가리키는 작은 런처라서, 업데이트는 재설치 없이 `git pull` + 빌드로 끝난다.
 
 | 옵션 | 설명 |
@@ -78,7 +78,7 @@ cd mac-vibe-coder
 | `./install.sh --login` | 로그인 시 자동 실행(LaunchAgent)까지 등록 |
 | `./install.sh --no-launch` | 설치만 하고 실행은 안 함 |
 | `scripts/update.sh` | 수동 업데이트(pull · install · build · 재실행) |
-| `scripts/uninstall.sh [--purge]` | 앱 · 로그인 항목 제거. `--purge` 는 `~/.mac-vibe-coder` 까지 |
+| `scripts/uninstall.sh [--purge]` | 앱 · 로그인 항목 제거. `--purge` 는 `~/.vibrato` 까지 |
 
 ### 요구 사항
 
@@ -86,7 +86,7 @@ cd mac-vibe-coder
 - Node.js 는 없어도 된다: 서버는 시스템 node(20 이상)가 있으면 그걸, 없으면 Electron 에 내장된 Node 로 뜬다. 소스 설치는 git 이 필요하고, `install.sh` 가 Node 가 없으면 `runtime/` 에 내려받는다
 - Claude Code CLI(`claude`) 와/또는 Codex CLI(`codex`). 없으면 앱 안 Settings 에서 설치 가능. 로그인은 앱 안 터미널 탭에서 `claude` → `/login`, `codex login`.
 
-첫 실행 때 macOS 가 "Mac Vibe Coder 가 데스크탑 폴더에 접근하려 합니다" 를 물으면 허용한다.
+첫 실행 때 macOS 가 "Vibrato 가 데스크탑 폴더에 접근하려 합니다" 를 물으면 허용한다.
 
 ## 사용법
 
@@ -125,7 +125,7 @@ cd mac-vibe-coder
 ## 동작 원리
 
 ```
-┌─ Mac Vibe Coder.app (Electron) ─────────────────────────────┐
+┌─ Vibrato.app (Electron) ─────────────────────────────┐
 │  renderer: React SPA  ──HTTP/WS──▶  server (Node, 127.0.0.1:11398)
 │                                        ├─ agents/claude.ts  → @anthropic-ai/claude-agent-sdk → 로컬 claude 바이너리
 │                                        ├─ agents/codex.ts   → codex app-server (JSON-RPC/stdio)
@@ -145,16 +145,16 @@ cd mac-vibe-coder
 
 | 경로 | 내용 |
 |------|------|
-| `~/.mac-vibe-coder/config.json` | 즐겨찾기 · 그룹 · 최근 폴더 · 저장한 프롬프트 · 프로젝트별 검증 명령과 작업 백로그 |
-| `~/.mac-vibe-coder/attachments/` | 브라우저 모드 · 붙여넣기 첨부 사본, 브라우저 캡처 · 요소 스크린샷, `tool-images/` 에 도구가 돌려준 이미지(내용 해시 이름) |
-| `~/Library/Application Support/Mac Vibe Coder/Partitions/mvc-browser/` | 브라우저 탭 쿠키 · 로그인(`debugweb` 프로필과 별개) |
+| `~/.vibrato/config.json` | 즐겨찾기 · 그룹 · 최근 폴더 · 저장한 프롬프트 · 프로젝트별 검증 명령과 작업 백로그 |
+| `~/.vibrato/attachments/` | 브라우저 모드 · 붙여넣기 첨부 사본, 브라우저 캡처 · 요소 스크린샷, `tool-images/` 에 도구가 돌려준 이미지(내용 해시 이름) |
+| `~/Library/Application Support/Vibrato/Partitions/vibrato-browser/` | 브라우저 탭 쿠키 · 로그인(`debugweb` 프로필과 별개) |
 | `~/.claude/projects/` | Claude 세션(CLI 와 공유, 이름 변경·삭제도 반영) |
 | `~/.codex/` | Codex 세션 · 로그인(앱이 읽기만 함) |
-| `~/Library/LaunchAgents/com.hdomi.mac-vibe-coder.plist` | `--login` 으로 등록한 자동 실행 |
+| `~/Library/LaunchAgents/com.hdomi.vibrato.plist` | `--login` 으로 등록한 자동 실행 |
 
 ## 업데이트
 
-**DMG 로 설치한 앱**: 버전 배지 → 커밋 목록 확인 → 업데이트 적용. GitHub 최신 릴리스의 zip 을 받아 `SHA256SUMS.txt` 와 대조하고, 번들 id · 버전 · 서명을 확인한 뒤 `~/Library/Caches/com.hdomi.mac-vibe-coder/update/` 에 풀어 둔다. 앱이 종료되면 보조 스크립트가 `/Applications` 의 앱을 새 것으로 바꾸고(실패하면 원래 앱 복구) 다시 연다. 활성 세션이 있으면 보류한다. 결과는 같은 폴더의 `install.log`. `응용 프로그램` 폴더 밖(DMG 안, 다운로드 폴더에서 바로 실행)에서는 자기 교체가 안 돼서 옮기라고 안내한다. 업데이트 창의 **최근 릴리스**에 이 기기용 zip 이 있는 릴리스 세 개가 노트와 함께 나오고, 그중 아무 버전이나 같은 검증 절차로 설치할 수 있다(설치된 것보다 낮으면 **이 버전으로 내리기**).
+**DMG 로 설치한 앱**: 버전 배지 → 커밋 목록 확인 → 업데이트 적용. GitHub 최신 릴리스의 zip 을 받아 `SHA256SUMS.txt` 와 대조하고, 번들 id · 버전 · 서명을 확인한 뒤 `~/Library/Caches/com.hdomi.vibrato/update/` 에 풀어 둔다. 앱이 종료되면 보조 스크립트가 `/Applications` 의 앱을 새 것으로 바꾸고(실패하면 원래 앱 복구) 다시 연다. 활성 세션이 있으면 보류한다. 결과는 같은 폴더의 `install.log`. `응용 프로그램` 폴더 밖(DMG 안, 다운로드 폴더에서 바로 실행)에서는 자기 교체가 안 돼서 옮기라고 안내한다. 업데이트 창의 **최근 릴리스**에 이 기기용 zip 이 있는 릴리스 세 개가 노트와 함께 나오고, 그중 아무 버전이나 같은 검증 절차로 설치할 수 있다(설치된 것보다 낮으면 **이 버전으로 내리기**).
 
 **소스 설치(런처)**:
 
@@ -177,7 +177,7 @@ cd mac-vibe-coder
 
 | 증상 | 원인 · 해결 |
 |------|------------|
-| 파일 목록이 `EACCES` | Desktop/Documents/Downloads 는 macOS 보호 폴더. 권한 팝업을 허용하거나 시스템 설정 › 개인정보 보호 및 보안 › 전체 디스크 접근 권한에 Mac Vibe Coder 추가. 오류 카드에 바로가기 있음 |
+| 파일 목록이 `EACCES` | Desktop/Documents/Downloads 는 macOS 보호 폴더. 권한 팝업을 허용하거나 시스템 설정 › 개인정보 보호 및 보안 › 전체 디스크 접근 권한에 Vibrato 추가. 오류 카드에 바로가기 있음 |
 | "Node.js 를 찾을 수 없음" 대화상자 | 구버전. 지금은 `runtime/node` → 시스템 node(인터랙티브 셸에서 nvm 포함 탐색) → Electron 내장 Node 순으로 자동 선택한다 |
 | `npm run app` 했는데 Electron 이 Node 로 실행됨 | VS Code 통합 터미널이 `ELECTRON_RUN_AS_NODE=1` 을 심는다. npm 스크립트와 `install.sh` 는 이 변수를 지우니 그걸로 실행 |
 | 메뉴바 · Dock 에 "Electron" 으로 표시 | `npm run brand` 한 번 실행 후 재시작. `npm install` 뒤엔 자동 적용 |

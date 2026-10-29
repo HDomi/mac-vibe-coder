@@ -52,7 +52,7 @@ export function cleanMessage(text: string): string {
 }
 
 async function viaClaude(claudePath: string, cwd: string, prompt: string): Promise<string> {
-  const q = query({ prompt, options: { pathToClaudeCodeExecutable: claudePath, cwd, model: 'haiku', tools: [], settingSources: [], maxTurns: 1, persistSession: false, env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: 'mac-vibe-coder/0.1.0' } } });
+  const q = query({ prompt, options: { pathToClaudeCodeExecutable: claudePath, cwd, model: 'haiku', tools: [], settingSources: [], maxTurns: 1, persistSession: false, env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: 'vibrato/0.1.0' } } });
   const timer = setTimeout(() => void q.interrupt().catch(() => {}), 60000);
   try {
     for await (const m of q) {
@@ -66,7 +66,7 @@ async function viaClaude(claudePath: string, cwd: string, prompt: string): Promi
 }
 
 async function viaCodex(codexPath: string, cwd: string, prompt: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(tmpdir(), 'mvc-msg-'));
+  const dir = await fs.mkdtemp(path.join(tmpdir(), 'vibrato-msg-'));
   const out = path.join(dir, 'last.txt');
   try {
     await new Promise<void>((resolve, reject) => {

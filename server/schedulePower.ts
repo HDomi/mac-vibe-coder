@@ -13,13 +13,13 @@ import path from 'node:path';
  *   run pmset with anything else.
  */
 
-export const HELPER_PATH = '/Library/PrivilegedHelperTools/com.hdomi.mac-vibe-coder.wake';
-export const SUDOERS_PATH = '/etc/sudoers.d/mac-vibe-coder';
-const OWNER_BASE = 'MacVibeCoder';
+export const HELPER_PATH = '/Library/PrivilegedHelperTools/com.hdomi.vibrato.wake';
+export const SUDOERS_PATH = '/etc/sudoers.d/vibrato';
+const OWNER_BASE = 'Vibrato';
 
 /** The helper installed as root. Arguments: set|cancel <epoch seconds> <tag>. */
 export const HELPER_SCRIPT = `#!/bin/sh
-# Installed by Mac Vibe Coder. Schedules or cancels the app's own wake events and nothing else;
+# Installed by Vibrato. Schedules or cancels the app's own wake events and nothing else;
 # the sudoers rule in ${SUDOERS_PATH} lets the app run it without a password.
 set -eu
 [ "$#" -eq 3 ] || exit 64
@@ -35,7 +35,7 @@ exec /usr/bin/pmset schedule cancel wake "$when" "${OWNER_BASE}.$3"
 
 export function sudoersRule(user: string): string {
   if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(user)) throw new Error(`Unsupported user name "${user}"`);
-  return `# Mac Vibe Coder: schedule the app's own wake events (see ${HELPER_PATH}).\n${user} ALL=(root) NOPASSWD: ${HELPER_PATH}\n`;
+  return `# Vibrato: schedule the app's own wake events (see ${HELPER_PATH}).\n${user} ALL=(root) NOPASSWD: ${HELPER_PATH}\n`;
 }
 
 /** Wake events this app (tag) scheduled, from `pmset -g sched`, as epoch ms. */
@@ -75,7 +75,7 @@ export class SchedulePower {
     if (!this.enabled) return;
     if (on && !this.child) {
       const child = spawn('/usr/bin/caffeinate', ['-i', '-s', '-w', String(process.pid)], { stdio: 'ignore' });
-      child.on('error', (err) => { console.warn(`[mac-vibe-coder] caffeinate failed: ${err.message}`); if (this.child === child) this.child = null; });
+      child.on('error', (err) => { console.warn(`[vibrato] caffeinate failed: ${err.message}`); if (this.child === child) this.child = null; });
       child.on('exit', () => { if (this.child === child) this.child = null; });
       this.child = child;
     } else if (!on && this.child) {
@@ -136,7 +136,7 @@ export class SchedulePower {
     let cmd: string;
     let dir: string | null = null;
     if (install) {
-      dir = await fs.mkdtemp(path.join(tmpdir(), 'mvc-wake-'));
+      dir = await fs.mkdtemp(path.join(tmpdir(), 'vibrato-wake-'));
       const script = path.join(dir, 'helper.sh');
       const rule = path.join(dir, 'sudoers');
       await fs.writeFile(script, HELPER_SCRIPT, { mode: 0o600 });

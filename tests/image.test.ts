@@ -14,7 +14,7 @@ const WRITABLE = new Set(execFileSync('sips', ['--formats'], { encoding: 'utf8' 
   .map((l) => l.trim().split(/\s+/)).filter((c) => c[2] === 'Writable').map((c) => c[1]));
 
 async function scratch() {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mvc-image-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'vibrato-image-'));
   const src = path.join(dir, 'pic.png');
   await fs.copyFile(SRC, src);
   return { dir, src };
@@ -41,7 +41,7 @@ test('convertImage writes the new format at the requested size, without leftover
     const p = await convertImage({ path: src, dest, format, width: 64, height: 64 });
     assert.ok((await fs.stat(p)).size > 0, format);
   }
-  assert.deepEqual((await fs.readdir(dir)).filter((n) => n.includes('mvc-tmp')), []);
+  assert.deepEqual((await fs.readdir(dir)).filter((n) => n.includes('vibrato-tmp')), []);
 });
 
 test('convertImage refuses to replace silently and rejects icon sizes ImageIO cannot write', async () => {

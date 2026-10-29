@@ -199,7 +199,7 @@ export default function LockScreen() {
   const [settings, setSettings] = useState<LockSettings | null>(null);
   const [sessions, setSessions] = useState<LockSessionSummary[]>([]);
   useEffect(() => {
-    document.title = 'Mac Vibe Coder';
+    document.title = 'Vibrato';
     const lock = window.vibe?.lock;
     if (!lock) return;
     void lock.init().then((i) => { if (!i) return; setInit(i); setSettings(i.settings); setSessions(i.sessions); });

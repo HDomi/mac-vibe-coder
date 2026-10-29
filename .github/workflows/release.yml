@@ -56,4 +56,4 @@ jobs:
           git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.md
           if [ -s notes.md ]; then notes=(--notes-file notes.md); else notes=(--generate-notes); fi
           gh release create "$GITHUB_REF_NAME" release/*.dmg release/*.zip release/SHA256SUMS.txt \
-            --title "Mac Vibe Coder $GITHUB_REF_NAME" --verify-tag "${notes[@]}"
+            --title "Vibrato $GITHUB_REF_NAME" --verify-tag "${notes[@]}"

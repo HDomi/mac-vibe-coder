@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('vibe', {
   // Approval answered from a notification button; closing drops a notification whose request was settled in the app.
   onNotificationApproval: (cb) => { ipcRenderer.on('notify-approval', (_e, answer) => cb(answer)); },
   closeNotification: (requestId) => ipcRenderer.send('notify-close', requestId),
-  // System Settings > Notifications > Mac Vibe Coder, for switching banners to alerts that stay on screen.
+  // System Settings > Notifications > Vibrato, for switching banners to alerts that stay on screen.
   openNotificationSettings: () => ipcRenderer.send('open-notification-settings'),
   // Hold / release the "no idle sleep" assertion while agents or shells are busy; wake-up signal for reconnects.
   keepAwake: (busy) => ipcRenderer.send('keep-awake', busy),

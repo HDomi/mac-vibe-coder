@@ -50,7 +50,7 @@ export class SessionRegistry {
   async reap(now = Date.now()) {
     for (const [id, e] of this.entries) {
       if (e.closed && now - e.lastActivity > REAP_EVERY_MS || e.subscribers.size === 0 && !e.running && now - e.lastActivity > ORPHAN_TTL_MS) {
-        console.log(`[mac-vibe-coder] reaping idle session ${id} (${e.session.agent})`);
+        console.log(`[vibrato] reaping idle session ${id} (${e.session.agent})`);
         await this.close(id).catch(() => {});
       }
     }
@@ -231,7 +231,7 @@ export class SessionRegistry {
     for (const ws of e.subscribers) safeSend(ws, msg);
     // Once the turn has settled (the adapters send `status: idle` right after `result`): changes, then verify.
     if (event.kind === 'result' && (e.touched || e.turnBase)) {
-      setTimeout(() => void this.finishTurn(e).catch((err) => console.warn(`[mac-vibe-coder] turn wrap-up failed: ${(err as Error).message}`)), 50);
+      setTimeout(() => void this.finishTurn(e).catch((err) => console.warn(`[vibrato] turn wrap-up failed: ${(err as Error).message}`)), 50);
     }
   }
 }

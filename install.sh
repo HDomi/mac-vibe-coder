@@ -1,6 +1,6 @@
 #!/bin/zsh
-# Mac Vibe Coder installer.
-#   ./install.sh            build and install "/Applications/Mac Vibe Coder.app", then launch it
+# Vibrato installer.
+#   ./install.sh            build and install "/Applications/Vibrato.app", then launch it
 #   ./install.sh --no-launch
 #   ./install.sh --login    also enable "open at login" (LaunchAgent)
 #
@@ -10,10 +10,10 @@
 set -e
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="Mac Vibe Coder"
-APP_DIR="${MVC_APP_DIR:-/Applications}"
+APP_NAME="Vibrato"
+APP_DIR="${VIBRATO_APP_DIR:-/Applications}"
 APP="$APP_DIR/$APP_NAME.app"
-if [ -z "${MVC_APP_DIR:-}" ] && [ -f "$ROOT/runtime/install-location" ]; then APP="$(cat "$ROOT/runtime/install-location")"; APP_DIR="$(dirname "$APP")"; fi
+if [ -z "${VIBRATO_APP_DIR:-}" ] && [ -f "$ROOT/runtime/install-location" ]; then APP="$(cat "$ROOT/runtime/install-location")"; APP_DIR="$(dirname "$APP")"; fi
 LAUNCH=1
 LOGIN=0
 SKIP_BUILD=0
@@ -90,7 +90,7 @@ step "Installing $APP"
 SRC="$ROOT/node_modules/electron/dist/Electron.app"
 [ -d "$SRC" ] || fail "Electron runtime missing at $SRC"
 mkdir -p "$APP_DIR"
-APP_STAGE="$(mktemp -d "$APP_DIR/.mvc-install.XXXXXX")"
+APP_STAGE="$(mktemp -d "$APP_DIR/.vibrato-install.XXXXXX")"
 cleanup_bundle() {
   local result=$?
   trap - EXIT
@@ -122,7 +122,7 @@ if [ "$LAUNCH" = "1" ]; then
 fi
 
 printf '\n'
-bold "Done. Mac Vibe Coder is in $APP_DIR (Launchpad · Spotlight · Dock)."
+bold "Done. Vibrato is in $APP_DIR (Launchpad · Spotlight · Dock)."
 echo "First run may ask for access to Desktop/Documents — allow it so the file browser can see those folders."
 echo "Update later: open the app and click the Update badge, or run scripts/update.sh"
 echo "Uninstall:    scripts/uninstall.sh"

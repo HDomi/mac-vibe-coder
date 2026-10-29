@@ -6,7 +6,7 @@
  * are not pointed at it.
  *
  * The Chrome is the app's own, separate from the `debugweb` helper (9222): CDP port
- * MVC_BROWSER_FALLBACK_PORT (9324) and profile MVC_BROWSER_PROFILE (~/.mac-vibe-coder/chrome-profile).
+ * VIBRATO_BROWSER_FALLBACK_PORT (9324) and profile VIBRATO_BROWSER_PROFILE (~/.vibrato/chrome-profile).
  */
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -18,13 +18,13 @@ import { ATTACH_DIR } from './attachments.js';
 import { CONFIG_DIR } from './config.js';
 
 /** Fallback (browser-mode) Chrome. Not debugweb's 9222, and not 9323 where v0.3.40-41 left their headless Chrome. */
-export const CDP_PORT = Number(process.env.MVC_BROWSER_FALLBACK_PORT) || 9324;
+export const CDP_PORT = Number(process.env.VIBRATO_BROWSER_FALLBACK_PORT) || 9324;
 /** Outside /tmp so logins survive a reboot. */
-export const CHROME_PROFILE = process.env.MVC_BROWSER_PROFILE || path.join(CONFIG_DIR, 'chrome-profile');
-const CHROME = process.env.MVC_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+export const CHROME_PROFILE = process.env.VIBRATO_BROWSER_PROFILE || path.join(CONFIG_DIR, 'chrome-profile');
+const CHROME = process.env.VIBRATO_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const CALL_TIMEOUT_MS = 15000;
-/** MVC_BROWSER_DEBUG=1 logs screencast decisions and frame flow (troubleshooting a blank panel). */
-const DEBUG = process.env.MVC_BROWSER_DEBUG === '1';
+/** VIBRATO_BROWSER_DEBUG=1 logs screencast decisions and frame flow (troubleshooting a blank panel). */
+const DEBUG = process.env.VIBRATO_BROWSER_DEBUG === '1';
 const debug = (...a: unknown[]) => { if (DEBUG) console.log('[browser]', ...a); };
 
 type Json = Record<string, unknown>;

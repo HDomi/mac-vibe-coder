@@ -54,7 +54,7 @@ export async function exportZip(bundle: ExportBundle, dest: string | null): Prom
   if (!SAFE_NAME.test(bundle.name) || bundle.name === '.' || bundle.name === '..') throw new FsError('EINVAL', 'Invalid export name', 400);
   if (typeof bundle.markdown !== 'string') throw new FsError('EINVAL', 'markdown must be a string', 400);
   const target = dest ? resolvePath(dest) : null;
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'mvc-export-'));
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'vibrato-export-'));
   try {
     const { folder, missing } = await stage(bundle, tmp);
     const zip = target ?? path.join(tmp, `${bundle.name}.zip`);

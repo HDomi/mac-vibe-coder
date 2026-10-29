@@ -4,13 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-const home = mkdtempSync(join(tmpdir(), 'mvc-home-'));
-process.env.MVC_AGENT_HOME = home;
+const home = mkdtempSync(join(tmpdir(), 'vibrato-home-'));
+process.env.VIBRATO_AGENT_HOME = home;
 process.env.CODEX_HOME = join(home, '.codex');
 
 test('agent context: docs, skills, hooks and MCP from project and user level', async () => {
   const { agentContext, codexMcp, skillMeta } = await import('../server/agentContext');
-  const proj = mkdtempSync(join(tmpdir(), 'mvc-proj-'));
+  const proj = mkdtempSync(join(tmpdir(), 'vibrato-proj-'));
   try {
     writeFileSync(join(proj, 'CLAUDE.md'), '# rules\n');
     mkdirSync(join(proj, '.claude', 'skills', 'deploy'), { recursive: true });
@@ -34,7 +34,7 @@ test('agent context: docs, skills, hooks and MCP from project and user level', a
 test('commit message: prompt carries rules, subjects and staged diff; output is cleaned', async () => {
   const { commitPrompt, cleanMessage } = await import('../server/commitMessage');
   const { execFileSync } = await import('node:child_process');
-  const repo = mkdtempSync(join(tmpdir(), 'mvc-msg-'));
+  const repo = mkdtempSync(join(tmpdir(), 'vibrato-msg-'));
   const git = (...a: string[]) => execFileSync('git', ['-C', repo, ...a], { stdio: 'pipe' });
   try {
     git('init', '-q'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't');

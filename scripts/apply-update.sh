@@ -46,11 +46,11 @@ echo '▸ npm ci (staging)'
 npm ci --no-audit --no-fund
 echo '▸ build (staging)'
 npm run build
-if [ -n "${MVC_ELECTRON_VERSION:-}" ] && [ "$MVC_ELECTRON_VERSION" != "$(node -p 'require("./node_modules/electron/package.json").version')" ]; then
+if [ -n "${VIBRATO_ELECTRON_VERSION:-}" ] && [ "$VIBRATO_ELECTRON_VERSION" != "$(node -p 'require("./node_modules/electron/package.json").version')" ]; then
   echo 'Electron runtime changed. Run scripts/update.sh to reinstall the app bundle safely.' >&2
   exit 1
 fi
-if [ -n "${MVC_ELECTRON_EXEC_PATH:-}" ] && [[ "$MVC_ELECTRON_EXEC_PATH" = "$ROOT/node_modules/"* ]]; then
+if [ -n "${VIBRATO_ELECTRON_EXEC_PATH:-}" ] && [[ "$VIBRATO_ELECTRON_EXEC_PATH" = "$ROOT/node_modules/"* ]]; then
   echo 'Run scripts/update.sh to update an app launched from node_modules.' >&2
   exit 1
 fi

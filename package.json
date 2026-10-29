@@ -1,6 +1,6 @@
 {
-  "name": "mac-vibe-coder",
-  "productName": "Mac Vibe Coder",
+  "name": "vibrato",
+  "productName": "Vibrato",
   "version": "3.2.0",
   "private": true,
   "type": "module",
@@ -9,11 +9,11 @@
   "author": "HDomi",
   "repository": {
     "type": "git",
-    "url": "https://github.com/HDomi/mac-vibe-coder.git"
+    "url": "https://github.com/HDomi/vibrato.git"
   },
   "scripts": {
     "icons": "env -u ELECTRON_RUN_AS_NODE electron scripts/generate-icons.cjs",
-    "dev": "concurrently -k -n web,server \"vite\" \"MVC_DEV=1 tsx watch server/index.ts\"",
+    "dev": "concurrently -k -n web,server \"vite\" \"VIBRATO_DEV=1 tsx watch server/index.ts\"",
     "dev:app": "npm run build:main && env -u ELECTRON_RUN_AS_NODE VITE_DEV=1 electron .",
     "build:main": "tsc -p tsconfig.json && cp electron/preload.cjs dist/electron/preload.cjs",
     "build:web": "vite build",

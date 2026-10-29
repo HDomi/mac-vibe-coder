@@ -6,7 +6,7 @@ import test from 'node:test';
 import { runVerify, suggestVerifyCommands } from '../server/verify';
 
 test('verify runner: exit code, output tail without colour codes, cancel', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'mvc-verify-'));
+  const dir = await mkdtemp(join(tmpdir(), 'vibrato-verify-'));
   try {
     const ok = await runVerify(dir, 'printf "\\033[32mfine\\033[0m\\n"; pwd').done;
     assert.equal(ok.exitCode, 0);
@@ -27,7 +27,7 @@ test('verify runner: exit code, output tail without colour codes, cancel', async
 });
 
 test('verify suggestions follow the project kind and package manager', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'mvc-verify-'));
+  const dir = await mkdtemp(join(tmpdir(), 'vibrato-verify-'));
   try {
     assert.deepEqual(await suggestVerifyCommands(dir), []);
     await writeFile(join(dir, 'package.json'), JSON.stringify({ scripts: { typecheck: 'tsc', test: 'node --test', lint: 'eslint .' } }));

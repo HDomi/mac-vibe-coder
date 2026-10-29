@@ -57,7 +57,7 @@ async function placeAt(dest: string, overwrite: boolean, produce: (tmp: string) 
   const st = await fs.stat(dir).catch(() => null);
   if (!st?.isDirectory()) throw new FsError('ENOENT', `Not found: ${dir}`, 404);
   if (!overwrite && await fs.access(dest).then(() => true, () => false)) throw new FsError('EEXIST', `Already exists: ${dest}`, 409);
-  const tmp = path.join(dir, `.${path.basename(dest)}.${randomUUID().slice(0, 8)}.mvc-tmp${path.extname(dest)}`);
+  const tmp = path.join(dir, `.${path.basename(dest)}.${randomUUID().slice(0, 8)}.vibrato-tmp${path.extname(dest)}`);
   try {
     await produce(tmp);
     await fs.rename(tmp, dest);
@@ -80,7 +80,7 @@ export async function convertImage(o: { path: string; dest: string; format: stri
 /** PNG rendering of any readable image (preview of HEIC/TIFF/PSD/RAW, and the WebP encoder's input). */
 export async function renderPng(p: string, opts: { width?: number; height?: number; fit?: number }): Promise<Buffer> {
   const src = resolvePath(p);
-  const tmp = path.join(os.tmpdir(), `mvc-render-${randomUUID()}.png`);
+  const tmp = path.join(os.tmpdir(), `vibrato-render-${randomUUID()}.png`);
   // `sips -Z` also enlarges; a preview bound only ever shrinks.
   if (opts.fit && !opts.width) {
     const info = await imageInfo(src);

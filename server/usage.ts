@@ -26,7 +26,7 @@ async function fetchCodex(): Promise<CodexUsage | null> {
   const auth = await readCodexAuth().catch(() => null);
   if (!auth) return null;
   const request = async (a: { accessToken: string; accountId: string | null }) => {
-    const headers: Record<string, string> = { Authorization: `Bearer ${a.accessToken}`, 'User-Agent': 'mac-vibe-coder', Accept: 'application/json' };
+    const headers: Record<string, string> = { Authorization: `Bearer ${a.accessToken}`, 'User-Agent': 'vibrato', Accept: 'application/json' };
     if (a.accountId) headers['ChatGPT-Account-Id'] = a.accountId;
     return fetch('https://chatgpt.com/backend-api/wham/usage', { headers, signal: AbortSignal.timeout(7000) });
   };

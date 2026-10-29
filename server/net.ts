@@ -72,7 +72,7 @@ function once(url: URL, method: string, headers: [string, string][], body: Buffe
       outHeaders[key] = prev === undefined ? v : Array.isArray(prev) ? [...prev, v] : [prev, v];
     }
     const has = (n: string) => Object.keys(outHeaders).some((k) => k.toLowerCase() === n);
-    if (!has('user-agent')) outHeaders['User-Agent'] = 'mac-vibe-coder';
+    if (!has('user-agent')) outHeaders['User-Agent'] = 'vibrato';
     if (!has('accept')) outHeaders.Accept = '*/*';
     if (!has('accept-encoding')) outHeaders['Accept-Encoding'] = 'gzip, deflate, br';
     if (body && !has('content-length')) outHeaders['Content-Length'] = String(body.length);
@@ -205,6 +205,6 @@ export async function listeningPorts(): Promise<ListeningPort[]> {
 /** Stops a process that holds a port. Refuses this server and the app that launched it. */
 export function killProcess(pid: number, force: boolean): void {
   if (!Number.isInteger(pid) || pid <= 1) throw Object.assign(new Error('Invalid pid'), { status: 400 });
-  if (pid === process.pid || pid === process.ppid) throw Object.assign(new Error('That is Mac Vibe Coder itself'), { status: 400 });
+  if (pid === process.pid || pid === process.ppid) throw Object.assign(new Error('That is Vibrato itself'), { status: 400 });
   process.kill(pid, force ? 'SIGKILL' : 'SIGTERM');
 }

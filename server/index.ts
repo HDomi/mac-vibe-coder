@@ -19,8 +19,8 @@ export async function startServer(port = PORT): Promise<ServerType> {
     const scheduler = new Scheduler(registry);
     const app = createApp(registry, port, scheduler);
     const server = serve({ fetch: app.fetch, hostname: HOST, port }, (info) => {
-      console.log(`[mac-vibe-coder] http://${info.address}:${info.port}`);
-      void scheduler.start().catch((err) => console.warn(`[mac-vibe-coder] scheduler failed to start: ${(err as Error).message}`));
+      console.log(`[vibrato] http://${info.address}:${info.port}`);
+      void scheduler.start().catch((err) => console.warn(`[vibrato] scheduler failed to start: ${(err as Error).message}`));
       resolve(server);
     });
     const http = server as import('node:http').Server;
@@ -35,7 +35,7 @@ export async function startServer(port = PORT): Promise<ServerType> {
     const shutdown = (reason: string, code = 0) => {
       if (shuttingDown) return;
       shuttingDown = true;
-      console.log(`[mac-vibe-coder] ${reason}: closing sessions`);
+      console.log(`[vibrato] ${reason}: closing sessions`);
       // Stop accepting connections right away so a new app instance does not attach to a dying server.
       http.close();
       const timer = setTimeout(() => process.exit(code), 4000);

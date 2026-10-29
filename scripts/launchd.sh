@@ -1,13 +1,13 @@
 #!/bin/zsh
-# Install / remove a LaunchAgent that starts mac-vibe-coder at login and keeps it alive.
+# Install / remove a LaunchAgent that starts vibrato at login and keeps it alive.
 #   scripts/launchd.sh install
 #   scripts/launchd.sh uninstall
 #   scripts/launchd.sh status
 set -e
-LABEL="com.hdomi.mac-vibe-coder"
+LABEL="com.hdomi.vibrato"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-LOG="$HOME/Library/Logs/mac-vibe-coder.log"
+LOG="$HOME/Library/Logs/vibrato.log"
 
 case "${1:-status}" in
   install)
@@ -41,7 +41,7 @@ EOF
     launchctl bootstrap "gui/$(id -u)" "$PLIST"
     echo "installed: $PLIST"
     echo "log: $LOG"
-    echo "macOS 가 Desktop/Documents 접근 권한을 물으면 허용해. 안 뜨면 시스템 설정 > 개인정보 보호 > 전체 디스크 접근 권한에 Mac Vibe Coder 추가."
+    echo "macOS 가 Desktop/Documents 접근 권한을 물으면 허용해. 안 뜨면 시스템 설정 > 개인정보 보호 > 전체 디스크 접근 권한에 Vibrato 추가."
     ;;
   uninstall)
     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true

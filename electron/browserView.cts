@@ -15,8 +15,8 @@ import path from 'node:path';
 
 /** Port the v0.3.40-41 headless Chrome used; see stopOldHeadlessChrome. */
 const OLD_HEADLESS_PORT = 9323;
-const PARTITION = 'persist:mvc-browser';
-const ATTACH_DIR = path.join(os.homedir(), '.mac-vibe-coder', 'attachments');
+const PARTITION = 'persist:vibrato-browser';
+const ATTACH_DIR = path.join(os.homedir(), '.vibrato', 'attachments');
 
 export interface BrowserViewState {
   url: string; title: string; loading: boolean; canBack: boolean; canForward: boolean;
@@ -58,7 +58,7 @@ export function allowedPanelUrl(url: string) {
 }
 
 function chromeUserAgent(ua: string) {
-  return ua.replace(/\s(?:mac-vibe-coder|Mac Vibe Coder)\/\S+/gi, '').replace(/\sElectron\/\S+/, '');
+  return ua.replace(/\s(?:vibrato|Vibrato)\/\S+/gi, '').replace(/\sElectron\/\S+/, '');
 }
 
 let view: WebContentsView | null = null;

@@ -10,7 +10,7 @@ async function main() {
     const script = ['on run argv', 'set appPath to item 1 of argv', 'if application appPath is running then tell application appPath to quit', 'end run'];
     execFileSync('osascript', [...script.flatMap((line) => ['-e', line]), '--', bundle], { timeout: 10000 });
   }
-  const executable = path.join(bundle, 'Contents/MacOS/Mac Vibe Coder');
+  const executable = path.join(bundle, 'Contents/MacOS/Vibrato');
   const server = path.join(root, 'dist/server/index.js');
   const deadline = Date.now() + 15000;
   while (true) {

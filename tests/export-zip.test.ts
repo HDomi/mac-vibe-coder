@@ -9,7 +9,7 @@ import { exportZip } from '../server/exportZip';
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 
 test('exportZip bundles the markdown with copied and decoded images, skipping unreadable ones', { skip: process.platform !== 'darwin' }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'mvc-export-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vibrato-export-'));
   try {
     const src = join(dir, 'shot.png');
     writeFileSync(src, PNG);

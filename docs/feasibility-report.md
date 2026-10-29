@@ -1,4 +1,4 @@
-# mac-vibe-coder 가능성 조사 보고서
+# vibrato 가능성 조사 보고서
 
 작성일: 2026-10-19
 조사 환경: macOS 26.6.2 (arm64), Node v24.13.0, git 2.54.0, Claude Code 2.1.300, Codex CLI 0.162.1
@@ -66,11 +66,11 @@
 ## 5. 아키텍처 제안
 
 ```
-mac-vibe-coder/
+vibrato/
 ├─ server/                 # Node + TypeScript, 127.0.0.1:11398 바인드
 │  ├─ index.ts             # HTTP(정적 SPA + REST) + WebSocket
 │  ├─ fs/                  # 폴더 트리, 파일 읽기, Range 스트리밍(영상), chokidar watch
-│  ├─ favorites.ts         # ~/.mac-vibe-coder/config.json
+│  ├─ favorites.ts         # ~/.vibrato/config.json
 │  ├─ agents/
 │  │  ├─ types.ts          # 통합 이벤트 스키마 (아래)
 │  │  ├─ claude.ts         # Agent SDK 어댑터
@@ -79,7 +79,7 @@ mac-vibe-coder/
 │  └─ updater.ts           # git fetch/pull + 재시작
 ├─ web/                    # Vite SPA (Vue 3 + Tailwind 추천, 기존 프로젝트 스택과 맞춤)
 ├─ bin/start.sh            # node 경로 고정 런처 (launchd 가 호출)
-├─ launchd/com.hdomi.mac-vibe-coder.plist
+├─ launchd/com.hdomi.vibrato.plist
 └─ docs/
 ```
 
@@ -103,7 +103,7 @@ type AgentEvent =
 
 **프리뷰.** md: markdown-it + shiki + mermaid. 이미지: 정적 서빙. 영상: HTTP Range 요청 지원 필수 (없으면 탐색 불가). PDF: iframe. 코드: CodeMirror 6 읽기전용(필요 시 편집). chokidar 로 파일 변경 시 자동 새로고침 (에이전트가 파일 고치면 즉시 반영).
 
-**상태 저장.** 즐겨찾기·최근 폴더·설정은 `~/.mac-vibe-coder/config.json`. 세션 목록은 `~/.claude/projects` 와 Codex `thread/list` 를 그대로 읽어 재사용 → 별도 DB 불필요.
+**상태 저장.** 즐겨찾기·최근 폴더·설정은 `~/.vibrato/config.json`. 세션 목록은 `~/.claude/projects` 와 Codex `thread/list` 를 그대로 읽어 재사용 → 별도 DB 불필요.
 
 **보안.** 모든 폴더에 접근하는 서버이므로 `127.0.0.1` 만 바인드, `Origin` 검사, WebSocket 에 로컬 토큰. 외부 노출(Tailscale 등)은 나중에 별도 인증 붙인 뒤.
 

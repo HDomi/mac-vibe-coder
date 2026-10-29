@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checkLockWatch, deps, lockBeat, lockWatchState } from '../server/lockWatch';
 
-const EXE = '/Applications/Mac Vibe Coder.app/Contents/MacOS/Mac Vibe Coder';
-const BUNDLE = '/Applications/Mac Vibe Coder.app';
+const EXE = '/Applications/Vibrato.app/Contents/MacOS/Vibrato';
+const BUNDLE = '/Applications/Vibrato.app';
 
 function fake(exe: string | null = EXE) {
   const calls = { killed: [] as number[], reopened: [] as string[] };

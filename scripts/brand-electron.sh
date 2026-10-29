@@ -1,13 +1,13 @@
 #!/bin/zsh
 # Brand the unpackaged Electron.app in node_modules so the menu bar, Dock and
-# macOS privacy prompts say "Mac Vibe Coder" instead of "Electron".
+# macOS privacy prompts say "Vibrato" instead of "Electron".
 # Re-run after `npm install` (postinstall does this automatically).
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/node_modules/electron/dist/Electron.app"
 PLIST="$APP/Contents/Info.plist"
-NAME="Mac Vibe Coder"
-BUNDLE_ID="com.hdomi.mac-vibe-coder"
+NAME="Vibrato"
+BUNDLE_ID="com.hdomi.vibrato"
 ICON="$ROOT/assets/icon.icns"
 
 [ -f "$PLIST" ] || { echo "Electron.app not found; run npm install first"; exit 0; }

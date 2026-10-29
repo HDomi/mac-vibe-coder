@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createFile, FsError, readText, writeText } from '../server/fs';
 
 async function scratch() {
-  return fs.mkdtemp(path.join(os.tmpdir(), 'mvc-edit-'));
+  return fs.mkdtemp(path.join(os.tmpdir(), 'vibrato-edit-'));
 }
 
 test('readText reports mtime, BOM, binary and invalid UTF-8', async () => {

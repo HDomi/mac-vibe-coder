@@ -163,7 +163,7 @@ export default function Sidebar(p: Props) {
   return (
     <aside className="h-full flex flex-col border-r border-white/10 bg-[#0e1117] min-w-0">
       <div className="h-10 flex items-center px-3 text-xs text-zinc-500">
-        <span className="pl-1 font-medium text-zinc-400">Mac Vibe Coder</span>
+        <span className="pl-1 font-medium text-zinc-400">Vibrato</span>
         <span className="ml-2"><UpdateBadge /></span>
         <div className="flex-1" />
         <button className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-zinc-400" onClick={p.onToggle} title={t('sidebar.collapse')}><Icon name="chevronsLeft" /></button>
