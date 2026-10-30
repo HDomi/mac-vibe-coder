@@ -8,7 +8,7 @@ import { lockSummary } from './lib/lockScreen';
 import { requestNotificationPermission, useSessions, setOnScreenSession } from './lib/useSessions';
 import Sidebar from './components/Sidebar';
 import FileList from './components/FileList';
-import Preview from './components/Preview';
+import Preview, { PreviewDialog } from './components/Preview';
 import { editor } from './lib/editor/store';
 import ToolsPanel from './components/ToolsPanel';
 import UsageBar, { type ViewMode } from './components/UsageBar';
@@ -29,7 +29,7 @@ import { draftKey, writeDraft } from './lib/draft';
 import { hasTransfer, readTransfer, sendTransfer, setTransferTargets } from './lib/transfer';
 import AgentIcon from './components/AgentIcon';
 import Lightbox from './components/Lightbox';
-import Toaster from './components/Toast';
+import Toaster, { toast } from './components/Toast';
 import BacklogPanel from './components/BacklogPanel';
 import AgentContextDialog from './components/AgentContextDialog';
 import { EMPTY_BACKLOG, useBacklogs } from './lib/backlog';
@@ -152,19 +152,26 @@ function AppInner() {
 
   const navigate = useCallback((p: string) => { setCwd(p); setSelected(null); }, []);
   // Local file links inside markdown (chat or preview) open in the Preview tab.
+  // Views without the right-hand panel (Agents, Tools, Schedules, IDE without a project) show files in a dialog.
+  const [previewPopup, setPreviewPopup] = useState<Entry | null>(null);
   useEffect(() => {
     const h = (ev: Event) => {
       const path = (ev as CustomEvent<{ path: string }>).detail?.path;
       if (!path) return;
       api.stat(path).then((e) => {
-        if (e.isDir) navigate(e.path);
-        else if (view === 'ide') editor.open(e.path, { kind: e.kind });
-        else { setSelected(e); setRightTab('preview'); }
-      }).catch(() => {});
+        if (e.isDir) {
+          navigate(e.path);
+          if (view !== 'vibe' && view !== 'ide') { setPreviewPopup(null); setView('vibe'); }
+          if (view !== 'ide') { setRightTab('files'); setRightCollapsed(false); }
+        } else if (view === 'ide' && project) editor.open(e.path, { kind: e.kind });
+        else if (view === 'vibe') { setSelected(e); setRightTab('preview'); setRightCollapsed(false); }
+        else setPreviewPopup(e);
+      }).catch(() => toast(t('preview.openFailed', { path }), 'error'));
     };
     window.addEventListener('vibe:open-file', h);
     return () => window.removeEventListener('vibe:open-file', h);
-  }, [navigate, view]);
+  }, [navigate, view, project]);
+  useEffect(() => { setPreviewPopup(null); }, [view]);
   const openProject = useCallback((p: string) => {
     setProject(p); navigate(p); setActiveSession(null);
     api.pushRecent(p).then(setRecent).catch(() => {});
@@ -366,6 +373,7 @@ function AppInner() {
       <div className="h-full flex flex-col">
         <Lightbox />
         <Toaster />
+        {previewPopup && <PreviewDialog entry={previewPopup} onClose={() => setPreviewPopup(null)} />}
         <UsageBar mode={view} onMode={setView} companions={companions} onCompanions={() => setCompanions((v) => !v)} />
         {companions && <SessionCompanions sessions={Object.values(S.sessions)} scene={`${view}:${rightTab}:${rightCollapsed}`} />}
         {view === 'agent' ? (

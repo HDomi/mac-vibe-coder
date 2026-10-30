@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -6,6 +6,7 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { api } from '../lib/api';
 import { t, useLang } from '../lib/i18n';
+import { codePathCandidate, resolveLocal } from '../lib/localPath';
 import { openLightbox } from './Lightbox';
 
 interface Props {
@@ -15,7 +16,6 @@ interface Props {
   className?: string;
 }
 
-const EXTERNAL_RE = /^(https?:|mailto:|tel:|data:|blob:)/i;
 export const markdownSchema = {
   ...defaultSchema,
   attributes: { ...defaultSchema.attributes, '*': [...(defaultSchema.attributes?.['*'] ?? []), 'align'], img: [...(defaultSchema.attributes?.img ?? []), 'width', 'height'] },
@@ -30,22 +30,34 @@ function MarkdownImage({ url, label, alt, title }: { url: string; label: string;
   return <img src={url || undefined} alt={alt} title={title} className="max-w-full rounded-md cursor-zoom-in" onClick={() => openLightbox(url, label)} />;
 }
 
-function resolveLocal(href: string, baseDir?: string | null): string | null {
-  if (!href || EXTERNAL_RE.test(href) || href.startsWith('#')) return null;
-  if (/^[a-z][\w+.-]*:/i.test(href) && !href.startsWith('file://')) return null;
-  let p = href.startsWith('file://') ? href.slice(7) : href;
-  try { p = decodeURIComponent(p); } catch { /* keep as is */ }
-  p = p.split('#')[0].split('?')[0];
-  if (p.startsWith('~/')) return p;
-  if (p.startsWith('/')) return p;
-  if (!baseDir) return null;
-  const parts = (baseDir + '/' + p).split('/');
-  const out: string[] = [];
-  for (const seg of parts) {
-    if (seg === '' || seg === '.') continue;
-    if (seg === '..') out.pop(); else out.push(seg);
-  }
-  return '/' + out.join('/');
+
+
+// Existence checks for inline code paths, shared by every message. Kept briefly: agents often mention a
+// file just before creating it.
+const statCache = new Map<string, { at: number; found: Promise<boolean> }>();
+function pathExists(p: string): Promise<boolean> {
+  const hit = statCache.get(p);
+  if (hit && Date.now() - hit.at < 15000) return hit.found;
+  const found = api.stat(p).then(() => true, () => false);
+  statCache.set(p, { at: Date.now(), found });
+  if (statCache.size > 2000) statCache.delete(statCache.keys().next().value!);
+  return found;
+}
+
+const InPre = createContext(false);
+
+function CodePath({ text, baseDir, children }: { text: string; baseDir?: string | null; children: React.ReactNode }) {
+  const local = resolveLocal(text, baseDir);
+  const [ok, setOk] = useState(false);
+  useEffect(() => {
+    setOk(false);
+    if (!local) return;
+    let alive = true;
+    void pathExists(local).then((v) => { if (alive) setOk(v); });
+    return () => { alive = false; };
+  }, [local]);
+  if (!local || !ok) return <code>{children}</code>;
+  return <code className="cursor-pointer underline decoration-dotted decoration-zinc-500 underline-offset-2 hover:decoration-zinc-200" title={local} onClick={() => openLocalFile(local)}>{children}</code>;
 }
 
 /** Ask the app to show a local file in the Preview tab. */
@@ -83,9 +95,15 @@ export default function MarkdownView({ text, baseDir, className }: Props) {
           pre: ({ children }) => (
             <div className="relative group/code">
               <CopyButton text={textOf(children)} className="absolute top-1.5 right-1.5 opacity-0 group-hover/code:opacity-100" />
-              <pre>{children}</pre>
+              <InPre.Provider value><pre>{children}</pre></InPre.Provider>
             </div>
           ),
+          code: function Code({ className, children }) {
+            const inPre = useContext(InPre);
+            if (inPre) return <code className={className}>{children}</code>;
+            const candidate = codePathCandidate(textOf(children));
+            return candidate ? <CodePath text={candidate} baseDir={baseDir}>{children}</CodePath> : <code className={className}>{children}</code>;
+          },
           img: ({ src, alt, title }) => {
             const local = resolveLocal(String(src ?? ''), baseDir);
             const url = local ? api.rawUrl(local) : String(src ?? '');

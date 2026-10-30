@@ -9,8 +9,9 @@ import { findTables } from '../lib/mdtable';
 // The grid editor only loads when a Markdown file's tables are edited.
 const MdTableEditor = lazy(() => import('./MdTableEditor'));
 import { t, useLang } from '../lib/i18n';
+import Icon from './Icon';
 
-interface Props { entry: Entry | null }
+interface Props { entry: Entry | null; /** Shown in a dialog (views without a preview panel): adds a close button. */ onClose?: () => void }
 
 /** Syntax-highlighted source view with line numbers and a language picker (remembered per extension). */
 function CodeView({ content, name, ext }: { content: string; name: string; ext: string }) {
@@ -135,7 +136,7 @@ function CopySourceButton({ path }: { path: string }) {
   );
 }
 
-export default function Preview({ entry }: Props) {
+export default function Preview({ entry, onClose }: Props) {
   useLang();
   const [converting, setConverting] = useState(false);
   // Bumped when the file on screen changes (saved here, edited elsewhere, opened again), so it is read again.
@@ -173,6 +174,7 @@ export default function Preview({ entry }: Props) {
         )}
         {entry.kind === 'markdown' && <CopySourceButton path={entry.path} />}
         <button className="text-xs text-zinc-400 hover:text-white" onClick={() => navigator.clipboard.writeText(entry.path)} title={entry.path}>{t('preview.copyPath')}</button>
+        {onClose && <button className="-mr-2 w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-white/10" onClick={onClose} title="Esc"><Icon name="close" /></button>}
       </div>
       {converting && (
         <ImageConvertDialog entry={entry} onClose={() => setConverting(false)}
@@ -203,6 +205,22 @@ export default function Preview({ entry }: Props) {
             <div className="text-xs text-zinc-600">{entry.ext || t('preview.noExt')}</div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** The preview as a dialog, for views without the right-hand panel (Agents, Tools, Schedules). */
+export function PreviewDialog({ entry, onClose }: { entry: Entry; onClose: () => void }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.isComposing && !e.defaultPrevented) { e.preventDefault(); onClose(); } };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center" onMouseDown={onClose}>
+      <div className="w-[960px] max-w-[94vw] h-[86vh] rounded-xl bg-[#12151c] border border-white/10 shadow-2xl overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
+        <Preview entry={entry} onClose={onClose} />
       </div>
     </div>
   );
