@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import ImageConvertDialog from './ImageConvertDialog';
 import { highlight, highlightedLines, LANGUAGES, languageFor, rememberLanguage } from '../lib/highlight';
 import { CopyButton } from './MarkdownView';
@@ -45,7 +45,7 @@ function CodeView({ content, name, ext }: { content: string; name: string; ext: 
   );
 }
 
-function TextView({ path, markdown, name, ext }: { path: string; markdown: boolean; name: string; ext: string }) {
+function TextView({ path, markdown, name, ext, reload }: { path: string; markdown: boolean; name: string; ext: string; /** Bumped when the file changed on disk. */ reload: number }) {
   useLang();
   const [state, setState] = useState<TextFile | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -59,6 +59,14 @@ function TextView({ path, markdown, name, ext }: { path: string; markdown: boole
     return () => { alive = false; };
   }, [path, tick]);
   useEffect(() => { setMode('view'); }, [path]);
+  // Changed on disk: swap the content in place (no loading flash, scroll kept). The table editor keeps its
+  // edits; saving them over a newer file is caught as a conflict.
+  useEffect(() => {
+    if (!reload || mode === 'tables') return;
+    let alive = true;
+    api.text(path).then((r) => { if (alive) setState((s) => (s && s.mtime === r.mtime && s.content === r.content ? s : r)); setErr(null); }).catch(() => {});
+    return () => { alive = false; };
+  }, [reload]); // eslint-disable-line react-hooks/exhaustive-deps
   const tableCount = useMemo(() => (markdown && state ? findTables(state.content).length : 0), [markdown, state]);
   const saveTables = async (next: string) => {
     if (!state) return;
@@ -130,8 +138,26 @@ function CopySourceButton({ path }: { path: string }) {
 export default function Preview({ entry }: Props) {
   useLang();
   const [converting, setConverting] = useState(false);
-  // Bumped after saving over the file on screen, so the <img> refetches.
+  // Bumped when the file on screen changes (saved here, edited elsewhere, opened again), so it is read again.
   const [rev, setRev] = useState(0);
+  const seen = useRef<{ path: string; mtime: number } | null>(null);
+  useEffect(() => {
+    if (!entry) return;
+    const prev = seen.current;
+    seen.current = { path: entry.path, mtime: entry.mtime };
+    if (prev?.path === entry.path && prev.mtime !== entry.mtime) setRev((r) => r + 1);
+  }, [entry]);
+  const watchPath = entry && !entry.isDir ? entry.path : null;
+  useEffect(() => {
+    if (!watchPath) return;
+    const es = new EventSource(api.fsWatchUrl(watchPath.slice(0, watchPath.lastIndexOf('/')) || '/'));
+    es.addEventListener('change', (ev) => {
+      let changed: unknown;
+      try { changed = JSON.parse((ev as MessageEvent<string>).data); } catch { return; }
+      if (changed === '*' || (Array.isArray(changed) && changed.includes(watchPath))) setRev((r) => r + 1);
+    });
+    return () => es.close();
+  }, [watchPath]);
   if (!entry) {
     return <div className="h-full flex items-center justify-center text-zinc-600 text-sm">{t('preview.hint')}</div>;
   }
@@ -153,8 +179,8 @@ export default function Preview({ entry }: Props) {
           onSaved={(p) => { if (p === entry.path) setRev((r) => r + 1); else window.dispatchEvent(new CustomEvent('vibe:open-file', { detail: { path: p } })); }} />
       )}
       <div className="flex-1 overflow-auto bg-[#0b0d12]">
-        {entry.kind === 'markdown' && <TextView path={entry.path} markdown name={entry.name} ext={entry.ext} />}
-        {entry.kind === 'text' && <TextView path={entry.path} markdown={false} name={entry.name} ext={entry.ext} />}
+        {entry.kind === 'markdown' && <TextView path={entry.path} markdown name={entry.name} ext={entry.ext} reload={rev} />}
+        {entry.kind === 'text' && <TextView path={entry.path} markdown={false} name={entry.name} ext={entry.ext} reload={rev} />}
         {entry.kind === 'image' && (
           <div className="h-full flex items-center justify-center p-4">
             <img src={imageSrc(entry.path, entry.ext, rev)} alt={entry.name} className="max-w-full max-h-full object-contain rounded" />
